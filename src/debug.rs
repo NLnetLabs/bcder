@@ -26,13 +26,13 @@
 //! code reaches one of these booby-trapped points.
 
 #[cfg(feature = "extra-debug")]
-#[allow(unused_macros)]
+#[macro_export]
 macro_rules! xerr {
     ($test:expr) => { panic!("extra debugging enabled") };
 }
 
 #[cfg(not(feature = "extra-debug"))]
-#[allow(unused_macros)]
+#[macro_export]
 macro_rules! xerr {
     ($test:expr) => { $test };
 }

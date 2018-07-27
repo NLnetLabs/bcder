@@ -70,7 +70,7 @@ pub use self::ostring::{
 pub use self::source::{CaptureSource, LimitedSource, Source};
 pub use self::tag::Tag;
 
-#[macro_use] mod debug;
+#[macro_use] pub mod debug;
 
 mod bstring;
 mod content;
