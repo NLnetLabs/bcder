@@ -3,8 +3,7 @@
 //! This is a private module. Its public content is being re-exported by the
 //! parent module.
 use std::fmt;
-use super::error::Error;
-use super::source::Source;
+use super::decode;
 
 
 //------------ Tag -----------------------------------------------------------
@@ -108,14 +107,14 @@ impl Tag {
     /// Upon success, returns both the tag and whether the value is
     /// constructed. If there are no more octets available in the source,
     /// an error is returned.
-    pub fn take_from<S: Source>(
+    pub fn take_from<S: decode::Source>(
         source: &mut S,
     ) -> Result<(Self, bool), S::Err> {
         let byte = source.take_u8()?;
         if (byte & 0x1F) == 0x1F {
             // If all five lower bits are 1, the tag is encoded in multiple
             // bytes. We don’t support that.
-            xerr!(return Err(Error::Unimplemented.into()))
+            xerr!(return Err(decode::Error::Unimplemented.into()))
         }
         Ok((Tag(byte & 0xdf), byte & 0x20 != 0))
     }
@@ -125,7 +124,7 @@ impl Tag {
     /// If there is no more data available in the source or if the tag is
     /// something else, returns `Ok(None)`. If the tag matches `self`, returns
     /// whether the value is constructed.
-    pub fn take_from_if<S: Source>(
+    pub fn take_from_if<S: decode::Source>(
         self,
         source: &mut S,
     ) -> Result<Option<bool>, S::Err> {

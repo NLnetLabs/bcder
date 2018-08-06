@@ -3,9 +3,8 @@
 //! This is a private module. Its public content is being re-exported by the
 //! parent module.
 
-use super::content::Mode;
-use super::error::Error;
-use super::source::Source;
+use super::decode;
+use super::mode::Mode;
 
 
 //------------ Length -------------------------------------------------------
@@ -54,7 +53,7 @@ pub enum Length {
 
 impl Length {
     /// Takes a length value from the beginning of a source.
-    pub fn take_from<S: Source>(
+    pub fn take_from<S: decode::Source>(
         source: &mut S,
         mode: Mode
     ) -> Result<Self, S::Err> {
@@ -72,7 +71,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(Error::Malformed.into())
+                    Err(decode::Error::Malformed.into())
                 }
             }
             0x82 => {
@@ -83,7 +82,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(Error::Malformed.into())
+                    Err(decode::Error::Malformed.into())
                 }
             }
             0x83 => {
@@ -95,7 +94,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(Error::Malformed.into())
+                    Err(decode::Error::Malformed.into())
                 }
             }
             0x84 => {
@@ -108,12 +107,12 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(Error::Malformed.into())
+                    Err(decode::Error::Malformed.into())
                 }
             }
             _ => {
                 // We only implement up to two length bytes for now.
-                Err(Error::Unimplemented.into())
+                Err(decode::Error::Unimplemented.into())
             }
         }
     }

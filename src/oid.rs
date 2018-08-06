@@ -4,9 +4,8 @@
 
 use std::fmt;
 use bytes::Bytes;
-use super::content::Constructed;
-use super::error::Error;
-use super::source::Source;
+use super::decode;
+use super::decode::Source;
 use super::tag::Tag;
 
 
@@ -43,8 +42,8 @@ impl Oid<Bytes> {
     /// If the source has reached its end, if the next value does not have
     /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
     /// error.
-    pub fn skip_in<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn skip_in<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<(), S::Err> {
         cons.take_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
@@ -54,8 +53,8 @@ impl Oid<Bytes> {
     /// If the source has reached its end of if the next value does not have
     /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
     /// tag but is not a primitive value, returns a malformed error.
-    pub fn skip_opt_in<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn skip_opt_in<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<Option<()>, S::Err> {
         cons.take_opt_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
@@ -65,8 +64,8 @@ impl Oid<Bytes> {
     /// If the source has reached its end, if the next value does not have
     /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
     /// error.
-    pub fn take_from<S: Source>(
-        constructed: &mut Constructed<S>
+    pub fn take_from<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         constructed.take_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
@@ -78,8 +77,8 @@ impl Oid<Bytes> {
     /// If the source has reached its end of if the next value does not have
     /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
     /// tag but is not a primitive value, returns a malformed error.
-    pub fn take_opt_from<S: Source>(
-        constructed: &mut Constructed<S>
+    pub fn take_opt_from<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
     ) -> Result<Option<Self>, S::Err> {
         constructed.take_opt_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
@@ -89,9 +88,9 @@ impl Oid<Bytes> {
 
 impl<T: AsRef<[u8]>> Oid<T> {
     /// Skip over an object identifier if it matches `self`.
-    pub fn skip_if<S: Source>(
+    pub fn skip_if<S: decode::Source>(
         &self,
-        constructed: &mut Constructed<S>
+        constructed: &mut decode::Constructed<S>
     ) -> Result<(), S::Err> {
         constructed.take_primitive_if(Tag::OID, |content| {
             let len = content.remaining();
@@ -101,7 +100,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
                 Ok(())
             }
             else {
-                xerr!(Err(Error::Malformed.into()))
+                xerr!(Err(decode::Error::Malformed.into()))
             }
         })
     }
@@ -111,16 +110,16 @@ impl<T: AsRef<[u8]>> Oid<T> {
 ///
 impl<T: AsRef<[u8]>> Oid<T> {
     /// Returns an iterator to the sub-identifiers of this object identifiers.
-    pub fn iter(&self) -> Result<IdIter, Error> {
+    pub fn iter(&self) -> Result<IdIter, decode::Error> {
         let mut sublen = 0;
         for &ch in self.0.as_ref() {
             if ch & 0x80 != 0 {
                 sublen += 1;
                 if sublen == 1 && ch == 0x80 {
-                    xerr!(return Err(Error::Malformed))
+                    xerr!(return Err(decode::Error::Malformed))
                 }
                 if sublen == 5 {
-                    xerr!(return Err(Error::Unimplemented))
+                    xerr!(return Err(decode::Error::Unimplemented))
                 }
             }
             else {
@@ -128,7 +127,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
             }
         }
         if sublen != 0 {
-            xerr!(return Err(Error::Malformed))
+            xerr!(return Err(decode::Error::Malformed))
         }
         Ok(IdIter(self.0.as_ref()))
     }
@@ -167,8 +166,8 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
                     write!(f, ".{}", id)?;
                 }
             }
-            Err(Error::Malformed) => write!(f, "malformed")?,
-            Err(Error::Unimplemented) => write!(f, "unimplemented")?,
+            Err(decode::Error::Malformed) => write!(f, "malformed")?,
+            Err(decode::Error::Unimplemented) => write!(f, "unimplemented")?,
         }
         Ok(())
     }

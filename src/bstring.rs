@@ -4,9 +4,9 @@
 //! parent.
 
 use bytes::Bytes;
-use super::content::{Content, Constructed, Mode};
-use super::error::Error;
-use super::source::Source;
+use super::decode;
+use super::decode::Source;
+use super::mode::Mode;
 use super::tag::Tag;
 
 
@@ -106,61 +106,61 @@ impl BitString {
 ///
 impl BitString {
     /// Takes a single bit string value from constructed content.
-    pub fn take_from<S: Source>(
-        constructed: &mut Constructed<S>
+    pub fn take_from<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         constructed.take_value_if(Tag::BIT_STRING, Self::parse_content)
     }
 
     /// Skip over a single bit string value inside constructed content.
-    pub fn skip_in<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn skip_in<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<(), S::Err> {
         cons.take_value_if(Tag::BIT_STRING, Self::skip_content)
     }
  
     /// Parses the content octets of a bit string value.
-    pub fn parse_content<S: Source>(
-        content: &mut Content<S>
+    pub fn parse_content<S: decode::Source>(
+        content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
         match *content {
-            Content::Primitive(ref mut inner) => {
+            decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(Error::Malformed.into()))
+                    xerr!(return Err(decode::Error::Malformed.into()))
                 }
                 Ok(BitString {
                     unused: inner.take_u8()?,
                     bits: inner.take_all()?,
                 })
             }
-            Content::Constructed(ref inner) => {
+            decode::Content::Constructed(ref inner) => {
                 if inner.mode() == Mode::Der {
-                    xerr!(Err(Error::Malformed.into()))
+                    xerr!(Err(decode::Error::Malformed.into()))
                 }
                 else {
-                    xerr!(Err(Error::Unimplemented.into()))
+                    xerr!(Err(decode::Error::Unimplemented.into()))
                 }
             }
         }
     }
 
     /// Skips over the content octets of a bit string value.
-    pub fn skip_content<S: Source>(
-        content: &mut Content<S>
+    pub fn skip_content<S: decode::Source>(
+        content: &mut decode::Content<S>
     ) -> Result<(), S::Err> {
         match *content {
-            Content::Primitive(ref mut inner) => {
+            decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(Error::Malformed.into()))
+                    xerr!(return Err(decode::Error::Malformed.into()))
                 }
                 inner.skip_all()
             }
-            Content::Constructed(ref inner) => {
+            decode::Content::Constructed(ref inner) => {
                 if inner.mode() == Mode::Der {
-                    xerr!(Err(Error::Malformed.into()))
+                    xerr!(Err(decode::Error::Malformed.into()))
                 }
                 else {
-                    xerr!(Err(Error::Unimplemented.into()))
+                    xerr!(Err(decode::Error::Unimplemented.into()))
                 }
             }
         }

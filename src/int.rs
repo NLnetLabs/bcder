@@ -6,9 +6,7 @@
 //! TODO: Add more useful things to these types.
 
 use bytes::Bytes;
-use super::content::{Constructed, Primitive};
-use super::error::Error;
-use super::source::Source;
+use super::decode;
 use super::tag::Tag;
 
 
@@ -37,25 +35,25 @@ use super::tag::Tag;
 pub struct Integer(Bytes);
 
 impl Integer {
-    pub fn take_from<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn take_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.take_primitive_if(Tag::INTEGER, Self::take_content_from)
     }
 
-    pub fn take_content_from<S: Source>(
-        prim: &mut Primitive<S>
+    pub fn take_content_from<S: decode::Source>(
+        prim: &mut decode::Primitive<S>
     ) -> Result<Self, S::Err> {
         let res = prim.take_all()?;
         match (res.get(0), res.get(1).map(|x| x & 0x80 != 0)) {
             (Some(0), Some(false)) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             (Some(0xFF), Some(true)) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             (None, _) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             _ => { }
         }
@@ -88,28 +86,28 @@ impl Integer {
 pub struct Unsigned(Bytes);
 
 impl Unsigned {
-    pub fn take_from<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn take_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.take_primitive_if(Tag::INTEGER, Self::take_content_from)
     }
 
-    pub fn take_content_from<S: Source>(
-        prim: &mut Primitive<S>
+    pub fn take_content_from<S: decode::Source>(
+        prim: &mut decode::Primitive<S>
     ) -> Result<Self, S::Err> {
         let res = prim.take_all()?;
         match (res.get(0), res.get(1).map(|x| x & 0x80 != 0)) {
             (Some(0), Some(false)) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             (Some(0xFF), Some(true)) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             (Some(x), _) if x & 0x80 != 0 => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             (None, _) => {
-                xerr!(return Err(Error::Malformed.into()))
+                xerr!(return Err(decode::Error::Malformed.into()))
             }
             _ => { }
         }

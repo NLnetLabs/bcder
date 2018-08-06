@@ -5,10 +5,9 @@
 
 use std::{cmp, hash, mem};
 use bytes::{BytesMut, Bytes};
-use super::content::{Content, Constructed, Mode};
-use super::error::Error;
+use super::decode;
+use super::mode::Mode;
 use super::length::Length;
-use super::source::Source;
 use super::tag::Tag;
 
 
@@ -64,32 +63,32 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, a malformed error is returned.
-    pub fn take_from<S: Source>(
-        cons: &mut Constructed<S>
+    pub fn take_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.take_value_if(Tag::OCTET_STRING, Self::take_content_from)
     }
 
     /// Takes an octet string value from content.
-    pub fn take_content_from<S: Source>(
-        content: &mut Content<S>
+    pub fn take_content_from<S: decode::Source>(
+        content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
         match *content {
-            Content::Primitive(ref mut inner) => {
+            decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(Error::Malformed.into()))
+                    xerr!(return Err(decode::Error::Malformed.into()))
                 }
                 Ok(OctetString {
                     bytes: inner.take_all()?,
                     primitive: true
                 })
             }
-            Content::Constructed(ref mut inner) => {
+            decode::Content::Constructed(ref mut inner) => {
                 match inner.mode() {
                     Mode::Ber => Self::take_constructed_ber(inner),
                     Mode::Cer => Self::take_constructed_cer(inner),
                     Mode::Der => {
-                        xerr!(Err(Error::Malformed.into()))
+                        xerr!(Err(decode::Error::Malformed.into()))
                     }
                 }
             }
@@ -99,8 +98,8 @@ impl OctetString {
     /// Parses a constructed BER encoded octet string.
     ///
     /// It consists octet string values either primitive or constructed.
-    fn take_constructed_ber<S: Source>(
-        constructed: &mut Constructed<S>
+    fn take_constructed_ber<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         constructed.capture(|constructed| skip_nested(constructed))
             .map(|bytes| OctetString { bytes, primitive: false })
@@ -110,19 +109,19 @@ impl OctetString {
     ///
     /// The constructed form contains a sequence of primitive OCTET STRING
     /// values each except for the last one exactly 1000 octets long.
-    fn take_constructed_cer<S: Source>(
-        constructed: &mut Constructed<S>
+    fn take_constructed_cer<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         let mut short = false;
         constructed.capture(|con| {
             while let Some(()) = con.take_opt_primitive_if(Tag::OCTET_STRING,
                                                            |primitive| {
                 if primitive.remaining() > 1000 {
-                    xerr!(return Err(Error::Malformed.into()));
+                    xerr!(return Err(decode::Error::Malformed.into()));
                 }
                 if primitive.remaining() < 1000 {
                     if short {
-                        xerr!(return Err(Error::Malformed.into()));
+                        xerr!(return Err(decode::Error::Malformed.into()));
                     }
                     short = true
                 }
@@ -425,10 +424,10 @@ impl OctetStringSource {
     }
 }
 
-impl Source for OctetStringSource {
-    type Err = Error;
+impl decode::Source for OctetStringSource {
+    type Err = decode::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Error> {
+    fn request(&mut self, len: usize) -> Result<usize, decode::Error> {
         if self.current.len() < len && !self.remainder.is_empty() {
             // Make a new current that is at least `len` long.
             let mut current = BytesMut::from(self.current.clone());
@@ -445,13 +444,13 @@ impl Source for OctetStringSource {
         Ok(self.current.len())
     }
 
-    fn advance(&mut self, mut len: usize) -> Result<(), Error> {
+    fn advance(&mut self, mut len: usize) -> Result<(), decode::Error> {
         while len > self.current.len() {
             len -= self.current.len();
             self.current = match self.next_primitive() {
                 Some(value) => value,
                 None => {
-                    xerr!(return Err(Error::Malformed))
+                    xerr!(return Err(decode::Error::Malformed))
                 }
             }
         }
@@ -563,14 +562,14 @@ impl<'a> Iterator for OctetStringOctets<'a> {
 
 //------------ Helper Functions ----------------------------------------------
 
-fn skip_nested<S>(con: &mut Constructed<S>) -> Result<(), S::Err>
-where S: Source {
+fn skip_nested<S>(con: &mut decode::Constructed<S>) -> Result<(), S::Err>
+where S: decode::Source {
     while let Some(()) = con.take_opt_value_if(Tag::OCTET_STRING, |content| {
         match content {
-            Content::Constructed(ref mut inner) => {
+            decode::Content::Constructed(ref mut inner) => {
                 skip_nested(inner)?
             }
-            Content::Primitive(ref mut inner) => {
+            decode::Content::Primitive(ref mut inner) => {
                 inner.skip_all()?
             }
         }
