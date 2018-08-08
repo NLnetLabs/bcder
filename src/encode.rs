@@ -275,6 +275,31 @@ impl<L: Values, R: Values> Values for Choice2<L, R> {
 }
 
 
+/// A wrapper for an iterator of values.
+///
+/// The wrapper is needed because a blanket impl on any iterator type is
+/// currently not possible.
+///
+/// Note that `T` needs to be clone because we need to be able to restart
+/// iterating at the beginning.
+pub struct Iter<T>(pub T);
+
+impl<T> Values for Iter<T>
+where T: Clone + Iterator, <T as Iterator>::Item: Values {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.0.clone().map(|item| item.encoded_len(mode)).sum()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        self.0.clone().try_for_each(|item| item.write_encoded(mode, target))
+    }
+}
+
+
 //============ Standard Functions ============================================
 
 /// Returns a value encoder for a SEQUENCE.
