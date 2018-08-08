@@ -5,6 +5,7 @@
 
 use std::{cmp, hash, mem};
 use bytes::{BytesMut, Bytes};
+use super::captured::Captured;
 use super::decode;
 use super::mode::Mode;
 use super::length::Length;
@@ -47,12 +48,12 @@ use super::tag::Tag;
 ///
 /// In DER, only the primitive form is allowed.
 #[derive(Clone, Debug)]
-pub struct OctetString {
-    /// The content octets of the octet string value.
-    bytes: Bytes,
+pub struct OctetString(Inner<Bytes, Captured>);
 
-    /// Whether the primitive or constructed form was used.
-    primitive: bool,
+#[derive(Clone, Debug)]
+enum Inner<P, C> {
+    Primitive(P),
+    Constructed(C),
 }
 
 /// # Parsing of BER Encoded Octet Strings
@@ -78,10 +79,7 @@ impl OctetString {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
                     xerr!(return Err(decode::Error::Malformed.into()))
                 }
-                Ok(OctetString {
-                    bytes: inner.take_all()?,
-                    primitive: true
-                })
+                Ok(OctetString(Inner::Primitive(inner.take_all()?)))
             }
             decode::Content::Constructed(ref mut inner) => {
                 match inner.mode() {
@@ -102,7 +100,7 @@ impl OctetString {
         constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         constructed.capture(|constructed| skip_nested(constructed))
-            .map(|bytes| OctetString { bytes, primitive: false })
+            .map(|captured| OctetString(Inner::Constructed(captured)))
     }
 
     /// Parses a constructed CER encoded octet string.
@@ -128,7 +126,7 @@ impl OctetString {
                 primitive.skip_all()
             })? { }
             Ok(())
-        }).map(|bytes| OctetString { bytes, primitive: false })
+        }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
 }
 
@@ -140,9 +138,13 @@ impl OctetString {
     /// The iterator will produce `&[u8]` which, when appended produce the
     /// complete content of the octet string.
     pub fn iter(&self) -> OctetStringIter {
-        OctetStringIter {
-            bytes: self.bytes.as_ref(),
-            primitive: self.primitive
+        match self.0 {
+            Inner::Primitive(ref inner) => {
+                OctetStringIter(Inner::Primitive(inner.as_ref()))
+            }
+            Inner::Constructed(ref inner) => {
+                OctetStringIter(Inner::Constructed(inner.as_ref()))
+            }
         }
     }
 
@@ -159,11 +161,9 @@ impl OctetString {
     /// This is guaranteed to return some slice if the value was produced by
     /// decoding in DER mode.
     pub fn as_slice(&self) -> Option<&[u8]> {
-        if self.primitive {
-            Some(self.bytes.as_ref())
-        }
-        else {
-            None
+        match self.0 {
+            Inner::Primitive(ref inner) => Some(inner.as_ref()),
+            Inner::Constructed(_) => None
         }
     }
 
@@ -174,14 +174,12 @@ impl OctetString {
     /// an entirely new bytes value from the concatenated content of all
     /// the primitive values.
     pub fn to_bytes(&self) -> Bytes {
-        if self.primitive {
-            self.bytes.clone()
+        if let Inner::Primitive(ref inner) = self.0 {
+            return inner.clone()
         }
-        else {
-            let mut res = BytesMut::new();
-            self.iter().for_each(|x| res.extend_from_slice(x));
-            res.freeze()
-        }
+        let mut res = BytesMut::new();
+        self.iter().for_each(|x| res.extend_from_slice(x));
+        res.freeze()
     }
 
     /// Returns the length of the content.
@@ -189,12 +187,10 @@ impl OctetString {
     /// This is _not_ the length of the encoded value but of the actual
     /// octet string.
     pub fn len(&self) -> usize {
-        if self.primitive {
-            self.bytes.len()
+        if let Inner::Primitive(ref inner) = self.0 {
+            return inner.len()
         }
-        else {
-            self.iter().fold(0, |len, x| len + x.len())
-        }
+        self.iter().fold(0, |len, x| len + x.len())
     }
 
     /// Creates a source that can be used to decode the string’s content.
@@ -212,8 +208,8 @@ impl OctetString {
 
 impl PartialEq for OctetString {
     fn eq(&self, other: &OctetString) -> bool {
-        if self.primitive && other.primitive {
-            return self.bytes == other.bytes
+        if let (Some(l), Some(r)) = (self.as_slice(), other.as_slice()) {
+            return l == r
         }
         let mut sit = self.iter();
         let mut oit = other.iter();
@@ -248,8 +244,8 @@ impl<T: AsRef<[u8]>> PartialEq<T> for OctetString {
     fn eq(&self, other: &T) -> bool {
         let mut other = other.as_ref();
 
-        if self.primitive {
-            return self.bytes.as_ref() == other
+        if let Some(slice) = self.as_slice() {
+            return slice == other
         }
 
         for part in self.iter() {
@@ -283,8 +279,8 @@ impl<T: AsRef<[u8]>> PartialOrd<T> for OctetString {
     fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
         let mut other = other.as_ref();
 
-        if self.primitive {
-            return self.bytes.partial_cmp(other)
+        if let Some(slice ) = self.as_slice() {
+            return slice.partial_cmp(other)
         }
 
         for part in self.iter() {
@@ -303,8 +299,8 @@ impl<T: AsRef<[u8]>> PartialOrd<T> for OctetString {
 
 impl Ord for OctetString {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        if self.primitive && other.primitive {
-            return self.bytes.cmp(&other.bytes)
+        if let (Some(l), Some(r)) = (self.as_slice(), other.as_slice()) {
+            return l.cmp(&r)
         }
 
         let mut siter = self.iter();
@@ -385,16 +381,18 @@ pub struct OctetStringSource {
 
 impl OctetStringSource {
     fn new(from: &OctetString) -> Self {
-        if from.primitive {
-            OctetStringSource {
-                current: from.bytes.clone(),
-                remainder: Bytes::new(),
+        match from.0 {
+            Inner::Primitive(ref inner) => {
+                OctetStringSource {
+                    current: inner.clone(),
+                    remainder: Bytes::new(),
+                }
             }
-        }
-        else {
-            OctetStringSource {
-                current: Bytes::new(),
-                remainder: from.bytes.clone(),
+            Inner::Constructed(ref inner) => {
+                OctetStringSource {
+                    current: Bytes::new(),
+                    remainder: inner.clone().into_bytes()
+                }
             }
         }
     }
@@ -474,50 +472,45 @@ impl decode::Source for OctetStringSource {
 ///
 /// You can get a value of this type by calling `OctetString::iter` or relying
 /// on the `IntoIterator` impl for a `&OctetString`.
-//  This is a simpler version of `OctetStringSource` that simply returns
-//  byte slices.
-#[derive(Copy, Clone, Debug)]
-pub struct OctetStringIter<'a> {
-    bytes: &'a [u8],
-    primitive: bool
-}
+#[derive(Clone, Debug)]
+pub struct OctetStringIter<'a>(Inner<&'a [u8], &'a [u8]>);
 
 impl<'a> Iterator for OctetStringIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.primitive {
-            if self.bytes.is_empty() {
-                None
-            }
-            else {
-                Some(mem::replace(&mut self.bytes, &b""[..]))
-            }
-        }
-        else {
-            while !self.bytes.is_empty() {
-                let (tag, cons) = Tag::take_from(&mut self.bytes).unwrap();
-                let length = Length::take_from(
-                    &mut self.bytes, Mode::Ber
-                ).unwrap();
-                match tag {
-                    Tag::OCTET_STRING => {
-                        if cons {
-                            continue
-                        }
-                        let length = match length {
-                            Length::Definite(len) => len,
-                            _ => unreachable!()
-                        };
-                        let res = &self.bytes[..length];
-                        self.bytes = &self.bytes[length..];
-                        return Some(res)
-                    }
-                    Tag::END_OF_VALUE => continue,
-                    _ => unreachable!()
+        match self.0 {
+            Inner::Primitive(ref mut inner) => {
+                if inner.is_empty() {
+                    None
+                }
+                else {
+                    Some(mem::replace(inner, &b""[..]))
                 }
             }
-            None
+            Inner::Constructed(ref mut inner) => {
+                while !inner.is_empty() {
+                    let (tag, cons) = Tag::take_from(inner).unwrap();
+                    let length = Length::take_from(inner, Mode::Ber).unwrap();
+                    match tag {
+                        Tag::OCTET_STRING => {
+                            if cons {
+                                continue
+                            }
+                            let length = match length {
+                                Length::Definite(len) => len,
+                                _ => unreachable!()
+                            };
+                            let res = &inner[..length];
+                            *inner = &inner[length..];
+                            return Some(res)
+                        }
+                        Tag::END_OF_VALUE => continue,
+                        _ => unreachable!()
+                    }
+                }
+                None
+            }
         }
     }
 }

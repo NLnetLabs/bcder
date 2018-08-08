@@ -2,7 +2,7 @@
 //!
 //! This is a private module. Its public content is being re-exported by the
 //! parent module.
-use std::fmt;
+use std::{fmt, io};
 use super::decode;
 
 
@@ -140,6 +140,22 @@ impl Tag {
         else {
             Ok(None)
         }
+    }
+
+    pub fn encoded_len(&self) -> usize {
+        1
+    }
+
+    pub fn write_encoded<W: io::Write>(
+        &self,
+        constructed: bool,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        let mut buf = [self.0];
+        if constructed {
+            buf[0] |= 0x20
+        }
+        target.write_all(&buf)
     }
 }
 

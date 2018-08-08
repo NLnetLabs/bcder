@@ -4,6 +4,7 @@
 //! parent.
 
 use bytes::Bytes;
+use ::captured::Captured;
 use ::length::Length;
 use ::mode::Mode;
 use ::tag::Tag;
@@ -89,10 +90,14 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     /// If the value is a constructed value, makes sure that all contained
     /// constructed values are properly encoded. Primitive values will only
     /// be checked for valid tag and length encodings.
+    ///
+    //  XXX This should probably not be used anymore.
     pub fn into_bytes(&mut self) -> Result<Bytes, S::Err> {
         match *self {
             Content::Primitive(ref mut inner) => inner.take_all(),
-            Content::Constructed(ref mut inner) => inner.capture_all(),
+            Content::Constructed(ref mut inner) => {
+                inner.capture_all().map(Captured::into_bytes)
+            }
         }
     }
 }
@@ -974,7 +979,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// value’s content.
     ///
     /// If the closure returns an error, this error is returned.
-    pub fn capture<F>(&mut self, op: F) -> Result<Bytes, S::Err>
+    pub fn capture<F>(&mut self, op: F) -> Result<Captured, S::Err>
     where
         F: FnOnce(
             &mut Constructed<CaptureSource<LimitedSource<S>>>
@@ -989,7 +994,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             );
             op(&mut constructed)?
         }
-        Ok(source.unwrap().into_bytes())
+        Ok(Captured::new(source.unwrap().into_bytes(), self.mode))
     }
 
     /// Captures the next value into a bytes value.
@@ -999,7 +1004,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If there is no next value, a malformed error is returned. If access
     /// to the underlying source fails, an appropriate error is returned.
-    pub fn capture_one(&mut self) -> Result<Bytes, S::Err> {
+    pub fn capture_one(&mut self) -> Result<Captured, S::Err> {
         self.capture(|cons| {
             match cons.skip_one()? {
                 Some(()) => Ok(()),
@@ -1014,7 +1019,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// The mathod takes all remaining values from this value’s content and
     /// returns their encoded form in a `Bytes` value.
-    pub fn capture_all(&mut self) -> Result<Bytes, S::Err> {
+    pub fn capture_all(&mut self) -> Result<Captured, S::Err> {
         self.capture(|cons| cons.skip_all())
     }
 
