@@ -3,8 +3,9 @@
 //! This is an internal module. Its public types are re-exported by the
 //! parent.
 
+use std::io;
 use bytes::Bytes;
-use super::decode;
+use super::{decode, encode};
 use super::decode::Source;
 use super::mode::Mode;
 use super::tag::Tag;
@@ -102,7 +103,7 @@ impl BitString {
     }
 }
 
-/// # Parsing
+/// # Decoding and Encoding
 ///
 impl BitString {
     /// Takes a single bit string value from constructed content.
@@ -165,6 +166,14 @@ impl BitString {
             }
         }
     }
+
+    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+        encode::PrimitiveContent::value(self)
+    }
+
+    pub fn encode_tagged<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        encode::PrimitiveContent::tagged(self, tag)
+    }
 }
 
 
@@ -177,6 +186,23 @@ impl AsRef<Bytes> for BitString {
 impl AsRef<[u8]> for BitString {
     fn as_ref(&self) -> &[u8] {
         self.bits.as_ref()
+    }
+}
+
+impl encode::PrimitiveContent for BitString {
+    const TAG: Tag = Tag::BIT_STRING;
+
+    fn encoded_len(&self, _: Mode) -> usize {
+        self.bits.len() + 1
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        target.write_all(&[self.unused])?;
+        target.write_all(self.bits.as_ref())
     }
 }
 

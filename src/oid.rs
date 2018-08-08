@@ -2,10 +2,11 @@
 //!
 //! This is a private module. Its public content is re-exportet by the parent.
 
-use std::fmt;
+use std::{fmt, io};
 use bytes::Bytes;
-use super::decode;
+use super::{decode, encode};
 use super::decode::Source;
+use super::mode::Mode;
 use super::tag::Tag;
 
 
@@ -104,6 +105,14 @@ impl<T: AsRef<[u8]>> Oid<T> {
             }
         })
     }
+
+    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+        <Self as encode::PrimitiveContent>::value(self)
+    }
+
+    pub fn encode_tagged<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        <Self as encode::PrimitiveContent>::tagged(self, tag)
+    }
 }
 
 /// # Access to Sub-identifiers
@@ -170,6 +179,25 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
             Err(decode::Error::Unimplemented) => write!(f, "unimplemented")?,
         }
         Ok(())
+    }
+}
+
+
+//--- encode::PrimitiveContent
+
+impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
+    const TAG: Tag = Tag::OID;
+
+    fn encoded_len(&self, _: Mode) -> usize {
+        self.0.as_ref().len()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        target.write_all(self.0.as_ref())
     }
 }
 
