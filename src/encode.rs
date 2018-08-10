@@ -141,7 +141,7 @@ pub trait PrimitiveContent {
 }
 
 
-//--- impl for integers
+//--- impl for built-in types
 
 impl PrimitiveContent for u32 {
     const TAG: Tag = Tag::INTEGER;
@@ -182,6 +182,22 @@ impl PrimitiveContent for u32 {
         else {
             target.write_all(&[0, 0xFF, 0xFF, 0xFF, 0xFF])
         }
+    }
+}
+
+impl PrimitiveContent for () {
+    const TAG: Tag = Tag::NULL;
+
+    fn encoded_len(&self, _: Mode) -> usize {
+        0
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _: Mode,
+        _: &mut W
+    ) -> Result<(), io::Error> {
+        Ok(())
     }
 }
 
@@ -323,8 +339,10 @@ pub struct Primitive<'a, P: 'a + ?Sized> {
 
 impl<'a, P: PrimitiveContent + 'a> Values for Primitive<'a, P> {
     fn encoded_len(&self, mode: Mode) -> usize {
+        let len = self.prim.encoded_len(mode);
         self.tag.encoded_len()
-        + Length::Definite(self.prim.encoded_len(mode)).encoded_len()
+        + Length::Definite(len).encoded_len()
+        + len
     }
 
     fn write_encoded<W: io::Write>(

@@ -150,6 +150,7 @@ impl Length {
                 target.write_all(&buf)
             }
             Length::Definite(len) => {
+                println!("len: {}", len);
                 if len < 0x80 {
                     let buf = [len as u8];
                     target.write_all(&buf)
