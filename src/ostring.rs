@@ -586,15 +586,13 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
     fn encoded_len(&self, mode: Mode) -> usize {
         match mode {
             Mode::Ber => {
-                match self.value.0 {
-                    Inner::Primitive(ref bytes) => {
-                        let len = bytes.len();
-                        self.tag.encoded_len()
-                        + Length::Definite(len).encoded_len()
-                        + len
-                    }
-                    Inner::Constructed(ref captured) => captured.len()
-                }
+                let len = match self.value.0 {
+                    Inner::Primitive(ref bytes) => bytes.len(),
+                    Inner::Constructed(ref captured) => captured.len(),
+                };
+                self.tag.encoded_len()
+                + Length::Definite(len).encoded_len()
+                + len
             }
             Mode::Cer => {
                 unimplemented!()
@@ -622,6 +620,8 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
                         target.write_all(bytes.as_ref())
                     }
                     Inner::Constructed(ref captured) => {
+                        self.tag.write_encoded(true, target)?;
+                        Length::Definite(captured.len()).write_encoded(target)?;
                         target.write_all(captured.as_slice())
                     }
                 }
