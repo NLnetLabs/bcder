@@ -15,7 +15,7 @@ use super::tag::Tag;
 /// sequence of BER encoded values. While you can impl this trait for your
 /// type manually, in practice it is often easier to define a method called
 /// `encode` and let it return some dedicated value encoder type from this
-/// module. 
+/// module.
 ///
 /// A type implementing this trait should encodes itself into one or more
 /// BER values. That is, the type becomes the content or part of the content

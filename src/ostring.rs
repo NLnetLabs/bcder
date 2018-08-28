@@ -2,11 +2,14 @@
 //!
 //! This is an internal module. It’s public types are re-exported by the
 //! parent.
+//!
+//! XXX This currently panics when trying to encode an octet string in
+//!     CER mode. An implementation of that is TODO.
 
-use std::{cmp, hash, mem};
+use std::{cmp, hash, io, mem};
 use bytes::{BytesMut, Bytes};
 use super::captured::Captured;
-use super::decode;
+use super::{decode, encode};
 use super::mode::Mode;
 use super::length::Length;
 use super::tag::Tag;
@@ -128,7 +131,16 @@ impl OctetString {
             Ok(())
         }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
+
+    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        OctetStringEncoder::new(self, tag)
+    }
+
+    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+        self.encode_as(Tag::OCTET_STRING)
+    }
 }
+
 
 /// # Content Access
 ///
@@ -549,6 +561,83 @@ impl<'a> Iterator for OctetStringOctets<'a> {
         let res = self.cur[0];
         self.cur = &self.cur[1..];
         Some(res)
+    }
+}
+
+
+//------------ OctetStringEncoder --------------------------------------------
+
+#[derive(Clone, Debug)]
+pub struct OctetStringEncoder<'a> {
+    value: &'a OctetString,
+    tag: Tag,
+}
+
+impl<'a> OctetStringEncoder<'a> {
+    fn new(value: &'a OctetString, tag: Tag) -> Self {
+        OctetStringEncoder { value, tag }
+    }
+}
+
+
+//--- encode::Values
+
+impl<'a> encode::Values for OctetStringEncoder<'a> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        match mode {
+            Mode::Ber => {
+                match self.value.0 {
+                    Inner::Primitive(ref bytes) => {
+                        let len = bytes.len();
+                        self.tag.encoded_len()
+                        + Length::Definite(len).encoded_len()
+                        + len
+                    }
+                    Inner::Constructed(ref captured) => captured.len()
+                }
+            }
+            Mode::Cer => {
+                unimplemented!()
+            }
+            Mode::Der => {
+                let len = self.value.len();
+                self.tag.encoded_len()
+                + Length::Definite(len).encoded_len()
+                + len
+            }
+        }
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        match mode {
+            Mode::Ber => {
+                match self.value.0 {
+                    Inner::Primitive(ref bytes) => {
+                        self.tag.write_encoded(false, target)?;
+                        Length::Definite(bytes.len()).write_encoded(target)?;
+                        target.write_all(bytes.as_ref())
+                    }
+                    Inner::Constructed(ref captured) => {
+                        target.write_all(captured.as_slice())
+                    }
+                }
+            }
+            Mode::Cer => {
+                unimplemented!()
+            }
+            Mode::Der => {
+                self.tag.write_encoded(false, target)?;
+                Length::Definite(self.value.len()).write_encoded(target)?;
+                for slice in self.value.iter() {
+                    target.write_all(slice)?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
