@@ -323,6 +323,10 @@ pub fn sequence<V: Values>(inner: V) -> impl Values {
     Constructed::new(Tag::SEQUENCE, inner)
 }
 
+/// Return a value encoder for a SET
+pub fn set<V: Values>(inner: V) -> impl Values {
+    Constructed::new(Tag::SET, inner)
+}
 
 //============ Helper Types ==================================================
 

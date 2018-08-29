@@ -17,6 +17,7 @@ pub mod decode;
 pub mod encode;
 
 pub mod bstring;
+pub mod cstring;
 pub mod captured;
 pub mod int;
 pub mod mode;
