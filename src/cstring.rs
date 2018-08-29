@@ -13,7 +13,6 @@ use super::tag::Tag;
 
 /// Trait for the various Restricted Character String types defined in X.680
 pub trait CharSet {
-
     /// Implementations must specify their own natural tag
     const TAG: Tag;
 
@@ -24,7 +23,7 @@ pub trait CharSet {
 
 //------------ PrintableString -----------------------------------------------
 
-/// PrintableString
+/// A PrintableString.
 ///
 /// The printable string is an implementation of the restricted character
 /// string type defined in X.680 that only allows the following characters:
@@ -35,15 +34,14 @@ pub type PrintableString = CharString<PrintableStringSet>;
 pub struct PrintableStringSet;
 
 impl CharSet for PrintableStringSet {
-
     const TAG: Tag = Tag::PRINTABLE_STRING;
 
     fn is_allowed<I: Iterator<Item=u8>>(i: &mut I) -> bool {
         i.all(|x| {
-                x.is_ascii_alphanumeric() || // A-Z a-z 0-9
-                x == b' ' || x == b'\'' || x == b'(' || x == b')' ||
-                x == b'+' || x == b',' || x == b'-' || x == b'.' ||
-                x == b'/' || x == b':' || x == b'=' || x == b'?'
+            x.is_ascii_alphanumeric() || // A-Z a-z 0-9
+            x == b' ' || x == b'\'' || x == b'(' || x == b')' ||
+            x == b'+' || x == b',' || x == b'-' || x == b'.' ||
+            x == b'/' || x == b':' || x == b'=' || x == b'?'
         })
     }
 }
@@ -51,13 +49,12 @@ impl CharSet for PrintableStringSet {
 
 //------------ CharString ----------------------------------------------------
 
-/// A generic Restricted Character String
+/// A generic Restricted Character String.
 ///
-/// Contains an OCTET STRING with the actual content.
+/// Contains an octet string with the actual content.
 ///
 /// Specific implementations have to ensure that they verify the content
 /// according to the appropriate limitations, and use the correct Tag.
-///
 #[derive(Clone, Debug)]
 pub struct CharString<L: CharSet> {
     octets: OctetString,
@@ -65,7 +62,6 @@ pub struct CharString<L: CharSet> {
 }
 
 impl<L: CharSet> CharString<L> {
-
     unsafe fn new_unchecked(octets: OctetString) -> Self {
         CharString {
             octets,
@@ -73,6 +69,12 @@ impl<L: CharSet> CharString<L> {
         }
     }
 
+    /// Creates a new restricted character set instance.
+    ///
+    /// Creates a new restricted character set instance from an octet string,
+    /// and verifies that all the bytes in the octet string are allowed by
+    /// the specific restricted character set implementation, e.g. printable
+    /// string.
     pub fn new(os: OctetString) -> Result<Self, CharSetError> {
         if L::is_allowed(&mut os.octets()) {
             Ok(unsafe { Self::new_unchecked(os) })
@@ -81,12 +83,19 @@ impl<L: CharSet> CharString<L> {
         }
     }
 
+    /// Takes a single character set value from constructed value content.
+    ///
+    /// If there is no next value, if the next value does not have the natural
+    /// tag appropriate for this character set implementation, or if it does
+    /// not contain a correctly encoded character string, a malformed error is
+    /// returned.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.take_value_if(L::TAG, Self::take_content_from)
     }
 
+    /// Takes a character set from content.
     pub fn take_content_from<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
@@ -103,12 +112,19 @@ impl<L: CharSet> CharString<L> {
     }
 }
 
-impl<L: CharSet> Eq for CharString<L> { }
+
+//--- PartialEq and Eq
+
 impl<L: CharSet, T: AsRef<OctetString>> PartialEq<T> for CharString<L> {
     fn eq(&self, other: &T) -> bool {
         self.octets.eq(other.as_ref())
     }
 }
+
+impl<L: CharSet> Eq for CharString<L> { }
+
+
+//--- AsRef
 
 impl<L: CharSet> AsRef<OctetString> for CharString<L> {
     fn as_ref(&self) -> &OctetString {
