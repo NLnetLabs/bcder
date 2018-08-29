@@ -9,10 +9,10 @@ use super::OctetString;
 use super::tag::Tag;
 
 
-//------------ LimitedCharSet ------------------------------------------------
+//------------ CharSet -------------------------------------------------------
 
 /// Trait for the various Restricted Character String types defined in X.680
-pub trait LimitedCharSet {
+pub trait CharSet {
 
     /// Implementations must specify their own natural tag
     const TAG: Tag;
@@ -21,23 +21,20 @@ pub trait LimitedCharSet {
     fn is_allowed<I: Iterator<Item=u8>>(i: &mut I) -> bool;
 }
 
-#[derive(Debug)]
-pub struct CharSetError;
 
-
-//------------ PrintableStringSet --------------------------------------------
+//------------ PrintableString -----------------------------------------------
 
 /// PrintableString
 ///
 /// The printable string is an implementation of the restricted character
 /// string type defined in X.680 that only allows the following characters:
 /// a-z A-Z 0-9 (space) ' ( ) + , _ . / : = ?
-pub type PrintableString = ResCharString<PrintableStringSet>;
+pub type PrintableString = CharString<PrintableStringSet>;
 
 #[derive(Debug)]
 pub struct PrintableStringSet;
 
-impl LimitedCharSet for PrintableStringSet {
+impl CharSet for PrintableStringSet {
 
     const TAG: Tag = Tag::PRINTABLE_STRING;
 
@@ -52,7 +49,7 @@ impl LimitedCharSet for PrintableStringSet {
 }
 
 
-//------------ ResCharString -------------------------------------------------
+//------------ CharString ----------------------------------------------------
 
 /// A generic Restricted Character String
 ///
@@ -62,15 +59,15 @@ impl LimitedCharSet for PrintableStringSet {
 /// according to the appropriate limitations, and use the correct Tag.
 ///
 #[derive(Clone, Debug)]
-pub struct ResCharString<L: LimitedCharSet> {
+pub struct CharString<L: CharSet> {
     octets: OctetString,
     marker: PhantomData<L>
 }
 
-impl<L: LimitedCharSet> ResCharString<L> {
+impl<L: CharSet> CharString<L> {
 
     unsafe fn new_unchecked(octets: OctetString) -> Self {
-        ResCharString {
+        CharString {
             octets,
             marker: PhantomData
         }
@@ -100,21 +97,26 @@ impl<L: LimitedCharSet> ResCharString<L> {
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
         self.octets.encode_as(L::TAG)
     }
-
 }
 
-impl<L: LimitedCharSet> Eq for ResCharString<L> { }
-impl<L: LimitedCharSet, T: AsRef<OctetString>> PartialEq<T> for ResCharString<L> {
+impl<L: CharSet> Eq for CharString<L> { }
+impl<L: CharSet, T: AsRef<OctetString>> PartialEq<T> for CharString<L> {
     fn eq(&self, other: &T) -> bool {
         self.octets.eq(other.as_ref())
     }
 }
 
-impl<L: LimitedCharSet> AsRef<OctetString> for ResCharString<L> {
+impl<L: CharSet> AsRef<OctetString> for CharString<L> {
     fn as_ref(&self) -> &OctetString {
         &self.octets
     }
 }
+
+
+//------------ CharSetError --------------------------------------------------
+
+#[derive(Debug)]
+pub struct CharSetError;
 
 
 //------------ Testing -------------------------------------------------------
