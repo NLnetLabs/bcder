@@ -95,7 +95,11 @@ impl<L: CharSet> CharString<L> {
     }
 
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        self.octets.encode_as(L::TAG)
+        self.encode_as(L::TAG)
+    }
+
+    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        self.octets.encode_as(tag)
     }
 }
 
