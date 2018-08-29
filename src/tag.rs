@@ -70,6 +70,9 @@ impl Tag {
     /// The tag for the SET and SET OF types, UNIVERSAL 17.
     pub const SET: Self = Tag(0x11);
 
+    /// The tag for the PrintableString type, UNIVERSAL 19
+    pub const PRINTABLE_STRING: Self = Tag(0x13);
+
     /// The tag for the IA5String type, UNIVERSAL 22.
     pub const IA5_STRING: Self = Tag(0x16);
 
@@ -170,6 +173,7 @@ impl fmt::Debug for Tag {
             Tag::OID => write!(f, "OBJECT IDENTIFIER"),
             Tag::SEQUENCE => write!(f, "SEQUENCE"),
             Tag::SET => write!(f, "SET"),
+            Tag::PRINTABLE_STRING => write!(f, "PrintableString"),
             Tag::CTX_0 => write!(f, "[0]"),
             Tag::CTX_1 => write!(f, "[1]"),
             Tag::CTX_2 => write!(f, "[2]"),

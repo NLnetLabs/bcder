@@ -145,6 +145,13 @@ impl OctetString {
 /// # Content Access
 ///
 impl OctetString {
+
+    /// Creates an octet string from a Bytes value.
+    pub fn new(bytes: Bytes) -> Self {
+        OctetString(Inner::Primitive(bytes))
+    }
+
+
     /// Returns an iterator over the parts of the octet string.
     ///
     /// The iterator will produce `&[u8]` which, when appended produce the
