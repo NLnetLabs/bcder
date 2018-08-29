@@ -22,7 +22,7 @@ pub mod int;
 pub mod mode;
 pub mod oid;
 pub mod ostring;
-pub mod rescharstring;
+pub mod cstring;
 pub mod tag;
 
 mod length;
