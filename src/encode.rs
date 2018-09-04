@@ -106,6 +106,26 @@ impl<R: Values, S: Values, T: Values, U: Values> Values for (R, S, T, U) {
 }
 
 
+//--- Impl for Vec
+
+impl<V: Values> Values for Vec<V> {
+
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.iter().fold(0, |l, i| { l + i.encoded_len(mode)} )
+    }
+
+    fn write_encoded<W: io::Write>(&self, mode: Mode, target: &mut W)
+        -> Result<(), io::Error>
+    {
+        for i in self {
+            i.write_encoded(mode, target)?;
+        };
+        Ok(())
+    }
+}
+
+
+
 //------------ PrimitiveContent ----------------------------------------------
 
 /// A trait for the content of a primitive value.
@@ -201,6 +221,25 @@ impl PrimitiveContent for () {
     }
 }
 
+impl PrimitiveContent for bool {
+    const TAG: Tag = Tag::BOOLEAN;
+
+    fn encoded_len(&self, _: Mode) -> usize {
+        1
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        match self {
+            true => target.write(&[1]).unwrap(),
+            false => target.write(&[0]).unwrap(),
+        };
+        Ok(())
+    }
+}
 
 //============ Standard Types ================================================
 
@@ -323,10 +362,28 @@ pub fn sequence<V: Values>(inner: V) -> impl Values {
     Constructed::new(Tag::SEQUENCE, inner)
 }
 
-/// Return a value encoder for a SET
+/// Returns a value encoder for a SET
 pub fn set<V: Values>(inner: V) -> impl Values {
     Constructed::new(Tag::SET, inner)
 }
+
+/// Returns the length for a structure based on the tag and content length.
+pub fn total_encoded_len(tag: Tag, content_l: usize) -> usize {
+    tag.encoded_len() + Length::Definite(content_l).encoded_len() + content_l
+}
+
+/// Writes a header for a structure.
+pub fn write_header<W: io::Write>(
+    target: &mut W,
+    tag: Tag,
+    constructed: bool,
+    content_length: usize
+) -> Result<(), io::Error> {
+    tag.write_encoded(constructed, target)?;
+    Length::Definite(content_length).write_encoded(target)?;
+    Ok(())
+}
+
 
 //============ Helper Types ==================================================
 
