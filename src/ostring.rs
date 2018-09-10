@@ -139,6 +139,11 @@ impl OctetString {
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
         self.encode_as(Tag::OCTET_STRING)
     }
+
+    /// Encodes any Values structure into an OctetString.
+    pub fn encode_into_der<V: encode::Values>(v: V) -> impl encode::Values {
+        WrappingOctetStringEncoder(v)
+    }
 }
 
 
@@ -569,6 +574,49 @@ impl<'a> Iterator for OctetStringOctets<'a> {
     }
 }
 
+//------------ WrappingOctetStringEncoder ------------------------------------
+
+/// Allows wrapping of any `impl encode::Values` inside a DER encoded
+/// OctetString. This is particularly intended for use with X509 Extensions,
+/// which wrap the value the particular extension DER structure as octets
+/// within an OctetString.
+pub struct WrappingOctetStringEncoder<V: encode::Values>(V);
+
+
+//--- encode::Values
+
+impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
+
+    fn encoded_len(&self, mode: Mode) -> usize {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+
+        encode::total_encoded_len(
+            Tag::OCTET_STRING,
+            self.0.encoded_len(Mode::Der)
+        )
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+
+        encode::write_header(
+            target,
+            Tag::OCTET_STRING,
+            false,
+            self.0.encoded_len(Mode::Der))?;
+
+        self.0.write_encoded(Mode::Der, target)
+    }
+}
+
 
 //------------ OctetStringEncoder --------------------------------------------
 
@@ -664,4 +712,30 @@ where S: decode::Source {
     })? { }
     Ok(())
 }
+
+
+//------------ Tests ---------------------------------------------------------
+
+#[cfg(test)]
+pub mod tests {
+
+    use super::*;
+    use encode::{Values, PrimitiveContent};
+
+    #[test]
+    fn should_wrap_content_in_octetstring() {
+        let mut v = Vec::new();
+        let enc = OctetString::encode_into_der(true.value());
+        enc.write_encoded(Mode::Der, &mut v).unwrap();
+
+        // 4, 3          OctetString with content length 3
+        //    1, 1, 1    Boolean, length 1, Value true
+        assert_eq!(vec![4, 3, 1, 1, 1], v);
+
+        let l = enc.encoded_len(Mode::Der);
+        assert_eq!(l, v.len());
+    }
+}
+
+
 

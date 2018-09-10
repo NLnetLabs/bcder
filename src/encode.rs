@@ -106,6 +106,29 @@ impl<R: Values, S: Values, T: Values, U: Values> Values for (R, S, T, U) {
 }
 
 
+//--- Impl for Option
+
+impl<V: Values> Values for Option<V> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        match self {
+            Some(v) => v.encoded_len(mode),
+            None => 0
+        }
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        match self {
+            Some(v) => v.write_encoded(mode, target),
+            None => Ok(())
+        }
+    }
+}
+
+
 //--- Impl for Vec
 
 impl<V: Values> Values for Vec<V> {
@@ -234,7 +257,7 @@ impl PrimitiveContent for bool {
         target: &mut W
     ) -> Result<(), io::Error> {
         match self {
-            true => target.write(&[1]).unwrap(),
+            true => target.write(&[0xff]).unwrap(),
             false => target.write(&[0]).unwrap(),
         };
         Ok(())
@@ -434,6 +457,23 @@ impl Values for EndOfValue {
     ) -> Result<(), io::Error> {
         let buf = [0, 0];
         target.write_all(&buf)
+    }
+}
+
+
+pub struct Nothing;
+
+impl Values for Nothing {
+    fn encoded_len(&self, _mode: Mode) -> usize {
+        0
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _mode: Mode,
+        _target: &mut W
+    ) -> Result<(), io::Error> {
+        Ok(())
     }
 }
 

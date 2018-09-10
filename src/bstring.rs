@@ -176,6 +176,14 @@ impl BitString {
     }
 }
 
+/// # Creating
+///
+impl BitString {
+    pub fn new(unused: u8, bits: Bytes) -> Self {
+        Self { unused, bits}
+    }
+}
+
 
 impl AsRef<Bytes> for BitString {
     fn as_ref(&self) -> &Bytes {

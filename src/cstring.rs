@@ -30,7 +30,7 @@ pub trait CharSet {
 /// a-z A-Z 0-9 (space) ' ( ) + , _ . / : = ?
 pub type PrintableString = CharString<PrintableStringSet>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PrintableStringSet;
 
 impl CharSet for PrintableStringSet {
