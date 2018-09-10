@@ -729,8 +729,8 @@ pub mod tests {
         enc.write_encoded(Mode::Der, &mut v).unwrap();
 
         // 4, 3          OctetString with content length 3
-        //    1, 1, 1    Boolean, length 1, Value true
-        assert_eq!(vec![4, 3, 1, 1, 1], v);
+        //    1, 1, 255    Boolean, length 1, Value true
+        assert_eq!(vec![4, 3, 1, 1, 255], v);
 
         let l = enc.encoded_len(Mode::Der);
         assert_eq!(l, v.len());
