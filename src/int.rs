@@ -8,6 +8,9 @@
 use bytes::Bytes;
 use super::decode;
 use super::tag::Tag;
+use encode::PrimitiveContent;
+use Mode;
+use std::io;
 
 
 //------------ Integer -------------------------------------------------------
@@ -115,4 +118,27 @@ impl Unsigned {
         Ok(Unsigned(res))
     }
 }
+
+impl PrimitiveContent for Unsigned {
+    const TAG: Tag = Tag::INTEGER;
+
+    fn encoded_len(&self, _mode: Mode) -> usize {
+        self.0.len()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        target.write_all(self.0.as_ref())
+    }
+}
+
+impl From<u32> for Unsigned {
+    fn from(n: u32) -> Self {
+        Unsigned(n.to_encoded_bytes(Mode::Der))
+    }
+}
+
 
