@@ -1,6 +1,6 @@
 //! Captured BER-encoded data.
 
-use std::{io, ops};
+use std::{fmt, io, ops};
 use bytes::Bytes;
 use super::{decode, encode};
 use super::mode::Mode;
@@ -8,7 +8,7 @@ use super::mode::Mode;
 
 //------------ Captured ------------------------------------------------------
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Captured {
     bytes: Bytes,
     mode: Mode,
@@ -98,6 +98,19 @@ impl encode::Values for Captured {
             panic!("Trying to encode a captured value with incompatible mode");
         }
         target.write_all(self.bytes.as_ref())
+    }
+}
+
+impl fmt::Debug for Captured {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[ ")?;
+        for (i, &v) in self.bytes.iter().enumerate() {
+            write!(f, "{:02x} ", v)?;
+            if i % 4 == 3 {
+                write!(f, " ")?;
+            }
+        }
+        write!(f, "]")
     }
 }
 

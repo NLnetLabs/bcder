@@ -1,6 +1,8 @@
 
 use std::io;
+use bytes::{BufMut, Bytes, BytesMut};
 use super::length::Length;
+use super::captured::Captured;
 use super::mode::Mode;
 use super::tag::Tag;
 
@@ -30,6 +32,14 @@ pub trait Values {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error>;
+
+    /// Encodes the value to bytes (useful when you need to sign a structure)
+    fn to_captured(&self, mode: Mode) -> Captured
+    where Self: Sized {
+        let mut c = Captured::new(Bytes::new(), mode);
+        c.extend(self);
+        c
+    }
 }
 
 
@@ -165,6 +175,14 @@ pub trait PrimitiveContent {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error>;
+
+    /// Encodes the value to bytes (useful when you need to sign a structure)
+    fn to_encoded_bytes(&self, mode: Mode) -> Bytes {
+        let l = self.encoded_len(mode);
+        let mut w = BytesMut::with_capacity(l).writer();
+        self.write_encoded(mode, &mut w).unwrap();
+        w.into_inner().freeze()
+    }
 
     /// Returns a value encoder for this content using the given tag.
     ///

@@ -85,6 +85,7 @@ impl Integer {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Unsigned(Bytes);
 
+/// # Decoding and Encoding
 impl Unsigned {
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
