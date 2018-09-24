@@ -274,13 +274,31 @@ impl PrimitiveContent for bool {
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        match self {
-            true => target.write(&[0xff]).unwrap(),
-            false => target.write(&[0]).unwrap(),
-        };
-        Ok(())
+        if *self {
+            target.write_all(&[0xff])
+        }
+        else {
+            target.write_all(&[0])
+        }
     }
 }
+
+impl<'a> PrimitiveContent for &'a [u8] {
+    const TAG: Tag = Tag::OCTET_STRING;
+
+    fn encoded_len(&self, _: Mode) -> usize {
+        self.len()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        target.write_all(self)
+    }
+}
+
 
 //============ Standard Types ================================================
 

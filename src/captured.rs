@@ -19,6 +19,12 @@ impl Captured {
         Captured { bytes, mode }
     }
 
+    pub fn from_values<V: encode::Values>(mode: Mode, values: V) -> Self {
+        let mut res = Self::new(Bytes::new(), mode);
+        res.extend(values);
+        res
+    }
+
     pub fn empty() -> Self {
         Captured {
             bytes: Bytes::new(),

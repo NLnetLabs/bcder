@@ -1024,7 +1024,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     }
 
     /// Skips over all remaining content.
-    fn skip_all(&mut self) -> Result<(), S::Err> {
+    pub fn skip_all(&mut self) -> Result<(), S::Err> {
         while let Some(()) = self.skip_one()? { }
         Ok(())
     }
@@ -1033,7 +1033,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If there is a next value, returns `Ok(Some(()))`, if the end of value
     /// has already been reached, returns `Ok(None)`.
-    fn skip_one(&mut self) -> Result<Option<()>, S::Err> {
+    pub fn skip_one(&mut self) -> Result<Option<()>, S::Err> {
         self.take_opt_value(|_tag, content| {
             match *content {
                 Content::Primitive(ref mut inner) => {
