@@ -8,7 +8,7 @@ use super::mode::Mode;
 
 //------------ Captured ------------------------------------------------------
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Captured {
     bytes: Bytes,
     mode: Mode,
