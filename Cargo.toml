@@ -5,6 +5,11 @@ authors = [
     "Tim Bruijnzeels <tim@nlnetlabs.nl>",
     "Martin Hoffmann <martin@nlnetlabs.nl>"
 ]
+description = "BER, CER, and DER encoding and decoding."
+repository = "https://github.com/nlnetlabs/ber-rs"
+keywords = ["ber", "cer", "der", "asn1", "decoding", "encoding"]
+categories = ["encoding", "network-programming", "parsing"]
+license = "BSD-3-Clause"
 
 [dependencies]
 bytes           = "^0.4"
