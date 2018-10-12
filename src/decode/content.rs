@@ -5,6 +5,7 @@
 
 use bytes::Bytes;
 use ::captured::Captured;
+use ::int::{Integer, Unsigned};
 use ::length::Length;
 use ::mode::Mode;
 use ::tag::Tag;
@@ -14,12 +15,15 @@ use super::source::{CaptureSource, LimitedSource, Source};
 
 //------------ Content -------------------------------------------------------
 
-/// The content octets of a BER encoded value.
+/// The content octets of a BER-encoded value.
 ///
 /// A value is either primitive, containing actual octets of an actual value,
 /// or constructed, in which case its content contains additional BER encoded
 /// values. This enum is useful for cases where a certain type may be encoded
 /// as either a primitive value or a complex constructed value.
+///
+/// Note that this type represents the content octets only, i.e., it does not
+/// contain the tag of the value.
 pub enum Content<'a, S: 'a> {
     /// The value is a primitive value.
     Primitive(Primitive<'a, S>),
@@ -63,7 +67,7 @@ impl<'a, S: Source + 'a> Content<'a, S> {
         }
     }
 
-    /// Converts a reference into on to a primitive value or errors out.
+    /// Converts a reference into into one to a primitive value or errors out.
     pub fn as_primitive(&mut self) -> Result<&mut Primitive<'a, S>, S::Err> {
         match *self {
             Content::Primitive(ref mut inner) => Ok(inner),
@@ -82,22 +86,6 @@ impl<'a, S: Source + 'a> Content<'a, S> {
                 xerr!(Err(Error::Malformed.into()))
             }
             Content::Constructed(ref mut inner) => Ok(inner),
-        }
-    }
-
-    /// Converts the content into a bytes value.
-    ///
-    /// If the value is a constructed value, makes sure that all contained
-    /// constructed values are properly encoded. Primitive values will only
-    /// be checked for valid tag and length encodings.
-    ///
-    //  XXX This should probably not be used anymore.
-    pub fn into_bytes(&mut self) -> Result<Bytes, S::Err> {
-        match *self {
-            Content::Primitive(ref mut inner) => inner.take_all(),
-            Content::Constructed(ref mut inner) => {
-                inner.capture_all().map(Captured::into_bytes)
-            }
         }
     }
 }
@@ -144,7 +132,6 @@ impl<'a, S: Source + 'a> Content<'a, S> {
         }
     }
 
-
     /// Converts content into a `u32`.
     ///
     /// If the content is not primitive or does not contain a single BER
@@ -158,7 +145,6 @@ impl<'a, S: Source + 'a> Content<'a, S> {
         }
     }
 
-
     /// Converts content into a `u64`.
     ///
     /// If the content is not primitive or does not contain a single BER
@@ -170,10 +156,6 @@ impl<'a, S: Source + 'a> Content<'a, S> {
         else {
             xerr!(Err(Error::Malformed.into()))
         }
-    }
-
-    pub fn to_unsigned(&mut self) -> Result<Bytes, S::Err> {
-        self.as_primitive()?.to_unsigned()
     }
 
     /// Converts the content into a NULL value.
@@ -247,16 +229,11 @@ impl<'a, S: 'a> Primitive<'a, S> {
     }
 }
 
+
 /// # High-level Decoding
 ///
 impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Parses the primitive value as a BOOLEAN value.
-    ///
-    /// A boolean value is encoded as a primitive value with exactly one
-    /// octet of content. If the octet is 0, the result is `false`, otherwise
-    /// it is `true`. In DER mode, the octet has to be `0` for a value of
-    /// `false`, `0xFF` for a value of `true`, and all other values are not
-    /// permitted.
     pub fn to_bool(&mut self) -> Result<bool, S::Err> {
         let res = self.take_u8()?;
         if self.mode == Mode::Der {
@@ -273,158 +250,54 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
         }
     }
 
-    /// Parses the primitive value as an INTEGER limited to a `u32`.
+    /// Parses the primitive value as an INTEGER limited to a `i8`.
+    pub fn to_i8(&mut self) -> Result<i8, S::Err> {
+        Integer::i8_from_primitive(self)
+    }
+
+    /// Parses the primitive value as an INTEGER limited to a `i8`.
+    pub fn to_i16(&mut self) -> Result<i16, S::Err> {
+        Integer::i16_from_primitive(self)
+    }
+
+    /// Parses the primitive value as an INTEGER limited to a `i8`.
+    pub fn to_i32(&mut self) -> Result<i32, S::Err> {
+        Integer::i32_from_primitive(self)
+    }
+
+    /// Parses the primitive value as an INTEGER limited to a `i8`.
+    pub fn to_i64(&mut self) -> Result<i64, S::Err> {
+        Integer::i64_from_primitive(self)
+    }
+
+    /// Parses the primitive value as an INTEGER limited to a `i8`.
+    pub fn to_i128(&mut self) -> Result<i128, S::Err> {
+        Integer::i128_from_primitive(self)
+    }
+
+    /// Parses the primitive value as an INTEGER limited to a `u8`.
     pub fn to_u8(&mut self) -> Result<u8, S::Err> {
-        self.check_int_head()?;
-        self.check_unsigned()?;
-        match self.remaining() {
-            1 => self.take_u8(), // sign bit has been checked above.
-            2 => {
-                // First byte must be 0x00, second is the result.
-                if self.take_u8()? != 0 {
-                    xerr!(Err(Error::Malformed.into()))
-                }
-                else {
-                    self.take_u8()
-                }
-            }
-            _ => xerr!(Err(Error::Malformed.into()))
-        }
+        Unsigned::u8_from_primitive(self)
     }
 
-
-    /// Parses the primitive value as an INTEGER limited to a `u32`.
+    /// Parses the primitive value as an INTEGER limited to a `u16`.
     pub fn to_u16(&mut self) -> Result<u16, S::Err> {
-        self.check_int_head()?;
-        self.check_unsigned()?;
-        match self.remaining() {
-            1 => Ok(self.take_u8()? as u16),
-            2 => {
-                Ok(
-                    (self.take_u8()? as u16) << 8
-                    | (self.take_u8()? as u16)
-                )
-            }
-            3 => {
-                if self.take_u8()? != 0 {
-                    xerr!(return Err(Error::Malformed.into()));
-                }
-                Ok(
-                    (self.take_u8()? as u16) << 24
-                    | (self.take_u8()? as u16) << 16
-                )
-            }
-            _ => xerr!(Err(Error::Malformed.into()))
-        }
+        Unsigned::u16_from_primitive(self)
     }
-
 
     /// Parses the primitive value as an INTEGER limited to a `u32`.
     pub fn to_u32(&mut self) -> Result<u32, S::Err> {
-        self.check_int_head()?;
-        self.check_unsigned()?;
-        match self.remaining() {
-            1 => Ok(self.take_u8()? as u32),
-            2 => {
-                Ok(
-                    (self.take_u8()? as u32) << 8
-                    | (self.take_u8()? as u32)
-                )
-            }
-            3 => {
-                Ok(
-                    (self.take_u8()? as u32) << 16
-                    | (self.take_u8()? as u32) << 8
-                    | (self.take_u8()? as u32)
-                )
-            }
-            4 => {
-                Ok(
-                    (self.take_u8()? as u32) << 24
-                    | (self.take_u8()? as u32) << 16
-                    | (self.take_u8()? as u32) << 8
-                    | (self.take_u8()? as u32)
-                )
-            }
-            5 => {
-                if self.take_u8()? != 0 {
-                    xerr!(return Err(Error::Malformed.into()));
-                }
-                Ok(
-                    (self.take_u8()? as u32) << 24
-                    | (self.take_u8()? as u32) << 16
-                    | (self.take_u8()? as u32) << 8
-                    | (self.take_u8()? as u32)
-                )
-            }
-            _ => xerr!(Err(Error::Malformed.into()))
-        }
+        Unsigned::u32_from_primitive(self)
     }
 
     /// Parses the primitive value as a INTEGER value limited to a `u64`.
     pub fn to_u64(&mut self) -> Result<u64, S::Err> {
-        self.check_int_head()?;
-        self.check_unsigned()?;
-        if self.remaining() == 9 {
-            if self.take_u8()? != 0 {
-                xerr!(return Err(Error::Malformed.into()))
-            }
-        }
-        let mut res = 0;
-        for _ in 0..8 {
-            if self.remaining() == 0 {
-                break
-            }
-            res = res << 8 | (self.take_u8()? as u64);
-        }
-        Ok(res)
+        Unsigned::u64_from_primitive(self)
     }
 
-    /// Parses the primitive value as an INTEGER of unlimited length.
-    pub fn to_unsigned(&mut self) -> Result<Bytes, S::Err> {
-        self.check_int_head()?;
-        self.check_unsigned()?;
-        self.take_all()
-    }
-
-    /// Checks that an integer is started correctly.
-    ///
-    /// Specifically, checks that there is at least one octet and that the
-    /// first nine bits of a multi-octet integer are not all the same.
-    ///
-    /// The latter ensures that an integer is encoded in the smallest possible
-    /// number of octets. If we insist on this rule, we can use the content
-    /// octets as the value for large integers and use simply compare slices
-    /// for comparision.
-    fn check_int_head(&mut self) -> Result<(), S::Err> {
-        if self.request(2)? == 0 {
-            xerr!(return Err(Error::Malformed.into()))
-        }
-        let slice = self.slice();
-        match (slice.get(0), slice.get(1).map(|x| x & 0x80 != 0)) {
-            (Some(0), Some(false)) => {
-                xerr!(Err(Error::Malformed.into()))
-            }
-            (Some(0xFF), Some(true)) => {
-                xerr!(Err(Error::Malformed.into()))
-            }
-            (Some(x), _) if x & 0x80 != 0 => {
-                xerr!(Err(Error::Malformed.into()))
-            }
-            _ => Ok(())
-        }
-    }
-
-    /// Checks that an integer is unsigned.
-    ///
-    /// Always call this after `check_int_head`.
-    fn check_unsigned(&self) -> Result<(), S::Err> {
-        if self.slice().get(0).unwrap() & 0x80 != 0 {
-            xerr!(Err(Error::Malformed.into()))
-        }
-        else {
-            Ok(())
-        }
+    /// Parses the primitive value as a INTEGER value limited to a `u128`.
+    pub fn to_u128(&mut self) -> Result<u64, S::Err> {
+        Unsigned::u64_from_primitive(self)
     }
 
     /// Converts the content octets to a NULL value.
@@ -441,8 +314,8 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
 /// For basic low-level access, `Primitive` implements the `Source` trait.
 /// Because the length of the content is guaranteed to be known, it can
 /// provide a few additional methods. Note that these may still fail because
-/// while the length is known, the underlying source doesn’t guarantee that
-/// as many octets are actually available.
+/// the underlying source doesn’t guarantee that as many octets are actually
+/// available.
 impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Returns the number of remaining octets.
     ///
@@ -476,6 +349,45 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
 }
 
 
+/// # Support for Testing
+///
+impl<'a> Primitive<'a, &'a [u8]> {
+    /// Decode a bytes slice via a closure.
+    ///
+    /// This method can be used in testing code for decoding primitive
+    /// values by providing a bytes slice with the content. For instance,
+    /// decoding the `to_bool` method could be tested like this:
+    ///
+    /// ```
+    /// use ber::Mode;
+    /// use ber::decode::Primitive;
+    ///
+    /// assert_eq!(
+    ///     Primitive::decode_slice(
+    ///         b"\x00".as_ref(), Mode::Der,
+    ///         |prim| prim.to_bool()
+    ///     ).unwrap(),
+    ///     false
+    /// )
+    /// ```
+    pub fn decode_slice<F, T>(
+        source: &'a [u8],
+        mode: Mode,
+        op: F
+    ) -> Result<T, Error>
+    where F: FnOnce(&mut Primitive<&[u8]>) -> Result<T, Error> {
+        let mut lim = LimitedSource::new(source);
+        lim.set_limit(Some(source.len()));
+        let mut prim = Self::new(&mut lim, mode);
+        let res = op(&mut prim)?;
+        prim.exhausted()?;
+        Ok(res)
+    }
+}
+
+
+//--- Source
+
 impl<'a, S: Source + 'a> Source for Primitive<'a, S> {
     type Err = S::Err;
 
@@ -502,18 +414,22 @@ impl<'a, S: Source + 'a> Source for Primitive<'a, S> {
 /// The content octets of a constructed value.
 ///
 /// You will only ever receive a mutable reference to a value of this type
-/// as an argument to a closure provided to some function. Your closure will
-/// have to advance over the complete content using the value’s methods.
+/// as an argument to a closure provided to some function. The closure will
+/// have to process all content of the constructed value.
 ///
-/// Since constructed values consist of a sequence of values, these methods
+/// Since constructed values consist of a sequence of values, the methods
 /// allow you to process these values one by one. The most basic of these
-/// are `value` and `opt_value` which process exactly one value or up to one
-/// value. A number of convenience functions exists on top of them for
-/// commonly encountered types and cases.
+/// are [`take_value`] and [`take_opt_value`] which process exactly one
+/// value or up to one value. A number of convenience functions exists on
+/// top of them for commonly encountered types and cases.
 ///
 /// Because the caller of your closure checks whether all content has been
-/// advanced over, you only need to read as many values as you expected to
-/// be present and can simply return when you think you are done.
+/// advanced over and raising an error of not, you only need to read as many
+/// values as you expected to be present and can simply return when you think
+/// you are done.
+///
+/// [`take_value`]: #method.take_value
+/// [`take_opt_value`]: #method.take_opt_value
 #[derive(Debug)]
 pub struct Constructed<'a, S: 'a> {
     /// The underlying source.
@@ -538,6 +454,15 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         Constructed { source, state, mode }
     }
 
+    /// Decode a source as a constructed content.
+    ///
+    /// The function will start decoding of `source` in the given mode. It
+    /// will pass a constructed content value to the closure `op` which
+    /// has to process all the content and return a result or error.
+    ///
+    /// This function is identical to calling [`Mode::decode`].
+    ///
+    /// [`Mode::decode`]: ../enum.Mode.html#method.decode
     pub fn decode<F, T>(source: S, mode: Mode, op: F) -> Result<T, S::Err>
     where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
         let mut source = LimitedSource::new(source);
@@ -561,11 +486,11 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 /// # Fundamental Reading
 ///
 impl<'a, S: Source + 'a> Constructed<'a, S> {
-    /// Checks whether all content has advanced over.
+    /// Checks whether all content has been advanced over.
     ///
     /// For a value of definite length, this is the case when the limit of the
     /// source has been reached. For indefinite values, we need to have either
-    /// have read or can now read the end-of-value marker.
+    /// already read or can now read the end-of-value marker.
     fn exhausted(&mut self) -> Result<(), S::Err> {
         match self.state {
             State::Done => Ok(()),
@@ -969,16 +894,18 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         })
     }
 
-    /// Captures content into a bytes value.
+    /// Captures content for later processing
     ///
     /// The method gives a representation of the content to the closure `op`.
-    /// If it succeeds, it converts whatever the closure advanced over into
-    /// a `Bytes` value and returns this value.
+    /// If it succeeds, it returns whatever the closure advanced over as a
+    /// [`Captured`] value.
     ///
     /// The closure may process no, one, several, or all values of this
     /// value’s content.
     ///
     /// If the closure returns an error, this error is returned.
+    ///
+    /// [`Captured`]: ../captures/struct.Captured.html
     pub fn capture<F>(&mut self, op: F) -> Result<Captured, S::Err>
     where
         F: FnOnce(
@@ -997,13 +924,15 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         Ok(Captured::new(source.unwrap().into_bytes(), self.mode))
     }
 
-    /// Captures the next value into a bytes value.
+    /// Captures one value for later processing
     ///
     /// The method takes the next value from this value’s content, whatever
-    /// it its, end returns its encoded form as a `Bytes` value.
+    /// it its, end returns its encoded form as a [`Captured`] value.
     ///
     /// If there is no next value, a malformed error is returned. If access
     /// to the underlying source fails, an appropriate error is returned.
+    ///
+    /// [`Captured`]: ../captures/struct.Captured.html
     pub fn capture_one(&mut self) -> Result<Captured, S::Err> {
         self.capture(|cons| {
             match cons.skip_one()? {
@@ -1015,9 +944,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         })
     }
 
-    /// Captures all remaining content into a bytes value.
+    /// Captures all remaining content for later processing.
     ///
-    /// The mathod takes all remaining values from this value’s content and
+    /// The method takes all remaining values from this value’s content and
     /// returns their encoded form in a `Bytes` value.
     pub fn capture_all(&mut self) -> Result<Captured, S::Err> {
         self.capture(|cons| cons.skip_all())
@@ -1054,25 +983,6 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 /// These methods provide short-cuts for processing fundamental values in
 /// their standard form. That is, the values use their regular tag and
 /// encoding.
-///
-/// When such values are explicitely tagged, they are encoded inside as the
-/// sole content of a constructed value with the given tag. If such values
-/// are implicitely tagged, they are encoded as usual, but have a different
-/// tag. In this case, you can use `take_value_if` or `take_opt_value_if`,
-/// provide it with the expected tag and use the high-level processing
-/// methods of `Value` to process the content.
-///
-/// For instance, an ASN.1 definition of `[0] IMPLICIT BOOL` you would
-/// process as
-/// 
-/// ```rust,ignore
-/// cons.take_value(Tag::CTX_0, |value| value.to_bool())
-/// ```
-///
-/// Note that if neither EXPLICIT or IMPLICIT are given in the definition,
-/// which of the two is used is decided by the module definition. If the
-/// module starts with `DEFINITIONS EXPLICIT TAGS ::=`, explicit is the
-/// default. Some RFCs have modules with both defaults, so check carefully.
 impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// Processes and returns a mandatory boolean value.
     pub fn take_bool(&mut self) -> Result<bool, S::Err> {
@@ -1142,7 +1052,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         }).map(|_| ())
     }
 
-    /// Processes a mandatory INTEGER value of the `u8` range.
+    /// Processes a mandatory INTEGER value of the `u16` range.
     ///
     /// If the integer value is less than 0 or greater than 65535, a malformed
     /// error is returned.

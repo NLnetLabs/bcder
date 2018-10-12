@@ -1,60 +1,33 @@
-//! Parsing data in Basic Encoding Rules.
+//! Parsing BER-encoded data.
 //!
-//! This modules provides means to parse data encoded in ASN.1’s _Basic
-//! Encoding Rules_ as defined in ITU recommendation X.690 as well as their
-//! stricter companions _Cannonical Encoding Rules_ and _Distringuished
-//! Encoding Rules._
+//! This modules provides the means to parse BER-encoded data.
 //!
-//! These rules encode data as a stream of nested values. Each value is
-//! has an indication of its type, called a [`Tag`]. It can either be
-//! [`Primitive`], in which case it contains the actual data for a value,
-//! or [`Constructed`], in which case it contains a sequence of more values.
+//! The basic idea is that for each type a function exists that knows how
+//! to decode one value of that type. For constructed types, this function
+//! in turn relies on similar functions provided for its consituent types.
+//! For a detailed introduction to how to write these functions, please
+//! refer to the [decode section of the guide].
 //!
-//! The decoder operates in a streaming fashion. It will read data from
-//! something encoding the [`Source`] trait which provides access to the
-//! data stream in a way digestible by the decoder.
+//! The two most important types of this module are [`Primitive`] and
+//! [`Constructed`], representing the content octets of a value in primitive
+//! and constructed encoding, respectively. Each provides a number of methods
+//! allowing to parse the content.
 //!
-//! All actual decoding happens through closures which receive a reference
-//! to a value and are supposed to handle this value completely. If they
-//! return with content of the value still unparsed, an error will occur.
+//! You will never create a value of either type. Rather, you get handed a
+//! reference to one as an argument to a closure or function argument to be
+//! provided to these methods. 
 //!
-//! This module uses the [bytes] crate’s [`Bytes`] type to store byte
-//! sequences in a reasonably cheap yet owned fashion. It implements
-//! [`Source`] for [`Bytes`], optimizing for a case where if you have a
-//! complete message, you can take out parts of it cheaply.
+//! The enum [`Content`] is used for cases where a value can be either
+//! primitive or constructed such as most string types.
 //!
-//! If you have such a message, you can begin parsing by determining the
-//! [`Mode`] you want to parse the message in: `Mode::Ber`, `Mode::Cer`,
-//! or `Mode::Der`. If you are unsure, use `Mode::Ber` as that is the most
-//! general and therefore most Postel-compatible for parsing. Pass your
-//! source to the `Mode`’s `decode` method and provide a means to deal with
-//! the content:
+//! Decoding is jumpstarted by providing a data source to parse data from.
+//! This is any value that implements the [`Source`] trait.
 //!
-//! ```rust,ignore
-//! let bytes = load_bytes_somehow();
-//! Mode::Ber.decode(bytes, |cons| {
-//!     cons.take_u64()
-//! })?;
-//! ```
-//!
-//! This would parse a BER encoded message that consists of a single
-//! INTEGER.
-//!
-//! The module also provides a number of types for commonly encountered
-//! types that warrant special treatment, specifically [`BitString`]
-//! and [`OctetString`] for the two fundamental ASN.1 string types, and
-//! [`Oid`] for ASN.1 OCTET IDENTIFIERs.
-//!
-//! [bytes]: ../../bytes/index.html
-//! [`Bytes`]: ../../bytes/struct.Bytes.html
-//! [`BitString`]: struct.BitString.html
-//! [`Constructed`]: struct.Constructed.html
-//! [`Mode`]: enum.Mode.html
-//! [`Oid`]: struct.Oid.html
-//! [`OctetString`]: struct.OctetString.html
+//! [decode section of the guide]: ../guide/decode/index.html
 //! [`Primitive`]: struct.Primitive.html
+//! [`Constructed`]: struct.Constructed.html
+//! [`Content`]: enum.Content.html
 //! [`Source`]: trait.Source.html
-//! [`Tag`]: struct.Tag.html
 
 pub use self::content::{Content, Constructed, Primitive};
 pub use self::error::Error;

@@ -6,12 +6,14 @@
 
 //------------ Error ---------------------------------------------------------
 
-/// An error happned while decoding BER data.
-#[derive(Clone, Copy, Debug, Fail)]
+/// An error happened while decoding data.
+#[derive(Clone, Copy, Debug, Eq, Fail, PartialEq)]
 pub enum Error {
+    /// The data didn’t conform to the expected structure.
     #[fail(display="malformed data")]
     Malformed,
 
+    /// An encoding used by the data is not yet implemented by the crate.
     #[fail(display="format not implemented")]
     Unimplemented,
 }

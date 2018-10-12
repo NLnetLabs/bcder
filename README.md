@@ -19,7 +19,7 @@ ber = "^0.1"
 A guide introducing ASN.1, BER, and how to use this crate is part of the
 source as the [`ber::guide`] module.
 
-[`ber::guide`]: https://github.com/NLnetLabs/ber-rs/tree/master/src/guide
+[`ber::guide`]: https://docs.rs/ber-rs/0.1/ber/guide/index.html
 
 
 ## Contributing
