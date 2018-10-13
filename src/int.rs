@@ -12,52 +12,32 @@ use super::Mode;
 
 
 //------------ Macros for built-in integers ----------------------------------
+//
+// These are only for decoding. Encoding via the PrimitiveContent can be found
+// in the `encode::primitive` module.
 
-macro_rules! signed_impl {
+macro_rules! decode_signed {
     ( $prim:ident, $type:ident, $len:expr) => {{
+        // Because the value is encoded in two’s complement, we need to fill
+        // in missing left octets by 0x00 for positive numbers and 0xFF for
+        // negative numbers. We achieve this by starting out with either all
+        // bits zero (i.e., 0) or ones (i.e., -1) and then shifting in
+        // present octets from the right.
         Self::check_head($prim)?;
         let first = $prim.take_u8()?;
-        if first & 0x80 != 0 {
-            if $prim.remaining() == $len - 1 {
-                // Full length. Simple shift the octets in.
-                let mut res = $type::from(first);
-                for _ in 1..$len {
-                    res = (res << 8) | $type::from($prim.take_u8()?);
-                }
-                Ok(res)
+        let mut res = if first & 0x80 == 0 { 0 }
+                      else { (-1 << 8) | $type::from(first) };
+        for _ in 1..$len {
+            if $prim.remaining() == 0 {
+                break
             }
-            else {
-                // Short encoding. To calculate the two’s complement, we need
-                // the value of the integer value of the sign bit and subtract
-                // that from the integer value of all the other bits.
-                let mut sign: $type = 0x80;
-                let mut sum = $type::from(first & 0x7F);
-                for _ in 1..$len - 1 {
-                    if $prim.remaining() == 0 {
-                        break
-                    }
-                    sign <<= 8;
-                    sum = (sum << 8) | $type::from($prim.take_u8()?);
-                }
-                Ok(sum - sign)
-            }
+            res = (res << 8) | ($type::from($prim.take_u8()?));
         }
-        else {
-            let mut res = $type::from(first);
-            for _ in 1..$len {
-                if $prim.remaining() == 0 {
-                    break
-                }
-                else {
-                    res = (res << 8) | ($type::from($prim.take_u8()?));
-                }
-            }
-            Ok(res)
-        }
+        Ok(res)
     }}
 }
 
-macro_rules! unsigned_impl {
+macro_rules! decode_unsigned {
     ( $prim:ident, $type:ident, $len:expr) => {{
         Self::check_head($prim)?;
         if $prim.remaining() > $len {
@@ -139,25 +119,25 @@ impl Integer {
     pub fn i16_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i16, S::Err> {
-        signed_impl!(prim, i16, 2)
+        decode_signed!(prim, i16, 2)
     }
 
     pub fn i32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i32, S::Err> {
-        signed_impl!(prim, i32, 4)
+        decode_signed!(prim, i32, 4)
     }
 
     pub fn i64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i64, S::Err> {
-        signed_impl!(prim, i64, 8)
+        decode_signed!(prim, i64, 8)
     }
 
     pub fn i128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i128, S::Err> {
-        signed_impl!(prim, i128, 16)
+        decode_signed!(prim, i128, 16)
     }
 
     /// Checks that an integer is started correctly.
@@ -282,19 +262,19 @@ impl Unsigned {
     pub fn u32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u32, S::Err> {
-        unsigned_impl!(prim, u32, 4)
+        decode_unsigned!(prim, u32, 4)
     }
 
     pub fn u64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u64, S::Err> {
-        unsigned_impl!(prim, u64, 8)
+        decode_unsigned!(prim, u64, 8)
     }
 
     pub fn u128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u128, S::Err> {
-        unsigned_impl!(prim, u128, 16)
+        decode_unsigned!(prim, u128, 16)
     }
 
     /// Checks that an unsigned integer is started correctly.
