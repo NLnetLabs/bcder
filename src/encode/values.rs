@@ -1,23 +1,24 @@
+//! Everything related to the `Values` trait.
+//!
+//! This is an internal module. Its public types are re-exported by the
+//! parent.
 
 use std::io;
-use bytes::{BufMut, Bytes, BytesMut};
-use super::length::Length;
-use super::captured::Captured;
-use super::mode::Mode;
-use super::tag::Tag;
+use ::captured::Captured;
+use ::length::Length;
+use ::mode::Mode;
+use ::tag::Tag;
 
-
-//============ Traits ========================================================
 
 //------------ Values --------------------------------------------------------
 
-/// A trait for a value encoder.
+/// A type that is a value encoder.
 ///
-/// A value encoder is a type that knows how to encode itself into a
+/// Value encoders know how to encode themselves into a
 /// sequence of BER encoded values. While you can impl this trait for your
 /// type manually, in practice it is often easier to define a method called
-/// `encode` and let it return some dedicated value encoder type from this
-/// module.
+/// `encode` and let it return some dedicated value encoder type constructed
+/// from the types provided by this module.
 ///
 /// A type implementing this trait should encodes itself into one or more
 /// BER values. That is, the type becomes the content or part of the content
@@ -33,12 +34,20 @@ pub trait Values {
         target: &mut W
     ) -> Result<(), io::Error>;
 
-    /// Encodes the value to bytes (useful when you need to sign a structure)
-    fn to_captured(&self, mode: Mode) -> Captured
+
+    //--- Provided methods
+
+    /// Converts the encoder into one with an explicit tag.
+    fn explicit(self, tag: Tag) -> Constructed<Self>
     where Self: Sized {
-        let mut c = Captured::new(Bytes::new(), mode);
-        c.extend(self);
-        c
+        Constructed::new(tag, self)
+    }
+
+    /// Captures the encoded values in the given mode.
+    fn to_captured(&self, mode: Mode) -> Captured {
+        let mut target = Vec::new();
+        self.write_encoded(mode, &mut target).unwrap();
+        Captured::new(target.into(), mode)
     }
 }
 
@@ -118,6 +127,10 @@ impl<R: Values, S: Values, T: Values, U: Values> Values for (R, S, T, U) {
 
 //--- Impl for Option
 
+/// Encoding of an optional value.
+///
+/// This implementation encodes `None` as nothing, i.e., as an OPTIONAL
+/// in ASN.1 parlance.
 impl<V: Values> Values for Option<V> {
     fn encoded_len(&self, mode: Mode) -> usize {
         match self {
@@ -139,12 +152,26 @@ impl<V: Values> Values for Option<V> {
 }
 
 
-//--- Impl for Vec
+//--- Impl for slice and Vec
+
+impl<V: Values> Values for [V] {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.iter().map(|v| v.encoded_len(mode)).sum()
+    }
+
+    fn write_encoded<W: io::Write>(&self, mode: Mode, target: &mut W)
+        -> Result<(), io::Error>
+    {
+        for i in self {
+            i.write_encoded(mode, target)?;
+        };
+        Ok(())
+    }
+}
 
 impl<V: Values> Values for Vec<V> {
-
     fn encoded_len(&self, mode: Mode) -> usize {
-        self.iter().fold(0, |l, i| { l + i.encoded_len(mode)} )
+        self.iter().map(|v| v.encoded_len(mode)).sum()
     }
 
     fn write_encoded<W: io::Write>(&self, mode: Mode, target: &mut W)
@@ -158,149 +185,7 @@ impl<V: Values> Values for Vec<V> {
 }
 
 
-
-//------------ PrimitiveContent ----------------------------------------------
-
-/// A trait for the content of a primitive value.
-pub trait PrimitiveContent {
-    /// The natural tag of an encoded value of this type.
-    const TAG: Tag;
-
-    /// Returns the length of the encoded content of this type.
-    fn encoded_len(&self, mode: Mode) -> usize;
-
-    /// Writes the encoded content to a writer.
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error>;
-
-    /// Encodes the value to bytes (useful when you need to sign a structure)
-    fn to_encoded_bytes(&self, mode: Mode) -> Bytes {
-        let l = self.encoded_len(mode);
-        let mut w = BytesMut::with_capacity(l).writer();
-        self.write_encoded(mode, &mut w).unwrap();
-        w.into_inner().freeze()
-    }
-
-    /// Returns a value encoder for this content using the given tag.
-    ///
-    /// The returned value is a content encoder that produces a single
-    /// primitive BER encoded value. The tag for this value is explicitely
-    /// given via the `tag` argument.
-    fn tagged(&self, tag: Tag) -> Primitive<Self> {
-        Primitive { tag, prim: self }
-    }
-
-    /// Returns a value encoder for this content using the natural tag.
-    ///
-    /// This is like `tagged` except that it uses `Self::TAG` as the tag.
-    fn value(&self) -> Primitive<Self> {
-        self.tagged(Self::TAG)
-    }
-}
-
-
-//--- impl for built-in types
-
-impl PrimitiveContent for u32 {
-    const TAG: Tag = Tag::INTEGER;
-
-    fn encoded_len(&self, _: Mode) -> usize {
-        ((32 - self.leading_zeros()) / 8 + 1) as usize
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        if *self < 0xFF {
-            target.write_all(&[*self as u8])
-        }
-        else if *self < 0xFFFF {
-            target.write_all(&[
-                (*self >> 8) as u8,
-                *self as u8
-            ])
-        }
-        else if *self < 0xFF_FFFF {
-            target.write_all(&[
-                (*self >> 16) as u8,
-                (*self >> 8) as u8,
-                *self as u8
-            ])
-        }
-        else if *self < 0xFFFF_FFFF {
-            target.write_all(&[
-                (*self >> 24) as u8,
-                (*self >> 16) as u8,
-                (*self >> 8) as u8,
-                *self as u8
-            ])
-        }
-        else {
-            target.write_all(&[0, 0xFF, 0xFF, 0xFF, 0xFF])
-        }
-    }
-}
-
-impl PrimitiveContent for () {
-    const TAG: Tag = Tag::NULL;
-
-    fn encoded_len(&self, _: Mode) -> usize {
-        0
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _: Mode,
-        _: &mut W
-    ) -> Result<(), io::Error> {
-        Ok(())
-    }
-}
-
-impl PrimitiveContent for bool {
-    const TAG: Tag = Tag::BOOLEAN;
-
-    fn encoded_len(&self, _: Mode) -> usize {
-        1
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        if *self {
-            target.write_all(&[0xff])
-        }
-        else {
-            target.write_all(&[0])
-        }
-    }
-}
-
-impl<'a> PrimitiveContent for &'a [u8] {
-    const TAG: Tag = Tag::OCTET_STRING;
-
-    fn encoded_len(&self, _: Mode) -> usize {
-        self.len()
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        target.write_all(self)
-    }
-}
-
-
-//============ Standard Types ================================================
+//------------ Constructed --------------------------------------------------
 
 /// A value encoder for a single constructed value.
 pub struct Constructed<V> {
@@ -312,6 +197,10 @@ pub struct Constructed<V> {
 }
 
 impl<V> Constructed<V> {
+    /// Creates a new constructed value encoder from a tag and content.
+    ///
+    /// The returned value will encode as a single constructed value with
+    /// the given tag and whatever `inner` encodeds to as its content.
     pub fn new(tag: Tag, inner: V) -> Self {
         Constructed { tag, inner }
     }
@@ -389,6 +278,48 @@ impl<L: Values, R: Values> Values for Choice2<L, R> {
 }
 
 
+//------------ Choice3 -------------------------------------------------------
+
+/// A value encoder for a three-variant enum.
+///
+/// Instead of implementing `Values` for an enum manually, you can just
+/// define a method `encode` that returns a value of this type.
+pub enum Choice3<L, C, R> {
+    /// The first choice.
+    One(L),
+
+    /// The second choice.
+    Two(C),
+
+    /// The third choice.
+    Three(R)
+}
+
+impl<L: Values, C: Values, R: Values> Values for Choice3<L, C, R> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        match *self {
+            Choice3::One(ref inner) => inner.encoded_len(mode),
+            Choice3::Two(ref inner) => inner.encoded_len(mode),
+            Choice3::Three(ref inner) => inner.encoded_len(mode),
+        }
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        match *self {
+            Choice3::One(ref inner) => inner.write_encoded(mode, target),
+            Choice3::Two(ref inner) => inner.write_encoded(mode, target),
+            Choice3::Three(ref inner) => inner.write_encoded(mode, target),
+        }
+    }
+}
+
+
+//--------------- Iter -------------------------------------------------------
+
 /// A wrapper for an iterator of values.
 ///
 /// The wrapper is needed because a blanket impl on any iterator type is
@@ -398,10 +329,41 @@ impl<L: Values, R: Values> Values for Choice2<L, R> {
 /// iterating at the beginning.
 pub struct Iter<T>(pub T);
 
+impl<T> Iter<T> {
+    /// Creates a new iterator encoder atop `iter`.
+    pub fn new(iter: T) -> Self {
+        Iter(iter)
+    }
+}
+
+
+//--- IntoIterator
+
+impl<T: IntoIterator> IntoIterator for Iter<T> {
+    type Item = <T as IntoIterator>::Item;
+    type IntoIter = <T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T: Clone + IntoIterator> IntoIterator for &'a Iter<T> {
+    type Item = <T as IntoIterator>::Item;
+    type IntoIter = <T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.clone().into_iter()
+    }
+}
+
+
+//--- Values
+
 impl<T> Values for Iter<T>
-where T: Clone + Iterator, <T as Iterator>::Item: Values {
+where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
     fn encoded_len(&self, mode: Mode) -> usize {
-        self.0.clone().map(|item| item.encoded_len(mode)).sum()
+        self.into_iter().map(|item| item.encoded_len(mode)).sum()
     }
 
     fn write_encoded<W: io::Write>(
@@ -409,29 +371,75 @@ where T: Clone + Iterator, <T as Iterator>::Item: Values {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        self.0.clone().try_for_each(|item| item.write_encoded(mode, target))
+        self.into_iter().try_for_each(|item| item.write_encoded(mode, target))
+    }
+}
+
+
+//------------ Nothing -------------------------------------------------------
+
+/// A encoder for nothing.
+///
+/// Unsurprisingly, this encodes as zero octets of content. It can be useful
+/// for writing an encoder for an enum where some of the variants shouldn’t
+/// result in content at all.
+pub struct Nothing;
+
+impl Values for Nothing {
+    fn encoded_len(&self, _mode: Mode) -> usize {
+        0
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _mode: Mode,
+        _target: &mut W
+    ) -> Result<(), io::Error> {
+        Ok(())
     }
 }
 
 
 //============ Standard Functions ============================================
 
-/// Returns a value encoder for a SEQUENCE.
+/// Returns a value encoder for a SEQUENCE containing `inner`.
 pub fn sequence<V: Values>(inner: V) -> impl Values {
     Constructed::new(Tag::SEQUENCE, inner)
 }
 
-/// Returns a value encoder for a SET
+/// Returns a value encoder for a SEQUENCE with the given tag.
+///
+/// This is identical to `Constructed::new(tag, inner)`. It merely provides a
+/// more memorial name.
+pub fn sequence_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+    Constructed::new(tag, inner)
+}
+
+/// Returns a value encoder for a SET containing `inner`.
 pub fn set<V: Values>(inner: V) -> impl Values {
     Constructed::new(Tag::SET, inner)
 }
 
+/// Returns a value encoder for a SET with the given tag.
+///
+/// This is identical to `Constructed::new(tag, inner)`. It merely provides a
+/// more memorial name.
+pub fn set_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+    Constructed::new(tag, inner)
+}
+
 /// Returns the length for a structure based on the tag and content length.
+///
+/// This is necessary because the length octets have a different length
+/// depending on the content length.
 pub fn total_encoded_len(tag: Tag, content_l: usize) -> usize {
     tag.encoded_len() + Length::Definite(content_l).encoded_len() + content_l
 }
 
-/// Writes a header for a structure.
+/// Writes the header for a value.
+///
+/// The header in the sense of this function is the identifier octets and the
+/// length octets.
 pub fn write_header<W: io::Write>(
     target: &mut W,
     tag: Tag,
@@ -446,39 +454,9 @@ pub fn write_header<W: io::Write>(
 
 //============ Helper Types ==================================================
 
-//------------ Primitive -----------------------------------------------------
-
-/// A value encoder for primitively encoded types.
-pub struct Primitive<'a, P: 'a + ?Sized> {
-    /// The tag for this value.
-    tag: Tag,
-
-    /// The primitive content.
-    prim: &'a P
-}
-
-impl<'a, P: PrimitiveContent + 'a> Values for Primitive<'a, P> {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        let len = self.prim.encoded_len(mode);
-        self.tag.encoded_len()
-        + Length::Definite(len).encoded_len()
-        + len
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.tag.write_encoded(false, target)?;
-        Length::Definite(self.prim.encoded_len(mode)).write_encoded(target)?;
-        self.prim.write_encoded(mode, target)
-    }
-}
-
-
 //------------ EndOfValue ----------------------------------------------------
 
+/// A value encoder for the end of value marker.
 struct EndOfValue;
 
 impl Values for EndOfValue {
@@ -493,23 +471,6 @@ impl Values for EndOfValue {
     ) -> Result<(), io::Error> {
         let buf = [0, 0];
         target.write_all(&buf)
-    }
-}
-
-
-pub struct Nothing;
-
-impl Values for Nothing {
-    fn encoded_len(&self, _mode: Mode) -> usize {
-        0
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _mode: Mode,
-        _target: &mut W
-    ) -> Result<(), io::Error> {
-        Ok(())
     }
 }
 
