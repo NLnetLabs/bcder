@@ -8,11 +8,11 @@
 
 use std::{cmp, hash, io, mem};
 use bytes::{BytesMut, Bytes};
-use super::captured::Captured;
-use super::{decode, encode};
-use super::mode::Mode;
-use super::length::Length;
-use super::tag::Tag;
+use ::captured::Captured;
+use ::{decode, encode};
+use ::mode::Mode;
+use ::length::Length;
+use ::tag::Tag;
 
 
 //------------ OctetString ---------------------------------------------------
@@ -717,15 +717,14 @@ where S: decode::Source {
 //------------ Tests ---------------------------------------------------------
 
 #[cfg(test)]
-pub mod tests {
-
+mod tests {
     use super::*;
     use encode::{Values, PrimitiveContent};
 
     #[test]
     fn should_wrap_content_in_octetstring() {
         let mut v = Vec::new();
-        let enc = OctetString::encode_into_der(true.value());
+        let enc = OctetString::encode_into_der(true.encode());
         enc.write_encoded(Mode::Der, &mut v).unwrap();
 
         // 4, 3          OctetString with content length 3

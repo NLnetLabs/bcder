@@ -4,9 +4,9 @@
 //! parent.
 
 use std::marker::PhantomData;
-use super::{decode, encode};
-use super::OctetString;
-use super::tag::Tag;
+use ::{decode, encode};
+use ::OctetString;
+use ::tag::Tag;
 
 
 //------------ CharSet -------------------------------------------------------
