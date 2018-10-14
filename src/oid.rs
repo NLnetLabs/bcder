@@ -107,11 +107,11 @@ impl<T: AsRef<[u8]>> Oid<T> {
     }
 
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        <Self as encode::PrimitiveContent>::value(self)
+        <Self as encode::PrimitiveContent>::encode(self)
     }
 
-    pub fn encode_tagged<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        <Self as encode::PrimitiveContent>::tagged(self, tag)
+    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        <Self as encode::PrimitiveContent>::encode_as(self, tag)
     }
 }
 

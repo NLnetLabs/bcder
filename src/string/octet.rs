@@ -17,7 +17,7 @@ use ::tag::Tag;
 
 //------------ OctetString ---------------------------------------------------
 
-/// An OCTET STRING value.
+/// An octet string value.
 ///
 /// An octet string is a sequence of octets, i.e., a glorified `[u8]`. Basic
 /// Encoding Rules, however, allow this sequence to be broken up into chunks
@@ -53,97 +53,14 @@ use ::tag::Tag;
 #[derive(Clone, Debug)]
 pub struct OctetString(Inner<Bytes, Captured>);
 
+/// A type allowing to distinguish between primitive and constructed encoding.
 #[derive(Clone, Debug)]
 enum Inner<P, C> {
+    /// The value is encoded in primitive encoding.
     Primitive(P),
+
+    /// The value is encoded in constructed encoding.
     Constructed(C),
-}
-
-/// # Parsing of BER Encoded Octet Strings
-///
-impl OctetString {
-    /// Takes a single octet string value from constructed value content.
-    ///
-    /// If there is no next value, if the next value does not have the tag
-    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
-    /// octet string, a malformed error is returned.
-    pub fn take_from<S: decode::Source>(
-        cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
-        cons.take_value_if(Tag::OCTET_STRING, Self::take_content_from)
-    }
-
-    /// Takes an octet string value from content.
-    pub fn take_content_from<S: decode::Source>(
-        content: &mut decode::Content<S>
-    ) -> Result<Self, S::Err> {
-        match *content {
-            decode::Content::Primitive(ref mut inner) => {
-                if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()))
-                }
-                Ok(OctetString(Inner::Primitive(inner.take_all()?)))
-            }
-            decode::Content::Constructed(ref mut inner) => {
-                match inner.mode() {
-                    Mode::Ber => Self::take_constructed_ber(inner),
-                    Mode::Cer => Self::take_constructed_cer(inner),
-                    Mode::Der => {
-                        xerr!(Err(decode::Error::Malformed.into()))
-                    }
-                }
-            }
-        }
-    }
-
-    /// Parses a constructed BER encoded octet string.
-    ///
-    /// It consists octet string values either primitive or constructed.
-    fn take_constructed_ber<S: decode::Source>(
-        constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
-        constructed.capture(|constructed| skip_nested(constructed))
-            .map(|captured| OctetString(Inner::Constructed(captured)))
-    }
-
-    /// Parses a constructed CER encoded octet string.
-    ///
-    /// The constructed form contains a sequence of primitive OCTET STRING
-    /// values each except for the last one exactly 1000 octets long.
-    fn take_constructed_cer<S: decode::Source>(
-        constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
-        let mut short = false;
-        constructed.capture(|con| {
-            while let Some(()) = con.take_opt_primitive_if(Tag::OCTET_STRING,
-                                                           |primitive| {
-                if primitive.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()));
-                }
-                if primitive.remaining() < 1000 {
-                    if short {
-                        xerr!(return Err(decode::Error::Malformed.into()));
-                    }
-                    short = true
-                }
-                primitive.skip_all()
-            })? { }
-            Ok(())
-        }).map(|captured| OctetString(Inner::Constructed(captured)))
-    }
-
-    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        OctetStringEncoder::new(self, tag)
-    }
-
-    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        self.encode_as(Tag::OCTET_STRING)
-    }
-
-    /// Encodes any Values structure into an OctetString.
-    pub fn encode_into_der<V: encode::Values>(v: V) -> impl encode::Values {
-        WrappingOctetStringEncoder(v)
-    }
 }
 
 
@@ -222,6 +139,102 @@ impl OctetString {
     /// trait and thus can be used to decode the string’s content.
     pub fn to_source(&self) -> OctetStringSource {
         OctetStringSource::new(self)
+    }
+}
+
+
+/// # Parsing and Encoding of Octet Strings
+///
+impl OctetString {
+    /// Takes a single octet string value from constructed value content.
+    ///
+    /// If there is no next value, if the next value does not have the tag
+    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
+    /// octet string, a malformed error is returned.
+    pub fn take_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
+    ) -> Result<Self, S::Err> {
+        cons.take_value_if(Tag::OCTET_STRING, Self::take_content_from)
+    }
+
+    /// Takes an octet string value from content.
+    pub fn take_content_from<S: decode::Source>(
+        content: &mut decode::Content<S>
+    ) -> Result<Self, S::Err> {
+        match *content {
+            decode::Content::Primitive(ref mut inner) => {
+                if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
+                    xerr!(return Err(decode::Error::Malformed.into()))
+                }
+                Ok(OctetString(Inner::Primitive(inner.take_all()?)))
+            }
+            decode::Content::Constructed(ref mut inner) => {
+                match inner.mode() {
+                    Mode::Ber => Self::take_constructed_ber(inner),
+                    Mode::Cer => Self::take_constructed_cer(inner),
+                    Mode::Der => {
+                        xerr!(Err(decode::Error::Malformed.into()))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Parses a constructed BER encoded octet string.
+    ///
+    /// It consists octet string values either primitive or constructed.
+    fn take_constructed_ber<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
+    ) -> Result<Self, S::Err> {
+        constructed.capture(|constructed| skip_nested(constructed))
+            .map(|captured| OctetString(Inner::Constructed(captured)))
+    }
+
+    /// Parses a constructed CER encoded octet string.
+    ///
+    /// The constructed form contains a sequence of primitive OCTET STRING
+    /// values each except for the last one exactly 1000 octets long.
+    fn take_constructed_cer<S: decode::Source>(
+        constructed: &mut decode::Constructed<S>
+    ) -> Result<Self, S::Err> {
+        let mut short = false;
+        constructed.capture(|con| {
+            while let Some(()) = con.take_opt_primitive_if(Tag::OCTET_STRING,
+                                                           |primitive| {
+                if primitive.remaining() > 1000 {
+                    xerr!(return Err(decode::Error::Malformed.into()));
+                }
+                if primitive.remaining() < 1000 {
+                    if short {
+                        xerr!(return Err(decode::Error::Malformed.into()));
+                    }
+                    short = true
+                }
+                primitive.skip_all()
+            })? { }
+            Ok(())
+        }).map(|captured| OctetString(Inner::Constructed(captured)))
+    }
+
+    /// Returns a value encoder for the octet string using the natural tag.
+    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+        self.encode_as(Tag::OCTET_STRING)
+    }
+
+    /// Returns a value encoder for the octet string using the given tag.
+    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        OctetStringEncoder::new(self, tag)
+    }
+
+    /// Returns a value encoder that wraps values into an octet string.
+    ///
+    /// This function allows an octet string wrapping some values to be
+    /// created without having to first create the octet string.
+    pub fn encode_wrapped<V: encode::Values>(
+        mode: Mode,
+        values: V
+    ) -> impl encode::Values {
+        WrappingOctetStringEncoder::new(mode, values)
     }
 }
 
@@ -402,6 +415,7 @@ pub struct OctetStringSource {
 }
 
 impl OctetStringSource {
+    /// Creates a new source atop an existing octet string.
     fn new(from: &OctetString) -> Self {
         match from.0 {
             Inner::Primitive(ref inner) => {
@@ -418,7 +432,10 @@ impl OctetStringSource {
             }
         }
     }
-                
+
+    /// Returns the bytes of the next primitive value in the string.
+    ///
+    /// Returns `None` if we are done.
     fn next_primitive(&mut self) -> Option<Bytes> {
         while !self.remainder.is_empty() {
             let (tag, cons) = Tag::take_from(&mut self.remainder).unwrap();
@@ -543,6 +560,7 @@ impl<'a> Iterator for OctetStringIter<'a> {
 /// An iterator over the octets in an octet string.
 ///
 /// You can get a value of this type by calling `OctetString::octets`.
+#[derive(Clone, Debug)]
 pub struct OctetStringOctets<'a> {
     cur: &'a [u8],
     iter: OctetStringIter<'a>,
@@ -574,59 +592,27 @@ impl<'a> Iterator for OctetStringOctets<'a> {
     }
 }
 
-//------------ WrappingOctetStringEncoder ------------------------------------
-
-/// Allows wrapping of any `impl encode::Values` inside a DER encoded
-/// OctetString. This is particularly intended for use with X509 Extensions,
-/// which wrap the value the particular extension DER structure as octets
-/// within an OctetString.
-pub struct WrappingOctetStringEncoder<V: encode::Values>(V);
-
-
-//--- encode::Values
-
-impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
-
-    fn encoded_len(&self, mode: Mode) -> usize {
-        if mode == Mode::Cer {
-            unimplemented!()
-        }
-
-        encode::total_encoded_len(
-            Tag::OCTET_STRING,
-            self.0.encoded_len(Mode::Der)
-        )
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        if mode == Mode::Cer {
-            unimplemented!()
-        }
-
-        encode::write_header(
-            target,
-            Tag::OCTET_STRING,
-            false,
-            self.0.encoded_len(Mode::Der))?;
-
-        self.0.write_encoded(Mode::Der, target)
-    }
-}
-
 
 //------------ OctetStringEncoder --------------------------------------------
 
+/// A value encoder for an octet string.
+///
+/// You can get a value of this type via octet string’s [`encode`] and
+/// [`encode_as`] methods.
+///
+/// [`encode`]: struct.OctetString.html#method.encode
+/// [`encode_as`]: struct.OctetString.html#method.encode_as
 #[derive(Clone, Debug)]
 pub struct OctetStringEncoder<'a> {
+    /// The octet string to encode.
     value: &'a OctetString,
+
+    /// The tag to used for the encoded value.
     tag: Tag,
 }
 
 impl<'a> OctetStringEncoder<'a> {
+    /// Creates a new octet string encoder.
     fn new(value: &'a OctetString, tag: Tag) -> Self {
         OctetStringEncoder { value, tag }
     }
@@ -695,6 +681,65 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
 }
 
 
+//------------ WrappingOctetStringEncoder ------------------------------------
+
+/// A value encoder that wraps the encoded inner values into an octet string.
+///
+/// You can get a value of this type from octet string’s [`encode_wrapped`]
+/// method.
+///
+/// [`encode_wrapped`]: struct.OctetString.html#method.encode_wrapped
+pub struct WrappingOctetStringEncoder<V: encode::Values> {
+    /// The value to wrap in the octet string.
+    values: V,
+
+    /// The mode to encode those values in.
+    mode: Mode
+}
+
+impl<V: encode::Values> WrappingOctetStringEncoder<V> {
+    /// Creates a new value from the mode and inner values.
+    fn new(mode: Mode, values: V) -> Self {
+        WrappingOctetStringEncoder { values, mode }
+    }
+}
+
+
+//--- encode::Values
+
+impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
+
+    fn encoded_len(&self, mode: Mode) -> usize {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+
+        encode::total_encoded_len(
+            Tag::OCTET_STRING,
+            self.values.encoded_len(self.mode)
+        )
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+
+        encode::write_header(
+            target,
+            Tag::OCTET_STRING,
+            false,
+            self.values.encoded_len(self.mode))?;
+
+        self.values.write_encoded(self.mode, target)
+    }
+}
+
+
 //------------ Helper Functions ----------------------------------------------
 
 fn skip_nested<S>(con: &mut decode::Constructed<S>) -> Result<(), S::Err>
@@ -724,7 +769,7 @@ mod tests {
     #[test]
     fn should_wrap_content_in_octetstring() {
         let mut v = Vec::new();
-        let enc = OctetString::encode_into_der(true.encode());
+        let enc = OctetString::encode_wrapped(Mode::Der, true.encode());
         enc.write_encoded(Mode::Der, &mut v).unwrap();
 
         // 4, 3          OctetString with content length 3
@@ -735,6 +780,4 @@ mod tests {
         assert_eq!(l, v.len());
     }
 }
-
-
 

@@ -32,12 +32,14 @@
 extern crate bytes;
 #[macro_use] extern crate failure;
 
-pub use self::bstring::BitString;
+
+//--- Re-exports
+
 pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
 pub use self::oid::Oid;
-pub use self::ostring::OctetString;
+pub use self::string::{BitString, OctetString};
 pub use self::tag::Tag;
 
 //--- Public modules
@@ -47,12 +49,11 @@ pub use self::tag::Tag;
 pub mod decode;
 pub mod encode;
 
-pub mod bstring;
-pub mod cstring;
 pub mod captured;
 pub mod int;
 pub mod oid;
-pub mod ostring;
+pub mod string;
+
 
 //--- Private modules
 

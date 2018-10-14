@@ -41,46 +41,52 @@ impl Tag {
     /// The tag marking the end-of-value in an indefinite length value.
     ///
     /// This is UNIVERSAL 0.
-    pub const END_OF_VALUE: Self = Tag(0x00);
+    pub const END_OF_VALUE: Self = Tag(0);
 
     /// The tag for the BOOLEAN type, UNIVERSAL 1.
-    pub const BOOLEAN: Self = Tag(0x01);
+    pub const BOOLEAN: Self = Tag(1);
 
     /// The tag for the INTEGER type, UNIVERSAL 2.
-    pub const INTEGER: Self = Tag(0x02);
+    pub const INTEGER: Self = Tag(2);
 
     /// The tag for the BIT STRING type, UNIVERSAL 3.
-    pub const BIT_STRING: Self = Tag(0x03);
+    pub const BIT_STRING: Self = Tag(3);
 
     /// The tag for the OCTET STRING type, UNIVERSAL 4.
-    pub const OCTET_STRING: Self = Tag(0x04);
+    pub const OCTET_STRING: Self = Tag(4);
 
     /// The tag for the NULL type, UNIVERSAL 5.
-    pub const NULL: Self = Tag(0x05);
+    pub const NULL: Self = Tag(5);
 
     /// The tag for the OBJECT IDENTIFIER type, UNIVERSAL 6.
-    pub const OID: Self = Tag(0x06);
+    pub const OID: Self = Tag(6);
 
     /// The tag for the REAL type, UNIVERSAL 9.
-    pub const REAL: Self = Tag(0x09);
+    pub const REAL: Self = Tag(9);
+
+    /// The tag for the UTF8String, UNIVERSAL 12
+    pub const UTF8_STRING: Self = Tag(12);
 
     /// The tag for the SEQUENCE and SEQUENCE OF types, UNIVERSAL 16.
-    pub const SEQUENCE: Self = Tag(0x10);
+    pub const SEQUENCE: Self = Tag(16);
 
     /// The tag for the SET and SET OF types, UNIVERSAL 17.
-    pub const SET: Self = Tag(0x11);
+    pub const SET: Self = Tag(17);
+
+    /// The tag for the NumericString type, UNIVERSAL 18.
+    pub const NUMERIC_STRING: Self = Tag(18);
 
     /// The tag for the PrintableString type, UNIVERSAL 19
-    pub const PRINTABLE_STRING: Self = Tag(0x13);
+    pub const PRINTABLE_STRING: Self = Tag(19);
 
     /// The tag for the IA5String type, UNIVERSAL 22.
-    pub const IA5_STRING: Self = Tag(0x16);
+    pub const IA5_STRING: Self = Tag(22);
 
     /// The tag for the UTCTime type, UNIVERSAL 23.
-    pub const UTC_TIME: Self = Tag(0x17);
+    pub const UTC_TIME: Self = Tag(23);
 
     /// The tag for the GeneralizedType type, UNIVERAL 24.
-    pub const GENERALIZED_TIME: Self = Tag(0x18);
+    pub const GENERALIZED_TIME: Self = Tag(24);
 
     /// The tag context specific tag [0].
     pub const CTX_0: Self = Tag(Tag::CONTEXT_SPECIFIC | 0);

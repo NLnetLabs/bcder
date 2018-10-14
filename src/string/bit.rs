@@ -1,4 +1,6 @@
 //! BER-encoded bit strings.
+//!
+//! This is a private module. Its public items are re-exported by the parent.
 
 use std::io;
 use bytes::Bytes;
@@ -10,7 +12,7 @@ use ::tag::Tag;
 
 //------------ BitString -----------------------------------------------------
 
-/// A BIT STRING value.
+/// A bit string value.
 ///
 /// Bit strings are a sequence of bits. Unlike [`OctetString`]s, they do not
 /// need to contain a multiple of eight bits.
