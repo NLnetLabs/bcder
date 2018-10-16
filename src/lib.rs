@@ -32,15 +32,15 @@
 extern crate bytes;
 #[macro_use] extern crate failure;
 
-
 //--- Re-exports
 
 pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
-pub use self::oid::Oid;
+pub use self::oid::{ConstOid, Oid};
 pub use self::string::{BitString, OctetString};
 pub use self::tag::Tag;
+
 
 //--- Public modules
 
@@ -49,7 +49,6 @@ pub use self::tag::Tag;
 pub mod decode;
 pub mod encode;
 
-pub mod captured;
 pub mod int;
 pub mod oid;
 pub mod string;
@@ -57,6 +56,7 @@ pub mod string;
 
 //--- Private modules
 
+mod captured;
 mod length;
 mod mode;
 mod tag;

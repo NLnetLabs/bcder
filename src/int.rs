@@ -1,8 +1,19 @@
-//! BER encoded integers.
+//! Unbounded integers.
 //!
-//! TODO: Add more useful things to these types.
+//! In ASN.1 integers are unbounded and, consequently, BER encodes integer in
+//! a variable length way.  While the [decode] and [encode] modules allow
+//! working with Rust’s native integer types, in some cases variable length
+//! integers are necessary. This module provides two types, [`Integer`] and
+//! [`Unsigned`] for signed and unsigned unbounded integers. While the
+//! second type isn’t strictly necessary, unsigned unbounded integers appear
+//! often enough in ASN.1 definitions to warrant a separate such type.
+//!
+//! [decode]: ../decode/index.html
+//! [encode]: ../encode/index.html
+//! [`Integer`]: struct.Integer.html
+//! [`Unsigned`]: struct.Unsigned.html
 
-use std::io;
+use std::{cmp, hash, io};
 use bytes::Bytes;
 use super::decode;
 use super::decode::Source;
@@ -39,6 +50,10 @@ macro_rules! decode_signed {
 
 macro_rules! decode_unsigned {
     ( $prim:ident, $type:ident, $len:expr) => {{
+        // This is kind of like signed decoding except that we can’t allow
+        // the sign bit to be set. In addition, because of the sign bit, the
+        // encoding requires an extra empty left-most octet if the native
+        // unsigned value has the most significant bit set.
         Self::check_head($prim)?;
         if $prim.remaining() > $len {
             if $prim.take_u8()? != 0 {
@@ -58,6 +73,18 @@ macro_rules! decode_unsigned {
     }}
 }
 
+macro_rules! from_impl {
+    ( $from:ident, $to:ident) => {
+        impl From<$from> for $to {
+            fn from(val: $from) -> $to {
+                unsafe {
+                    $to::from_bytes_unchecked(val.to_encoded_bytes(Mode::Der))
+                }
+            }
+        }
+    }
+}
+
 
 //------------ Integer -------------------------------------------------------
 
@@ -67,7 +94,7 @@ macro_rules! decode_unsigned {
 /// atop the underlying `Bytes` value containing the raw content. A value of
 /// this type is a signed integer. If a value is defined as an unsigned
 /// integer, i.e., as `INTEGER (0..MAX)`, you should use the sibling type
-/// `Unsigned` instead.
+/// [`Unsigned`] instead.
 ///
 /// In addition to these two generic types, the content decoders also provide
 /// methods to parse integers into native integer types such as `i8`. If the
@@ -80,17 +107,28 @@ macro_rules! decode_unsigned {
 /// providing a variable-length, big-endian, two‘s complement byte sequence of
 /// that integer. Thus, the most-significant bit of the first octet serves as
 /// the sign bit.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+///
+/// [`Unsigned`]: struct.Unsigned.html
+#[derive(Clone, Debug)]
 pub struct Integer(Bytes);
 
 impl Integer {
+    unsafe fn from_bytes_unchecked(bytes: Bytes) -> Self {
+        Integer(bytes)
+    }
+
+    /// Takes a single signed integer from the beginning of an encoded value.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// a correctly encoded signed integer.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        cons.take_primitive_if(Tag::INTEGER, Self::take_content_from)
+        cons.take_primitive_if(Tag::INTEGER, Self::from_primitive)
     }
 
-    pub fn take_content_from<S: decode::Source>(
+    /// Constructs a signed integer from the content of a primitive value.
+    pub fn from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<Self, S::Err> {
         let res = prim.take_all()?;
@@ -109,6 +147,7 @@ impl Integer {
         Ok(Integer(res))
     }
 
+    /// Constructs an `i8` from the content of a primitive value.
     pub fn i8_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i8, S::Err> {
@@ -116,24 +155,28 @@ impl Integer {
         prim.take_u8().map(|x| x as i8)
     }
 
+    /// Constructs an `i16` from the content of a primitive value.
     pub fn i16_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i16, S::Err> {
         decode_signed!(prim, i16, 2)
     }
 
+    /// Constructs an `i32` from the content of a primitive value.
     pub fn i32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i32, S::Err> {
         decode_signed!(prim, i32, 4)
     }
 
+    /// Constructs an `i64` from the content of a primitive value.
     pub fn i64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i64, S::Err> {
         decode_signed!(prim, i64, 8)
     }
 
+    /// Constructs an `i128` from the content of a primitive value.
     pub fn i128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i128, S::Err> {
@@ -167,6 +210,168 @@ impl Integer {
         }
     }
 
+    /// Trades the integer into a bytes value with the raw content octets.
+    pub fn into_bytes(self) -> Bytes {
+        self.0
+    }
+
+    /// Returns a bytes slice with the raw content.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
+    /// Returns whether the number is zero.
+    pub fn is_zero(&self) -> bool {
+        self.0[0] == 0
+    }
+
+    /// Returns whether the integer is positive.
+    ///
+    /// Also returns `false` if the number is zero.
+    pub fn is_positive(&self) -> bool {
+        self.0[0] & 0x81 == 0x01 // XXX I think this is right ...
+    }
+
+    /// Returns whether the integer is negative.
+    ///
+    /// Also returns `false` if the number is zero.
+    pub fn is_negative(&self) -> bool {
+        self.0[0] & 0x80 == 0x80
+    }
+}
+
+
+//--- From
+
+from_impl!(i8, Integer);
+from_impl!(i16, Integer);
+from_impl!(i32, Integer);
+from_impl!(i64, Integer);
+from_impl!(i128, Integer);
+from_impl!(u8, Integer);
+from_impl!(u16, Integer);
+from_impl!(u32, Integer);
+from_impl!(u64, Integer);
+from_impl!(u128, Integer);
+
+
+//--- AsRef
+
+impl AsRef<Bytes> for Integer {
+    fn as_ref(&self) -> &Bytes {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for Integer {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+
+//--- PartialEq and Eq
+
+impl PartialEq for Integer {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl PartialEq<Unsigned> for Integer {
+    fn eq(&self, other: &Unsigned) -> bool {
+        self.eq(&other.0)
+    }
+}
+
+impl Eq for Integer { }
+
+
+// XXX TODO impl for native types
+
+
+//--- PartialOrd and Ord
+
+impl PartialOrd for Integer {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Integer {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        match (self.is_positive(), other.is_positive()) {
+            (false, false) => { // i.e., both > 0
+                if self.0.len() > other.0.len() {
+                    cmp::Ordering::Greater
+                }
+                else if self.0.len() < other.0.len() {
+                    cmp::Ordering::Less
+                }
+                else {
+                    for (&l, &r) in self.0.iter().zip(other.0.iter()) {
+                        if l > r {
+                            return cmp::Ordering::Greater
+                        }
+                        else {
+                            return cmp::Ordering::Less
+                        }
+                    }
+                    cmp::Ordering::Equal
+                }
+            }
+            (true, true) => { // i.e., both <= 0
+                if self.0.len() > other.0.len() {
+                    cmp::Ordering::Less
+                }
+                else if self.0.len() < other.0.len() {
+                    cmp::Ordering::Greater
+                }
+                else {
+                    for (&l, &r) in self.0.iter().zip(other.0.iter()) {
+                        if l > r {
+                            return cmp::Ordering::Less
+                        }
+                        else {
+                            return cmp::Ordering::Greater
+                        }
+                    }
+                    cmp::Ordering::Equal
+                }
+
+            }
+            (false, true) => cmp::Ordering::Less,
+            (true, false) => cmp::Ordering::Greater,
+        }
+    }
+}
+
+
+//--- Hash
+
+impl hash::Hash for Integer {
+    fn hash<H: hash::Hasher>(&self, h: &mut H) {
+        self.0.hash(h)
+    }
+}
+
+
+//--- encode::PrimitiveContent
+
+impl PrimitiveContent for Integer {
+    const TAG: Tag = Tag::INTEGER;
+
+    fn encoded_len(&self, _mode: Mode) -> usize {
+        self.0.len()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        _mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        target.write_all(self.0.as_ref())
+    }
 }
 
 
@@ -190,22 +395,27 @@ impl Integer {
 /// providing a variable-length, big-endian, two‘s complement byte sequence of
 /// that integer. Thus, the most-significant bit of the first octet serves as
 /// the sign bit and, for an unsigned integer, has to be unset.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Unsigned(Bytes);
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Unsigned(Integer);
 
 /// # Decoding and Encoding
+///
 impl Unsigned {
+    unsafe fn from_bytes_unchecked(bytes: Bytes) -> Self {
+        Unsigned(Integer::from_bytes_unchecked(bytes))
+    }
+
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        cons.take_primitive_if(Tag::INTEGER, Self::take_content_from)
+        cons.take_primitive_if(Tag::INTEGER, Self::from_primitive)
     }
 
-    pub fn take_content_from<S: decode::Source>(
+    pub fn from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<Self, S::Err> {
         Self::check_head(prim)?;
-        prim.take_all().map(Unsigned)
+        Integer::from_primitive(prim).map(Unsigned)
     }
 
     pub fn u8_from_primitive<S: decode::Source>(
@@ -294,30 +504,59 @@ impl Unsigned {
     }
 }
 
+
+//--- From
+
+from_impl!(u8, Unsigned);
+from_impl!(u16, Unsigned);
+from_impl!(u32, Unsigned);
+from_impl!(u64, Unsigned);
+from_impl!(u128, Unsigned);
+
+
+//--- AsRef
+
+impl AsRef<Integer> for Unsigned {
+    fn as_ref(&self) -> &Integer {
+        &self.0
+    }
+}
+
+impl AsRef<Bytes> for Unsigned {
+    fn as_ref(&self) -> &Bytes {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for Unsigned {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+
+//--- endode::PrimitiveContent
+
 impl PrimitiveContent for Unsigned {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(&self, _mode: Mode) -> usize {
-        self.0.len()
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.0.encoded_len(mode)
     }
 
     fn write_encoded<W: io::Write>(
         &self,
-        _mode: Mode,
+        mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        target.write_all(self.0.as_ref())
-    }
-}
-
-impl From<u32> for Unsigned {
-    fn from(n: u32) -> Self {
-        Unsigned(n.to_encoded_bytes(Mode::Der))
+        self.0.write_encoded(mode, target)
     }
 }
 
 
 //============ Tests =========================================================
+
+// XXX There should be more tests here. Especially for the Ord impl.
 
 #[cfg(test)]
 mod test {
