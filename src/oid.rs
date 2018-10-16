@@ -1,8 +1,12 @@
-//! Object Identifiers.
+//! ASN.1 Object Identifiers.
 //!
-//! This is a private module. Its public content is re-exportet by the parent.
+//! This module contains the [`Oid`] type that implements object identifiers,
+//! a construct used by ANS.1 to uniquely identify all sorts of things. The
+//! type is also re-exported at the top-level.
+//!
+//! [`Oid`]: struct.Oid.html
 
-use std::{fmt, io};
+use std::{fmt, hash, io};
 use bytes::Bytes;
 use super::{decode, encode};
 use super::decode::Source;
@@ -24,18 +28,31 @@ use super::tag::Tag;
 /// Values of this type keep a single object identifer in its BER encoding,
 /// i.e., in some form of byte sequence. Because different representations
 /// may be useful, the type is actually generic over something that can
-/// become a reference to a byte slice. Parsing is only defined for `Bytes`
+/// become a reference to a bytes slice. Parsing is only defined for `Bytes`
 /// values, though.
 ///
 /// The only use for object identifiers currently is to compare them to
 /// predefined values. For this purpose, you typically define your known
-/// object identifiers in a `oid` submodule as `Oid<&'static [u8]>`
-/// constants. This is also the reason why the wrapped value is `pub` for
-/// now. This will change once `const fn` is stable.
+/// object identifiers in a `oid` submodule as contants of
+/// `Oid<&'static [u8]>` – or its type alias `ConstOid`. This is also the
+/// reason why the wrapped value is `pub` for now. This will change once
+/// `const fn` is stable.
+///
+/// Unfortunately, there is currently no proc macro to generate the object
+/// identifier constants in the code. Instead, the crate ships with a
+/// `mkoid` binary which accepts object identifiers in ‘dot integer’ notation
+/// and produces the `u8` array for their encoded value. You can install
+/// this binary via `cargo install ber`.
 #[derive(Clone, Debug)]
 pub struct Oid<T: AsRef<[u8]>=Bytes>(pub T);
 
-/// # Parsing of BER Encoded Data
+/// A type alias for `Oid<&'static [u8]>.
+///
+/// This is useful when defining object identifier constants.
+pub type ConstOid = Oid<&'static [u8]>;
+
+
+/// # Decoding and Encoding
 ///
 impl Oid<Bytes> {
     /// Skips over an object identifier value.
@@ -106,10 +123,12 @@ impl<T: AsRef<[u8]>> Oid<T> {
         })
     }
 
+    /// Returns a value encoder for the value using the natural tag.
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
         <Self as encode::PrimitiveContent>::encode(self)
     }
 
+    /// Returns a value encoder for the value using the given tag.
     pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
         <Self as encode::PrimitiveContent>::encode_as(self, tag)
     }
@@ -118,27 +137,14 @@ impl<T: AsRef<[u8]>> Oid<T> {
 /// # Access to Sub-identifiers
 ///
 impl<T: AsRef<[u8]>> Oid<T> {
-    /// Returns an iterator to the sub-identifiers of this object identifiers.
-    pub fn iter(&self) -> Result<IdIter, decode::Error> {
-        let mut sublen = 0;
-        for &ch in self.0.as_ref() {
-            if ch & 0x80 != 0 {
-                sublen += 1;
-                if sublen == 1 && ch == 0x80 {
-                    xerr!(return Err(decode::Error::Malformed))
-                }
-                if sublen == 5 {
-                    xerr!(return Err(decode::Error::Unimplemented))
-                }
-            }
-            else {
-                sublen = 0
-            }
-        }
-        if sublen != 0 {
-            xerr!(return Err(decode::Error::Malformed))
-        }
-        Ok(IdIter(self.0.as_ref()))
+    /// Returns an iterator to the components of this object identifiers.
+    ///
+    /// # Panics
+    ///
+    /// The returned identifier will eventually panic if `self` does not
+    /// contain a correctly encoded object identifier.
+    pub fn iter(&self) -> Iter {
+        Iter::new(self.0.as_ref())
     }
 }
 
@@ -154,29 +160,42 @@ impl<T: AsRef<[u8]>> AsRef<[u8]> for Oid<T> {
 
 //--- PartialEq and Eq
 
-impl<T: AsRef<[u8]>, U: AsRef<[u8]>> PartialEq<U> for Oid<T> {
-    fn eq(&self, other: &U) -> bool {
-        self.0.as_ref() == other.as_ref()
+impl<T: AsRef<[u8]>, U: AsRef<[u8]>> PartialEq<Oid<U>> for Oid<T> {
+    fn eq(&self, other: &Oid<U>) -> bool {
+        self.0.as_ref() == other.0.as_ref()
     }
 }
 
 impl<T: AsRef<[u8]>> Eq for Oid<T> { }
 
 
+//--- Hash
+
+impl<T: AsRef<[u8]>> hash::Hash for Oid<T> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
+    }
+}
+
+
 //--- Display
 
 impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.iter() {
-            Ok(mut ids) => {
-                let first = ids.next().unwrap();
-                write!(f, "{}.{}", first / 40, first % 40)?;
-                for id in ids {
-                    write!(f, ".{}", id)?;
-                }
+        // XXX This can’t deal correctly with overly large components.
+        //     Since this is a really rare (if not non-existant) case,
+        //     I can’t be bothered to figure out how to convert a seven
+        //     bit integer into decimal.
+        let mut components = self.iter();
+        // There’s at least one and it is always an valid u32.
+        write!(f, "{}", components.next().unwrap().to_u32().unwrap())?;
+        for component in components {
+            if let Some(val) = component.to_u32() {
+                write!(f, ".{}", val)?;
             }
-            Err(decode::Error::Malformed) => write!(f, "malformed")?,
-            Err(decode::Error::Unimplemented) => write!(f, "unimplemented")?,
+            else {
+                write!(f, ".(not implemented)")?;
+            }
         }
         Ok(())
     }
@@ -202,35 +221,163 @@ impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
 }
 
 
-//------------ IdIter --------------------------------------------------------
+//------------ Component -----------------------------------------------------
 
-/// An iterator over the sub-identifiers in an object identifier.
-pub struct IdIter<'a>(&'a [u8]);
+/// A component of an object identifier.
+///
+/// Although these components are integers, they are encoded in a slightly
+/// inconvenient way. Because of this we don’t convert them to native integers
+/// but rather keep them as references to the underlying octets.
+///
+/// This type allows comparison and formatting, which hopefully is all you’ll
+/// need. If you insist, the method `to_u32` allows you to try to convert a
+/// component to a native integer.
+#[derive(Clone, Copy, Debug)]
+pub struct Component<'a> {
+    /// The position of the component in the object identifer.
+    position: Position,
 
-impl<'a> Iterator for IdIter<'a> {
-    type Item = u32;
+    /// The octets of the subidentifer.
+    ///
+    /// These octets translate to an integer value. The most significant bit
+    /// of each octet indicates whether there are more octets to follow (and
+    /// can thus be ignored in this context), the lower seven bits are then
+    /// shifted accordingly to make up an unsigned integer in big endian
+    /// notation. Since this isn’t bounded in any way, we can’t just simply
+    /// turn these into, say, `u32`s although, realistically, it is unlikely
+    /// there is anything bigger than that.
+    slice: &'a [u8],
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.0.is_empty() {
+/// The position of the component in the object identifier.
+///
+/// As the first two components of the object identifer are encoded in the
+/// first subidentifier of the encoded value, we have three different cases.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum Position {
+    /// This is the first component of the identifier.
+    ///
+    /// This is 0 if the integer value of the subidentifer is 0..39,
+    /// 1 for 40..79, and 2 for anything else.
+    First,
+
+    /// This is the second component of the identifier.
+    ///
+    /// This is the integer value of the subidentifer module 40 if the value
+    /// is below 80 and otherwise the value minus 80.
+    Second,
+
+    /// This is any later component of the identifier.
+    ///
+    /// This is identical to the integer value of the subidentifier.
+    Other,
+}
+
+impl<'a> Component<'a> {
+    /// Creates a new component.
+    fn new(slice: &'a [u8], position: Position) -> Self {
+        Component { slice, position }
+    }
+
+    /// Attempts to convert the component to `u32`.
+    ///
+    /// Since the component’s value can be larger than the maximum value of
+    /// a `u32`, this may fail in which case the method will return `None`.
+    pub fn to_u32(self) -> Option<u32> {
+        // This can be at most five octets with at most four bits in the
+        // topmost octet.
+        if self.slice.len() > 5
+            || (self.slice.len() == 4 && self.slice[0] & 0x70 != 0)
+        {
             return None
         }
-        let mut tail = self.0;
         let mut res = 0;
-        for _ in 0..4 {
-            let first = match tail.split_first() {
-                Some((x, rest)) => {
-                    tail = rest;
-                    *x
+        for &ch in self.slice {
+            res = res << 7 | u32::from(ch & 0x7F);
+        }
+        match self.position {
+            Position::First => {
+                if res < 40 {
+                    Some(0)
                 }
-                None => panic!("invalid OID")
-            };
-            res = (res << 7) | (first & 0x7f) as u32;
-            if first < 0x80 {
-                self.0 = tail;
-                return Some(res)
+                else if res < 80{
+                    Some(1)
+                }
+                else {
+                    Some(2)
+                }
+            }
+            Position::Second => {
+                if res < 80 {
+                    Some(res % 40)
+                }
+                else {
+                    Some(res - 80)
+                }
+            }
+            Position::Other => Some(res)
+        }
+    }
+}
+
+
+//--- PartialEq and Eq
+
+impl<'a> PartialEq for Component<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.slice == other.slice
+    }
+}
+
+impl<'a> Eq for Component<'a> { }
+
+
+
+//------------ Iter ----------------------------------------------------------
+
+/// An iterator over the sub-identifiers in an object identifier.
+pub struct Iter<'a> {
+    /// The remainder of the object identifier’s encoded octets.
+    slice: &'a [u8],
+
+    /// The position of the next component.
+    position: Position,
+}
+
+impl<'a> Iter<'a> {
+    /// Creates a new iterator.
+    fn new(slice: &'a [u8]) -> Self {
+        Iter {
+            slice,
+            position: Position::First
+        }
+    }
+
+    fn advance_position(&mut self) -> Position {
+        let res = self.position;
+        self.position = match res {
+            Position::First => Position::Second,
+            _ => Position::Other
+        };
+        res
+    }
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = Component<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.slice.is_empty() {
+            return None
+        }
+        for i in 0..self.slice.len() {
+            if self.slice[i] & 0x80 == 0 {
+                let (res, tail) = self.slice.split_at(i);
+                self.slice = tail;
+                return Some(Component::new(res, self.advance_position()));
             }
         }
-        panic!("Invalid OID.");
+        panic!("illegal object identifier (last octet has bit 8 set)");
     }
 }
 
