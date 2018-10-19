@@ -19,6 +19,10 @@ use super::error::Error;
 /// A source can only progress forward over time. It provides the ability to
 /// access the next few bytes as a slice, advance forward, or advance forward
 /// returning a Bytes value of the data it advanced over.
+///
+/// _Please note:_ This trait may change as we gain more experience with
+/// decoding in different circumstances. If you implement it for your own
+/// types, we would appreciate feedback what worked well and what didn’t.
 pub trait Source {
     /// The error produced by the source.
     ///

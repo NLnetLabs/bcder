@@ -1,7 +1,6 @@
 //! The BER mode.
 //!
-//! This is a private module. It’s public content is re-exported by the parent
-//! module.
+//! This is a private module. It’s public items are re-exported by the parent.
 
 use super::decode;
 
@@ -14,10 +13,14 @@ use super::decode;
 /// follow the same basic ideas but implement them in slightly different
 /// ways.
 ///
-/// This type represents these rules. The `decode` method provides a way to
+/// This type represents these rules. The [`decode`] method provides a way to
 /// decode a source using the specific decoding mode. You can also change
-/// the decoding mode later on through the `set_mode` methods of `Primitive`
-/// and `Constructed`.
+/// the decoding mode later on through the `set_mode` methods of [`Primitive`]
+/// and [`Constructed`].
+///
+/// [`decode´]: #method.decode
+/// [`Primitive`]: decode/struct.Primitive.html
+/// [`Constructed`]: decode/struct.Constructed.html
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Mode {
     /// Basic Encoding Rules.
@@ -55,11 +58,27 @@ impl Mode {
         decode::Constructed::decode(source, self, op)
     }
 
-    /// Returns whether mode is `Mode::Ber`.
+    /// Returns whether the mode is `Mode::Ber`.
     pub fn is_ber(self) -> bool {
         match self {
             Mode::Ber => true,
             _ => false,
+        }
+    }
+
+    /// Returns whether the mode is `Mode::Cer`.
+    pub fn is_cer(self) -> bool {
+        match self {
+            Mode::Cer => true,
+            _ => false
+        }
+    }
+
+    /// Returns whether the mode is `Mode::Der`.
+    pub fn is_der(self) -> bool {
+        match self {
+            Mode::Der => true,
+            _ => false
         }
     }
 }
