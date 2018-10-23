@@ -27,7 +27,7 @@ use super::decode;
 /// # Limitations
 ///
 /// At this time, we can only decode single-octet identifier octets. That is,
-/// we only support tag number between 0 and 31.
+/// we only support tag numbers between 0 and 30.
 ///
 /// [`Primitive`]: decode/struct.Primitive.html
 /// [`Constructed`]: decode/struct.Constructed.html
@@ -173,9 +173,9 @@ impl Tag {
     /// # Panics
     ///
     /// Currently, this function panics if the tag number is greater than
-    /// 31.
+    /// 30.
     pub fn universal(number: u8) -> Self {
-        assert!(number < 32);
+        assert!(number < 31);
         Tag(number)
     }
 
@@ -184,9 +184,9 @@ impl Tag {
     /// # Panics
     ///
     /// Currently, this function panics if the tag number is greater than
-    /// 31.
+    /// 30.
     pub fn application(number: u8) -> Self {
-        assert!(number < 32);
+        assert!(number < 31);
         Tag(Tag::APPLICATION | number)
     }
 
@@ -195,9 +195,9 @@ impl Tag {
     /// # Panics
     ///
     /// Currently, this function panics if the provided tag number is greater
-    /// than 31.
+    /// than 30.
     pub fn context_specific(number: u8) -> Self {
-        assert!(number < 32);
+        assert!(number < 31);
         Tag(Tag::CONTEXT_SPECIFIC| number)
     }
 
@@ -206,9 +206,9 @@ impl Tag {
     /// # Panics
     ///
     /// Currently, this function panics if the provided tag number is greater
-    /// than 31.
+    /// than 30.
     pub fn private(number: u8) -> Self {
-        assert!(number < 32);
+        assert!(number < 31);
         Tag(Tag::PRIVATE | number)
     }
 
