@@ -236,7 +236,7 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Parses the primitive value as a BOOLEAN value.
     pub fn to_bool(&mut self) -> Result<bool, S::Err> {
         let res = self.take_u8()?;
-        if self.mode == Mode::Der {
+        if self.mode != Mode::Ber {
             match res {
                 0 => Ok(false),
                 0xFF => Ok(true),
