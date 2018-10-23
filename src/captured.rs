@@ -1,4 +1,6 @@
 //! Captured BER-encoded data.
+//!
+//! This is a private module. Its public items are re-exported by the parent.
 
 use std::{fmt, io, ops};
 use bytes::Bytes;
@@ -8,38 +10,87 @@ use super::mode::Mode;
 
 //------------ Captured ------------------------------------------------------
 
-#[derive(Clone, Eq, PartialEq)]
+/// A wrapper for BER encoded data.
+///
+/// This types keeps a sequence of BER-encoded data in a [`Bytes`] value. It
+/// allows for delayed processing of this data and therefore zero-allocation
+/// handling of sequences and similar types by implementing iterators and
+/// helper types that work directly on the the still-encoded data.
+///
+/// You usually acquire a value of this type trough the [`capture`] family of
+/// methods on constructed BER content. Alternatively, you can also construct
+/// a new value using regular encoding via the [`from_values`] function or
+/// incrementally by starting with [`empty`] and then adding more content
+/// with [`extent`].
+/// 
+/// Once you have a captured value, you can use the [`decode`] method to
+/// decode the entire captured value or [`decode_partial`] to decode some
+/// values at the start of the captured value. The latter manipulates the
+/// captured content by moving past the captured values and is therefore
+/// perfect for an iterator.
+///
+/// The value also remembers what [`Mode`] the original data was decoded in
+/// and will automatically use this encoding in those methods.
+///
+/// [`Bytes`]: ../../bytes/struct.Bytes.html
+/// [`capture`]: ../decode/struct.Constructed.html 
+/// [`from_values`]: #method.from_values
+/// [`empty`]: #method.empty
+/// [`extend`]: #method.extend
+/// [`decode`]: #method.decode
+/// [`decode_partial`]: #method.decode
+/// [`Mode`]: ../enum.Mode.html
+#[derive(Clone)]
 pub struct Captured {
     bytes: Bytes,
     mode: Mode,
 }
 
 impl Captured {
+    /// Creates a new captured value from bytes and a mode.
+    ///
+    /// Because we can’t guarantee that the bytes are properly encoded, we
+    /// keep this function crate public. The type, however, doesn’t rely on
+    /// content being properly encoded so this method isn’t unsafe.
     pub(crate) fn new(bytes: Bytes, mode: Mode) -> Self {
         Captured { bytes, mode }
     }
 
+    /// Creates a captured value by encoding data.
+    ///
+    /// The function takes a value encoder, encodes it into a bytes value
+    /// with the given mode, and returns the resulting data as a captured
+    /// value.
     pub fn from_values<V: encode::Values>(mode: Mode, values: V) -> Self {
         let mut res = Self::new(Bytes::new(), mode);
         res.extend(values);
         res
     }
 
-    pub fn empty() -> Self {
+    /// Creates a new empty captured value in the given mode.
+    pub fn empty(mode: Mode) -> Self {
         Captured {
             bytes: Bytes::new(),
-            mode: Mode::Ber
+            mode
         }
     }
 
-    pub fn into_bytes(self) -> Bytes {
-        self.bytes
+    /// Extends the captured value by encoding the given values.
+    ///
+    /// The function encodes the given values in the captured value’s own mode
+    /// and places the encoded content at the end of the captured value.
+    pub fn extend<V: encode::Values>(&mut self, values: V) {
+        values.write_encoded(
+            self.mode,
+            &mut CapturedWriter(&mut self.bytes)
+        ).unwrap()
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        self.bytes.as_ref()
-    }
-
+    /// Decodes the full content using the provided function argument.
+    ///
+    /// The method consumes the value. If you want to keep it around, simply
+    /// clone it first. Since bytes values are cheap to clone, this is
+    /// relatively cheap.
     pub fn decode<F, T>(self, op: F) -> Result<T, decode::Error>
     where
         F: FnOnce(
@@ -49,6 +100,11 @@ impl Captured {
         self.mode.decode(self.bytes, op)
     }
 
+    /// Decodes the beginning of the content of the captured value.
+    ///
+    /// The method calls `op` to parse a number of values from the beginning
+    /// of the value and then advances the content of the captured value until
+    /// after the end of these decoded values.
     pub fn decode_partial<F, T>(&mut self, op: F) -> Result<T, decode::Error>
     where
         F: FnOnce(
@@ -58,14 +114,19 @@ impl Captured {
         self.mode.decode(&mut self.bytes, op)
     }
 
-    pub fn extend<V: encode::Values>(&mut self, values: V) {
-        values.write_encoded(
-            self.mode,
-            &mut CapturedWriter(&mut self.bytes)
-        ).unwrap()
+    /// Trades the value for a bytes value with the raw data.
+    pub fn into_bytes(self) -> Bytes {
+        self.bytes
+    }
+
+    /// Returns a bytes slice with the raw data of the captured value.
+    pub fn as_slice(&self) -> &[u8] {
+        self.bytes.as_ref()
     }
 }
 
+
+//--- Deref and AsRef
 
 impl ops::Deref for Captured {
     type Target = Bytes;
@@ -87,6 +148,9 @@ impl AsRef<[u8]> for Captured {
     }
 }
 
+
+//--- encode::Values
+
 impl encode::Values for Captured {
     fn encoded_len(&self, mode: Mode) -> usize {
         if self.mode != mode && mode != Mode::Ber {
@@ -106,6 +170,9 @@ impl encode::Values for Captured {
         target.write_all(self.bytes.as_ref())
     }
 }
+
+
+//--- Debug
 
 impl fmt::Debug for Captured {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -135,3 +202,4 @@ impl<'a> io::Write for CapturedWriter<'a> {
         Ok(())
     }
 }
+

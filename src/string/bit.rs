@@ -1,32 +1,32 @@
-//! BER-encoded BIT STRINGs.
+//! BER-encoded bit strings.
 //!
-//! This is an internal module. Its public types are re-exported by the
-//! parent.
+//! This is a private module. Its public items are re-exported by the parent.
 
 use std::io;
 use bytes::Bytes;
-use super::{decode, encode};
-use super::decode::Source;
-use super::mode::Mode;
-use super::tag::Tag;
+use ::{decode, encode};
+use ::decode::Source;
+use ::mode::Mode;
+use ::tag::Tag;
 
 
 //------------ BitString -----------------------------------------------------
 
-/// A BIT STRING value.
+/// A bit string value.
 ///
-/// Bit strings are a sequence of bits. They do not need to contain a multiple
-/// of eight bits.
+/// Bit strings are a sequence of bits. Unlike [`OctetString`]s, they do not
+/// need to contain a multiple of eight bits.
 /// 
 /// You can parse a bit string value out of a constructed value using the
-/// `take_from` method. The `parse_content` method parses the content octets
-/// of a bit string value.
+/// [`take_from`] method. The [`from_content`] method parses the
+/// content octets of a bit string value and can be used of the bit string is
+/// implcitely tagged. Alternatively, you can create a new simple bit string
+/// via the [`new`] method.
 ///
-/// Once you have a value, you can ask for the number of bits available via
-/// the `bit_len` method or ask for the bit at a certain index via `bit`.
-/// The type also implements `AsRef<[u8]>` and `AsRef<Bytes>` to allow access
-/// to the complete bit string at once. Note, however, that the last octet
-/// may not be fully used.
+/// There are two types of methods for accessing the data in a bit string.
+/// Methods starting with `bit` operate on the individual bits while those
+/// prefixed with `octet` access entire octets and ignore the fact that there
+/// may be unused bits in the final octet.
 ///
 /// # BER Encoding
 ///
@@ -55,6 +55,10 @@ use super::tag::Tag;
 ///
 /// At this time, the `BitString` type does not implement the constructed
 /// encoding of a bit string.
+///
+/// [`OctetString`]: ../ostring/struct.OctetString.html
+/// [`take_from`]: #method.take_from
+/// [`from_content`]: #method.from_content
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BitString {
     /// The number of unused bits in the last byte.
@@ -65,6 +69,11 @@ pub struct BitString {
 }
 
 impl BitString {
+    /// Creates a new bit string.
+    pub fn new(unused: u8, bits: Bytes) -> Self {
+        Self { unused, bits}
+    }
+
     /// Returns the value of the given bit.
     pub fn bit(&self, bit: usize) -> bool {
         let idx = bit >> 3;
@@ -98,8 +107,20 @@ impl BitString {
         BitStringIter(self.bits.iter())
     }
 
+    /// Returns a slice of the octets in the bit string if available.
+    ///
+    /// The method will return `None` if the bit string is constructed from
+    /// several parts.
     pub fn octet_slice(&self) -> Option<&[u8]> {
         Some(self.bits.as_ref())
+    }
+
+    /// Returns a bytes value of the octets of the bit string.
+    ///
+    /// This will be cheap for primitively encoded bit strings but requires
+    /// allocations for complex ones.
+    pub fn octet_bytes(&self) -> Bytes {
+        self.bits.clone()
     }
 }
 
@@ -110,7 +131,7 @@ impl BitString {
     pub fn take_from<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        constructed.take_value_if(Tag::BIT_STRING, Self::parse_content)
+        constructed.take_value_if(Tag::BIT_STRING, Self::from_content)
     }
 
     /// Skip over a single bit string value inside constructed content.
@@ -121,7 +142,7 @@ impl BitString {
     }
  
     /// Parses the content octets of a bit string value.
-    pub fn parse_content<S: decode::Source>(
+    pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
         match *content {
@@ -168,34 +189,16 @@ impl BitString {
     }
 
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::value(self)
+        encode::PrimitiveContent::encode(self)
     }
 
-    pub fn encode_tagged<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::tagged(self, tag)
-    }
-}
-
-/// # Creating
-///
-impl BitString {
-    pub fn new(unused: u8, bits: Bytes) -> Self {
-        Self { unused, bits}
+    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        encode::PrimitiveContent::encode_as(self, tag)
     }
 }
 
 
-impl AsRef<Bytes> for BitString {
-    fn as_ref(&self) -> &Bytes {
-        &self.bits
-    }
-}
-
-impl AsRef<[u8]> for BitString {
-    fn as_ref(&self) -> &[u8] {
-        self.bits.as_ref()
-    }
-}
+//--- PrimitiveContent
 
 impl encode::PrimitiveContent for BitString {
     const TAG: Tag = Tag::BIT_STRING;

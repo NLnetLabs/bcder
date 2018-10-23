@@ -1,7 +1,6 @@
-//! Length Octets.
+//! The Length Octets.
 //!
-//! This is a private module. Its public content is being re-exported by the
-//! parent module.
+//! This is a private module. Its public tiems are re-exported by the parent.
 
 use std::io;
 use super::decode;
@@ -124,6 +123,7 @@ impl Length {
         else { false }
     }
 
+    /// Returns the length of the encoded representation of the value.
     pub fn encoded_len(&self) -> usize {
         match *self {
             Length::Indefinite => 1,
@@ -140,6 +140,7 @@ impl Length {
         }
     }
 
+    /// Writes the encoded value to a target.
     pub fn write_encoded<W: io::Write>(
         &self,
         target: &mut W
