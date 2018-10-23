@@ -34,7 +34,7 @@
 //! octet strings, this definition is easily mapped into a Rust struct:
 //!
 //! ```
-//! use ber::{Oid, OctetString};
+//! use bcder::{Oid, OctetString};
 //!
 //! pub struct EncapsulatedContentInfo {
 //!     content_type: Oid,
@@ -46,9 +46,9 @@
 //! this:
 //!
 //! ```
-//! # use ber::{Oid, OctetString};
-//! use ber::Tag;
-//! use ber::decode;
+//! # use bcder::{Oid, OctetString};
+//! use bcder::Tag;
+//! use bcder::decode;
 //!
 //! # pub struct EncapsulatedContentInfo {
 //! #     content_type: Oid,
@@ -86,9 +86,9 @@
 //! decoder would look like this:
 //!
 //! ```
-//! # use ber::{Oid, OctetString};
-//! use ber::Tag;
-//! use ber::decode;
+//! # use bcder::{Oid, OctetString};
+//! use bcder::Tag;
+//! use bcder::decode;
 //!
 //! # pub struct EncapsulatedContentInfo {
 //! #     content_type: Oid,

@@ -359,8 +359,8 @@ impl<'a> Primitive<'a, &'a [u8]> {
     /// decoding the `to_bool` method could be tested like this:
     ///
     /// ```
-    /// use ber::Mode;
-    /// use ber::decode::Primitive;
+    /// use bcder::Mode;
+    /// use bcder::decode::Primitive;
     ///
     /// assert_eq!(
     ///     Primitive::decode_slice(

@@ -26,7 +26,7 @@
 //! The structure was represented by this Rust struct:
 //!
 //! ```
-//! use ber::{Oid, OctetString};
+//! use bcder::{Oid, OctetString};
 //!
 //! pub struct EncapsulatedContentInfo {
 //!     content_type: Oid,
@@ -39,9 +39,9 @@
 //! our struct could return such an encoder like this:
 //!
 //! ```
-//! # use ber::{Oid, OctetString};
-//! use ber::Tag;
-//! use ber::encode;
+//! # use bcder::{Oid, OctetString};
+//! use bcder::Tag;
+//! use bcder::encode;
 //!
 //! # pub struct EncapsulatedContentInfo {
 //! #     content_type: Oid,

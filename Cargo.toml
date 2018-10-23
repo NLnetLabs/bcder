@@ -1,13 +1,13 @@
 [package]
-name = "ber"
+name = "bcder"
 version = "0.1.0"
 authors = [
     "Tim Bruijnzeels <tim@nlnetlabs.nl>",
     "Martin Hoffmann <martin@nlnetlabs.nl>"
 ]
-description = "BER, CER, and DER encoding and decoding."
-repository = "https://github.com/nlnetlabs/ber-rs"
-keywords = ["ber", "der", "asn1", "decoding", "encoding"]
+description = "Handling of data encoded in BER, CER, and DER."
+repository = "https://github.com/nlnetlabs/bcder"
+keywords = ["ber", "cer", "der", "asn1", "decoding"]
 categories = ["encoding", "network-programming", "parsing"]
 license = "BSD-3-Clause"
 
