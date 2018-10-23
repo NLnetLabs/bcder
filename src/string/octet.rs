@@ -154,11 +154,11 @@ impl OctetString {
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        cons.take_value_if(Tag::OCTET_STRING, Self::take_content_from)
+        cons.take_value_if(Tag::OCTET_STRING, Self::from_content)
     }
 
     /// Takes an octet string value from content.
-    pub fn take_content_from<S: decode::Source>(
+    pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
         match *content {

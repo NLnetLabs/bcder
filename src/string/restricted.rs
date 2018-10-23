@@ -67,7 +67,7 @@ pub trait CharSet {
 /// character set.
 ///
 /// As usual, you can parse a restricted character string from encoded data
-/// by way of the [`take_from`] and [`take_content_from`] methods.
+/// by way of the [`take_from`] and [`from_content`] methods.
 /// Alternatively, you can create a new value from a `String` or `str` via
 /// the [`from_string`] and [`from_str`] associated functions.
 ///
@@ -82,7 +82,7 @@ pub trait CharSet {
 /// [`CharSet`]: trait.CharSet.html
 /// [`OctetString`]: struct.OctetString.html
 /// [`take_from`]: #method.take_from
-/// [`take_content_from`]: #method.take_content_from
+/// [`from_content`]: #method.take_content
 /// [`from_string`]: #method.from_string
 /// [`from_str`]: #method.from_str
 /// [`to_string`]: #method.to_string
@@ -164,14 +164,14 @@ impl<L: CharSet> RestrictedString<L> {
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        cons.take_value_if(L::TAG, Self::take_content_from)
+        cons.take_value_if(L::TAG, Self::from_content)
     }
 
     /// Takes a character set from content.
-    pub fn take_content_from<S: decode::Source>(
+    pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
-        let os = OctetString::take_content_from(content)?;
+        let os = OctetString::from_content(content)?;
         Self::new(os).map_err(|_| decode::Error::Malformed.into())
     }
 

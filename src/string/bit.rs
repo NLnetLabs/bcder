@@ -18,7 +18,7 @@ use ::tag::Tag;
 /// need to contain a multiple of eight bits.
 /// 
 /// You can parse a bit string value out of a constructed value using the
-/// [`take_from`] method. The [`take_content_from`] method parses the
+/// [`take_from`] method. The [`from_content`] method parses the
 /// content octets of a bit string value and can be used of the bit string is
 /// implcitely tagged. Alternatively, you can create a new simple bit string
 /// via the [`new`] method.
@@ -58,7 +58,7 @@ use ::tag::Tag;
 ///
 /// [`OctetString`]: ../ostring/struct.OctetString.html
 /// [`take_from`]: #method.take_from
-/// [`take_content_from`]: #method.take_content_from
+/// [`from_content`]: #method.from_content
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BitString {
     /// The number of unused bits in the last byte.
@@ -131,7 +131,7 @@ impl BitString {
     pub fn take_from<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        constructed.take_value_if(Tag::BIT_STRING, Self::take_content_from)
+        constructed.take_value_if(Tag::BIT_STRING, Self::from_content)
     }
 
     /// Skip over a single bit string value inside constructed content.
@@ -142,7 +142,7 @@ impl BitString {
     }
  
     /// Parses the content octets of a bit string value.
-    pub fn take_content_from<S: decode::Source>(
+    pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<Self, S::Err> {
         match *content {
