@@ -38,7 +38,10 @@ pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
 pub use self::oid::{ConstOid, Oid};
-pub use self::string::{BitString, OctetString};
+pub use self::string::{
+    BitString, OctetString,
+    Ia5String, NumericString, PrintableString, Utf8String,
+};
 pub use self::tag::Tag;
 
 
