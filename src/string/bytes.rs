@@ -3,7 +3,7 @@
 //! This is an internal module. It’s public items are re-exported by the
 //! parent.
 
-use std::{ops, str};
+use std::{cmp, fmt, ops, str};
 use std::borrow::Borrow;
 use bytes::Bytes;
 
@@ -14,7 +14,7 @@ use bytes::Bytes;
 ///
 /// This types wraps a `Bytes` value that contains a correctly encoded
 /// string and provides a `str` interface to it.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Hash)]
 pub struct BytesString(Bytes);
 
 impl BytesString {
@@ -47,6 +47,14 @@ impl BytesString {
     /// Returns a reference to the raw byte slice.
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+//--- Default
+
+impl Default for BytesString {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 
@@ -109,6 +117,41 @@ impl Borrow<str> for BytesString {
 impl Borrow<[u8]> for BytesString {
     fn borrow(&self) -> &[u8] {
         self.as_slice()
+    }
+}
+
+
+//--- PartialEq and Eq
+
+impl<T: AsRef<str>> PartialEq<T> for BytesString {
+    fn eq(&self, other: &T) -> bool {
+        self.as_str().eq(other.as_ref())
+    }
+}
+
+impl Eq for BytesString { }
+
+
+//--- PartialOrd and Ord
+
+impl<T: AsRef<str>> PartialOrd<T> for BytesString {
+    fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
+        self.as_str().partial_cmp(other.as_ref())
+    }
+}
+
+impl Ord for BytesString {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+
+//--- Display
+
+impl fmt::Display for BytesString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_str().fmt(f)
     }
 }
 
