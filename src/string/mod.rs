@@ -35,6 +35,7 @@
 //--- Re-exports
 
 pub use self::bit::{BitString, BitStringIter};
+pub use self::bytes::BytesString;
 pub use self::restricted::{
     CharSet, CharSetError,
     RestrictedString, RestrictedStringChars,
@@ -48,6 +49,7 @@ pub use self::octet::{
 //--- Private modules
 
 mod bit;
+mod bytes;
 mod restricted;
 mod octet;
 
