@@ -39,6 +39,7 @@ pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
 pub use self::oid::{ConstOid, Oid};
 pub use self::string::{
+    BytesString,
     BitString, OctetString,
     Ia5String, NumericString, PrintableString, Utf8String,
 };
