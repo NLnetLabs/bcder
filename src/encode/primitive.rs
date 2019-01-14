@@ -21,18 +21,23 @@ use super::values::Values;
 /// gain the [`encode`] and [`encode_as`] methods from their implementation
 /// of this trait.
 ///
+/// Note that the trait requires implementing types to be `Copy` to
+/// avoid unnecessary lifetime parameters on the encoder type. For types that
+/// aren’t `Copy`, `PrimitiveContent` should be implemented on a reference to
+/// the type instead.
+///
 /// [`encode`]: #tymethod.encode
 /// [`encode_as`]: #tymethod.encode_as
-pub trait PrimitiveContent {
+pub trait PrimitiveContent: Copy {
     /// The natural tag of an encoded value of this type.
     const TAG: Tag;
 
     /// Returns the length of the encoded content of this type.
-    fn encoded_len(&self, mode: Mode) -> usize;
+    fn encoded_len(self, mode: Mode) -> usize;
 
     /// Writes the encoded content to a writer.
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error>;
@@ -48,7 +53,7 @@ pub trait PrimitiveContent {
     /// Returns a value encoder for this content using the natural tag.
     ///
     /// This is identical to `self.encode_as(Self::TAG)`
-    fn encode(&self) -> Primitive<Self> {
+    fn encode(self) -> Primitive<Self> {
         self.encode_as(Self::TAG)
     }
 
@@ -57,7 +62,7 @@ pub trait PrimitiveContent {
     /// The returned value is a content encoder that produces a single
     /// primitive BER encoded value. The tag for this value is explicitely
     /// given via the `tag` argument.
-    fn encode_as(&self, tag: Tag) -> Primitive<Self> {
+    fn encode_as(self, tag: Tag) -> Primitive<Self> {
         Primitive { tag, prim: self }
     }
 }
@@ -68,20 +73,20 @@ pub trait PrimitiveContent {
 impl PrimitiveContent for u8 {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(&self, _: Mode) -> usize {
-        if *self > 0x7F { 2 }
+    fn encoded_len(self, _: Mode) -> usize {
+        if self > 0x7F { 2 }
         else { 1 }
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        if *self > 0x7F {
+        if self > 0x7F {
             target.write(&[0])?;
         }
-        target.write(&[*self])?;
+        target.write(&[self])?;
         Ok(())
     }
 }
@@ -91,8 +96,8 @@ macro_rules! unsigned_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
-            fn encoded_len(&self, _: Mode) -> usize {
-                if *self == 0 {
+            fn encoded_len(self, _: Mode) -> usize {
+                if self == 0 {
                     1
                 }
                 else {
@@ -107,11 +112,11 @@ macro_rules! unsigned_content {
             }
 
             fn write_encoded<W: io::Write>(
-                &self,
+                self,
                 _: Mode,
                 target: &mut W
             ) -> Result<(), io::Error> {
-                if *self == 0 {
+                if self == 0 {
                     target.write(&[0x00])?;
                 }
                 else {
@@ -148,16 +153,16 @@ unsigned_content!(u128, 16);
 impl PrimitiveContent for i8 {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(&self, _: Mode) -> usize {
+    fn encoded_len(self, _: Mode) -> usize {
         1
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        target.write(&[*self as u8])?;
+        target.write(&[self as u8])?;
         Ok(())
     }
 }
@@ -167,12 +172,12 @@ macro_rules! signed_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
-            fn encoded_len(&self, _: Mode) -> usize {
-                if *self == 0 || *self == -1 {
+            fn encoded_len(self, _: Mode) -> usize {
+                if self == 0 || self == -1 {
                     1
                 }
-                else if *self < 0 {
-                    $len - (((!*self).leading_zeros() as usize) >> 3)
+                else if self < 0 {
+                    $len - (((!self).leading_zeros() as usize) >> 3)
                 }
                 else {
                     $len - ((self.leading_zeros() as usize) >> 3)
@@ -180,17 +185,17 @@ macro_rules! signed_content {
             }
 
             fn write_encoded<W: io::Write>(
-                &self,
+                self,
                 _: Mode,
                 target: &mut W
             ) -> Result<(), io::Error> {
-                if *self == 0 {
+                if self == 0 {
                     target.write(&[0x00])?;
                 }
-                else if *self == -1 {
+                else if self == -1 {
                     target.write(&[0xFF])?;
                 }
-                else if *self < 0 {
+                else if self < 0 {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
                     while i < $len {
@@ -237,12 +242,12 @@ signed_content!(i128, 16);
 impl PrimitiveContent for () {
     const TAG: Tag = Tag::NULL;
 
-    fn encoded_len(&self, _: Mode) -> usize {
+    fn encoded_len(self, _: Mode) -> usize {
         0
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         _: &mut W
     ) -> Result<(), io::Error> {
@@ -253,16 +258,16 @@ impl PrimitiveContent for () {
 impl PrimitiveContent for bool {
     const TAG: Tag = Tag::BOOLEAN;
 
-    fn encoded_len(&self, _: Mode) -> usize {
+    fn encoded_len(self, _: Mode) -> usize {
         1
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        if *self {
+        if self {
             target.write_all(&[0xff])
         }
         else {
@@ -274,12 +279,12 @@ impl PrimitiveContent for bool {
 impl<'a> PrimitiveContent for &'a [u8] {
     const TAG: Tag = Tag::OCTET_STRING;
 
-    fn encoded_len(&self, _: Mode) -> usize {
+    fn encoded_len(self, _: Mode) -> usize {
         self.len()
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
@@ -297,15 +302,15 @@ impl<'a> PrimitiveContent for &'a [u8] {
 ///
 /// [`PrimitiveContent::encode`]: trait.PrimitiveContent.html#tymethod_encode
 /// [`PrimitiveContent::encode_as`]: trait.PrimitiveContent.html#tymethod_encode_as
-pub struct Primitive<'a, P: 'a + ?Sized> {
+pub struct Primitive<P> {
     /// The tag for this value.
     tag: Tag,
 
     /// The primitive content.
-    prim: &'a P
+    prim: P
 }
 
-impl<'a, P: PrimitiveContent + 'a> Values for Primitive<'a, P> {
+impl<P: PrimitiveContent> Values for Primitive<P> {
     fn encoded_len(&self, mode: Mode) -> usize {
         let len = self.prim.encoded_len(mode);
         self.tag.encoded_len()

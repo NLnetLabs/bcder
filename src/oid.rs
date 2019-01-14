@@ -125,12 +125,12 @@ impl<T: AsRef<[u8]>> Oid<T> {
 
     /// Returns a value encoder for the value using the natural tag.
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        <Self as encode::PrimitiveContent>::encode(self)
+        encode::PrimitiveContent::encode(self)
     }
 
     /// Returns a value encoder for the value using the given tag.
     pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        <Self as encode::PrimitiveContent>::encode_as(self, tag)
+        encode::PrimitiveContent::encode_as(self, tag)
     }
 }
 
@@ -204,15 +204,15 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
 
 //--- encode::PrimitiveContent
 
-impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
+impl<'a, T: AsRef<[u8]>> encode::PrimitiveContent for &'a Oid<T> {
     const TAG: Tag = Tag::OID;
 
-    fn encoded_len(&self, _: Mode) -> usize {
+    fn encoded_len(self, _: Mode) -> usize {
         self.0.as_ref().len()
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
