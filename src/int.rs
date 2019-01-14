@@ -358,15 +358,15 @@ impl hash::Hash for Integer {
 
 //--- encode::PrimitiveContent
 
-impl PrimitiveContent for Integer {
+impl<'a> PrimitiveContent for &'a Integer {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(&self, _mode: Mode) -> usize {
+    fn encoded_len(self, _mode: Mode) -> usize {
         self.0.len()
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         _mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
@@ -537,15 +537,15 @@ impl AsRef<[u8]> for Unsigned {
 
 //--- endode::PrimitiveContent
 
-impl PrimitiveContent for Unsigned {
+impl<'a> PrimitiveContent for &'a Unsigned {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(&self, mode: Mode) -> usize {
+    fn encoded_len(self, mode: Mode) -> usize {
         self.0.encoded_len(mode)
     }
 
     fn write_encoded<W: io::Write>(
-        &self,
+        self,
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
