@@ -71,58 +71,62 @@ impl<'a, T: Values> Values for &'a T {
 
 //--- Impls for Tuples
 
-impl<T: Values, U: Values> Values for (T, U) {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.0.encoded_len(mode) + self.1.encoded_len(mode)
-    }
+/// Macro for implementing `Values` for tuples.
+///
+/// This macro implements `Values` for all tuples up to a certain degree.
+/// It needs to be invoked as below. All the `Tx`s are the type parameters
+/// of the elements the tuple, the numbers are the tuple element numbers.
+/// The number need to be provided backwards ending in 0.
+///
+/// The `tuple` bit of the macro does the actual impl and invokes itself with
+/// one less tuple element. The `write` bit below is to implement
+/// `write_encoded` backwards (i.e., starting with the smallest number).
+macro_rules! tupl_impl {
+    // Termination: empty lists, do nothing.
+    ( tuple > ) => { };
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.0.write_encoded(mode, target)?;
-        self.1.write_encoded(mode, target)?;
-        Ok(())
+    // Impl values for the complete lists, then recurse to the lists without
+    // their heads.
+    ( tuple $t:ident $( $ttail:ident )* > $i:tt $( $itail:tt )* ) => {
+        impl<$t: Values, $( $ttail: Values ),*> Values
+                for ($t, $( $ttail ),*) {
+            fn encoded_len(&self, mode: Mode) -> usize {
+                self.$i.encoded_len(mode)
+                $(
+                    + self.$itail.encoded_len(mode)
+                )*
+            }
+
+            fn write_encoded<W: io::Write>(
+                &self,
+                mode: Mode,
+                target: &mut W
+            ) -> Result<(), io::Error> {
+                tupl_impl!( write self, mode, target, $i $( $itail )* );
+                Ok(())
+            }
+        }
+
+        tupl_impl!(
+             tuple $($ttail)* > $($itail)*
+        );
+    };
+
+    // Termination: empty lists, do nothing.
+    ( write $self:expr, $mode:expr, $target:expr, ) => { };
+
+    // Write all elements of tuple $self in mode $mode to $target in order.
+    ( write $self:expr, $mode:expr, $target:expr, $i:tt $($itail:tt)*) => {
+        tupl_impl!( write $self, $mode, $target, $($itail)* );
+        $self.$i.write_encoded($mode, $target)?
     }
 }
 
-impl<R: Values, S: Values, T: Values> Values for (R, S, T) {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.0.encoded_len(mode) + self.1.encoded_len(mode)
-        + self.2.encoded_len(mode)
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.0.write_encoded(mode, target)?;
-        self.1.write_encoded(mode, target)?;
-        self.2.write_encoded(mode, target)?;
-        Ok(())
-    }
-}
-
-impl<R: Values, S: Values, T: Values, U: Values> Values for (R, S, T, U) {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.0.encoded_len(mode) + self.1.encoded_len(mode)
-        + self.2.encoded_len(mode) + self.3.encoded_len(mode)
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.0.write_encoded(mode, target)?;
-        self.1.write_encoded(mode, target)?;
-        self.2.write_encoded(mode, target)?;
-        self.3.write_encoded(mode, target)?;
-        Ok(())
-    }
-}
+// The standard library implements things for tuples up to twelve elements,
+// so we do the same.
+tupl_impl!(
+    tuple T11 T10 T9 T8 T7 T6 T5 T4 T3 T2 T1 T0 > 11 10 9 8 7 6 5 4 3 2 1 0
+);
 
 
 //--- Impl for Option
@@ -474,3 +478,26 @@ impl Values for EndOfValue {
     }
 }
 
+
+//============ Tests =========================================================
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::encode::PrimitiveContent;
+
+    #[test]
+    fn encode_2_tuple() {
+        let mut res = Vec::new();
+        (0.encode(), 1.encode()).write_encoded(Mode::Der, &mut res).unwrap();
+        assert_eq!(res, b"\x02\x01\0\x02\x01\x01");
+    }
+
+    #[test]
+    fn encode_4_tuple() {
+        let mut res = Vec::new();
+        (0.encode(), 1.encode(), 2.encode(), 3.encode())
+            .write_encoded(Mode::Der, &mut res).unwrap();
+        assert_eq!(res, b"\x02\x01\0\x02\x01\x01\x02\x01\x02\x02\x01\x03");
+    }
+}
