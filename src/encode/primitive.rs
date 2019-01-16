@@ -77,6 +77,24 @@ pub trait PrimitiveContent: Sized {
     }
 }
 
+//--- Blanket impls
+
+impl<'a, T: PrimitiveContent> PrimitiveContent for &'a T {
+    const TAG: Tag = T::TAG;
+
+    fn encoded_len(&self, mode: Mode) -> usize {
+        (*self).encoded_len(mode)
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        (*self).write_encoded(mode, target)
+    }
+}
+
 
 //--- impl for built-in types
 
