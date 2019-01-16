@@ -65,6 +65,16 @@ pub trait PrimitiveContent: Sized {
     fn encode_as(self, tag: Tag) -> Primitive<Self> {
         Primitive { tag, prim: self }
     }
+
+    /// Returns a value encoder for a reference using the natural tag.
+    fn encode_ref(&self) -> Primitive<&Self> {
+        self.encode_ref_as(Self::TAG)
+    }
+
+    /// Returns a value encoder for a reference using the given tag.
+    fn encode_ref_as(&self, tag: Tag) -> Primitive<&Self> {
+        Primitive { tag, prim: self }
+    }
 }
 
 
