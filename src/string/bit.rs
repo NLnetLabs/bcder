@@ -188,6 +188,7 @@ impl BitString {
         }
     }
 
+    /*
     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
         encode::PrimitiveContent::encode(self)
     }
@@ -195,6 +196,7 @@ impl BitString {
     pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
         encode::PrimitiveContent::encode_as(self, tag)
     }
+    */
 }
 
 
@@ -203,12 +205,12 @@ impl BitString {
 impl<'a> encode::PrimitiveContent for &'a BitString {
     const TAG: Tag = Tag::BIT_STRING;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         self.bits.len() + 1
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
