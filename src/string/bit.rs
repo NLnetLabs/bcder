@@ -202,7 +202,7 @@ impl BitString {
 
 //--- PrimitiveContent
 
-impl<'a> encode::PrimitiveContent for &'a BitString {
+impl encode::PrimitiveContent for BitString {
     const TAG: Tag = Tag::BIT_STRING;
 
     fn encoded_len(&self, _: Mode) -> usize {
