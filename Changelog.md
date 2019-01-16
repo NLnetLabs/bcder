@@ -9,11 +9,15 @@ Breaking Changes
 
 New
 
+*  `encode::Values` implemented for tuples of up to twelve elements.
+   [(#9)]
+
 Bug Fixes
 
 Dependencies
 
 [(#7)]: https://github.com/NLnetLabs/bcder/pull/7
+[(#9)]: https://github.com/NLnetLabs/bcder/pull/9
 
 
 ## 0.1.0
