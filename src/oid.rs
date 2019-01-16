@@ -207,12 +207,12 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
 impl<'a, T: AsRef<[u8]>> encode::PrimitiveContent for &'a Oid<T> {
     const TAG: Tag = Tag::OID;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         self.0.as_ref().len()
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {

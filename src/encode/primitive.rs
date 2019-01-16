@@ -28,16 +28,16 @@ use super::values::Values;
 ///
 /// [`encode`]: #tymethod.encode
 /// [`encode_as`]: #tymethod.encode_as
-pub trait PrimitiveContent: Copy {
+pub trait PrimitiveContent: Sized {
     /// The natural tag of an encoded value of this type.
     const TAG: Tag;
 
     /// Returns the length of the encoded content of this type.
-    fn encoded_len(self, mode: Mode) -> usize;
+    fn encoded_len(&self, mode: Mode) -> usize;
 
     /// Writes the encoded content to a writer.
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error>;
@@ -65,6 +65,34 @@ pub trait PrimitiveContent: Copy {
     fn encode_as(self, tag: Tag) -> Primitive<Self> {
         Primitive { tag, prim: self }
     }
+
+    /// Returns a value encoder for a reference using the natural tag.
+    fn encode_ref(&self) -> Primitive<&Self> {
+        self.encode_ref_as(Self::TAG)
+    }
+
+    /// Returns a value encoder for a reference using the given tag.
+    fn encode_ref_as(&self, tag: Tag) -> Primitive<&Self> {
+        Primitive { tag, prim: self }
+    }
+}
+
+//--- Blanket impls
+
+impl<'a, T: PrimitiveContent> PrimitiveContent for &'a T {
+    const TAG: Tag = T::TAG;
+
+    fn encoded_len(&self, mode: Mode) -> usize {
+        (*self).encoded_len(mode)
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        (*self).write_encoded(mode, target)
+    }
 }
 
 
@@ -73,20 +101,20 @@ pub trait PrimitiveContent: Copy {
 impl PrimitiveContent for u8 {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(self, _: Mode) -> usize {
-        if self > 0x7F { 2 }
+    fn encoded_len(&self, _: Mode) -> usize {
+        if *self > 0x7F { 2 }
         else { 1 }
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        if self > 0x7F {
+        if *self > 0x7F {
             target.write(&[0])?;
         }
-        target.write(&[self])?;
+        target.write(&[*self])?;
         Ok(())
     }
 }
@@ -96,8 +124,8 @@ macro_rules! unsigned_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
-            fn encoded_len(self, _: Mode) -> usize {
-                if self == 0 {
+            fn encoded_len(&self, _: Mode) -> usize {
+                if *self == 0 {
                     1
                 }
                 else {
@@ -112,11 +140,11 @@ macro_rules! unsigned_content {
             }
 
             fn write_encoded<W: io::Write>(
-                self,
+                &self,
                 _: Mode,
                 target: &mut W
             ) -> Result<(), io::Error> {
-                if self == 0 {
+                if *self == 0 {
                     target.write(&[0x00])?;
                 }
                 else {
@@ -153,16 +181,16 @@ unsigned_content!(u128, 16);
 impl PrimitiveContent for i8 {
     const TAG: Tag = Tag::INTEGER;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         1
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        target.write(&[self as u8])?;
+        target.write(&[*self as u8])?;
         Ok(())
     }
 }
@@ -172,12 +200,12 @@ macro_rules! signed_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
-            fn encoded_len(self, _: Mode) -> usize {
-                if self == 0 || self == -1 {
+            fn encoded_len(&self, _: Mode) -> usize {
+                if *self == 0 || *self == -1 {
                     1
                 }
-                else if self < 0 {
-                    $len - (((!self).leading_zeros() as usize) >> 3)
+                else if *self < 0 {
+                    $len - (((!*self).leading_zeros() as usize) >> 3)
                 }
                 else {
                     $len - ((self.leading_zeros() as usize) >> 3)
@@ -185,17 +213,17 @@ macro_rules! signed_content {
             }
 
             fn write_encoded<W: io::Write>(
-                self,
+                &self,
                 _: Mode,
                 target: &mut W
             ) -> Result<(), io::Error> {
-                if self == 0 {
+                if *self == 0 {
                     target.write(&[0x00])?;
                 }
-                else if self == -1 {
+                else if *self == -1 {
                     target.write(&[0xFF])?;
                 }
-                else if self < 0 {
+                else if *self < 0 {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
                     while i < $len {
@@ -242,12 +270,12 @@ signed_content!(i128, 16);
 impl PrimitiveContent for () {
     const TAG: Tag = Tag::NULL;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         0
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         _: &mut W
     ) -> Result<(), io::Error> {
@@ -258,16 +286,16 @@ impl PrimitiveContent for () {
 impl PrimitiveContent for bool {
     const TAG: Tag = Tag::BOOLEAN;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         1
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        if self {
+        if *self {
             target.write_all(&[0xff])
         }
         else {
@@ -279,12 +307,12 @@ impl PrimitiveContent for bool {
 impl<'a> PrimitiveContent for &'a [u8] {
     const TAG: Tag = Tag::OCTET_STRING;
 
-    fn encoded_len(self, _: Mode) -> usize {
+    fn encoded_len(&self, _: Mode) -> usize {
         self.len()
     }
 
     fn write_encoded<W: io::Write>(
-        self,
+        &self,
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
