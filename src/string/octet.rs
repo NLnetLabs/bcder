@@ -236,6 +236,19 @@ impl OctetString {
     ) -> impl encode::Values {
         WrappingOctetStringEncoder::new(mode, values)
     }
+
+    /// Returns a value encoder that encodes a bytes slice as an octet string.
+    pub fn encode_slice<T: AsRef<[u8]>>(value: &T) -> OctetSliceEncoder {
+        Self::encode_slice_as(value, Tag::OCTET_STRING)
+    }
+
+    /// Returns a value encoder that encodes a bytes slice as an octet string.
+    pub fn encode_slice_as<T: AsRef<[u8]>>(
+        value: &T,
+        tag: Tag
+    ) -> OctetSliceEncoder {
+        OctetSliceEncoder::new(value.as_ref(), tag)
+    }
 }
 
 
@@ -677,6 +690,58 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
                 Ok(())
             }
         }
+    }
+}
+
+
+//------------ OctetSliceEncoder ---------------------------------------------
+
+/// A value encoder for a bytes slice as an octet string.
+///
+/// You can get a value of this type via octet string’s [`encode_slice`] and
+/// [`encode_slice_as`] functions.
+///
+/// [`encode_slice`]: struct.OctetString.html#method.encode_slice
+/// [`encode_slice_as`]: struct.OctetString.html#method.encode_slice_as
+#[derive(Clone, Debug)]
+pub struct OctetSliceEncoder<'a> {
+    /// The slice to encode.
+    slice: &'a [u8],
+
+    /// The tag to be used for the encoded value.
+    tag: Tag,
+}
+
+impl<'a> OctetSliceEncoder<'a> {
+    /// Creates a new octet slice encoder.
+    fn new(slice: &'a [u8], tag: Tag) -> Self {
+        OctetSliceEncoder { slice, tag }
+    }
+}
+
+
+//--- encode::Values
+
+impl<'a> encode::Values for OctetSliceEncoder<'a> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        let len = self.slice.len();
+        self.tag.encoded_len() + Length::Definite(len).encoded_len() + len
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        self.tag.write_encoded(false, target)?;
+        Length::Definite(self.slice.len()).write_encoded(target)?;
+        target.write_all(self.slice)
     }
 }
 
