@@ -188,9 +188,10 @@ impl<V: Values> Values for Vec<V> {
         Ok(())
     }
 }
+    
 
 
-//------------ Constructed --------------------------------------------------
+//------------ Constructed ---------------------------------------------------
 
 /// A value encoder for a single constructed value.
 pub struct Constructed<V> {
@@ -387,28 +388,32 @@ where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
 
 //------------ Slice ---------------------------------------------------------
 
-/// A wrapper for a value that can be turned into a slice.
-pub struct Slice<T: AsRef<[V]>, V> {
+pub struct Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
     value: T,
-    marker: PhantomData<V>,
+    f: F,
+    marker: PhantomData<(U, V)>,
 }
 
-impl<T: AsRef<[V]>, V> Slice<T, V> {
-    pub fn new(value: T) -> Self {
-        Slice { value, marker: PhantomData }
+impl<T, F, U, V> Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
+    pub fn new(value: T, f: F) -> Self {
+        Slice { value, f, marker: PhantomData }
     }
 }
 
-pub fn slice<T: AsRef<[V]>, V>(value: T) -> Slice<T, V> {
-    Slice::new(value)
+pub fn slice<T, F, U, V>(value: T, f: F) -> Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
+    Slice::new(value, f)
 }
 
 
 //--- Values
 
-impl<T: AsRef<[V]>, V: Values> Values for Slice<T, V> {
+impl<T, F, U, V> Values for Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V, V: Values {
     fn encoded_len(&self, mode: Mode) -> usize {
-        self.value.as_ref().iter().map(|item| item.encoded_len(mode)).sum()
+        self.value.as_ref().iter().map(|v| (self.f)(v).encoded_len(mode)).sum()
     }
 
     fn write_encoded<W: io::Write>(
@@ -416,8 +421,8 @@ impl<T: AsRef<[V]>, V: Values> Values for Slice<T, V> {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        self.value.as_ref().iter().try_for_each(|item|
-            item.write_encoded(mode, target)
+        self.value.as_ref().iter().try_for_each(|v|
+            (self.f)(v).write_encoded(mode, target)
         )
     }
 }
