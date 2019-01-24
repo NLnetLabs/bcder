@@ -4,6 +4,7 @@
 //! parent.
 
 use std::io;
+use std::marker::PhantomData;
 use ::captured::Captured;
 use ::length::Length;
 use ::mode::Mode;
@@ -340,6 +341,10 @@ impl<T> Iter<T> {
     }
 }
 
+pub fn iter<T>(iter: T) -> Iter<T> {
+    Iter::new(iter)
+}
+
 
 //--- IntoIterator
 
@@ -376,6 +381,44 @@ where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
         target: &mut W
     ) -> Result<(), io::Error> {
         self.into_iter().try_for_each(|item| item.write_encoded(mode, target))
+    }
+}
+
+
+//------------ Slice ---------------------------------------------------------
+
+/// A wrapper for a value that can be turned into a slice.
+pub struct Slice<T: AsRef<[V]>, V> {
+    value: T,
+    marker: PhantomData<V>,
+}
+
+impl<T: AsRef<[V]>, V> Slice<T, V> {
+    pub fn new(value: T) -> Self {
+        Slice { value, marker: PhantomData }
+    }
+}
+
+pub fn slice<T: AsRef<[V]>, V>(value: T) -> Slice<T, V> {
+    Slice::new(value)
+}
+
+
+//--- Values
+
+impl<T: AsRef<[V]>, V: Values> Values for Slice<T, V> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.value.as_ref().iter().map(|item| item.encoded_len(mode)).sum()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        self.value.as_ref().iter().try_for_each(|item|
+            item.write_encoded(mode, target)
+        )
     }
 }
 
