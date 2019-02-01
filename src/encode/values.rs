@@ -4,6 +4,7 @@
 //! parent.
 
 use std::io;
+use std::marker::PhantomData;
 use ::captured::Captured;
 use ::length::Length;
 use ::mode::Mode;
@@ -187,9 +188,10 @@ impl<V: Values> Values for Vec<V> {
         Ok(())
     }
 }
+    
 
 
-//------------ Constructed --------------------------------------------------
+//------------ Constructed ---------------------------------------------------
 
 /// A value encoder for a single constructed value.
 pub struct Constructed<V> {
@@ -340,6 +342,11 @@ impl<T> Iter<T> {
     }
 }
 
+/// Wraps an iterator over value encoders into a value encoder.
+pub fn iter<T>(iter: T) -> Iter<T> {
+    Iter::new(iter)
+}
+
 
 //--- IntoIterator
 
@@ -376,6 +383,64 @@ where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
         target: &mut W
     ) -> Result<(), io::Error> {
         self.into_iter().try_for_each(|item| item.write_encoded(mode, target))
+    }
+}
+
+
+//------------ Slice ---------------------------------------------------------
+
+/// A wrapper for a slice of encodable values.
+///
+/// A value of this type will take something that can provide a reference to
+/// a slice of some value and a closure that converts the values of the slice
+/// into something encodable.
+pub struct Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
+    /// The slice value.
+    value: T,
+
+    /// The converter function.
+    f: F,
+
+    /// A markers for extra type arguments.
+    marker: PhantomData<(U, V)>,
+}
+
+impl<T, F, U, V> Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
+    /// Creates a new wrapper for a given value and closure.
+    pub fn new(value: T, f: F) -> Self {
+        Slice { value, f, marker: PhantomData }
+    }
+}
+
+/// Creates an encodable wrapper around a slice.
+///
+/// The function takes a value of a type that can be converted into a slice of
+/// some type and a function that converts references to slice elements into
+/// some encoder.
+pub fn slice<T, F, U, V>(value: T, f: F) -> Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V {
+    Slice::new(value, f)
+}
+
+
+//--- Values
+
+impl<T, F, U, V> Values for Slice<T, F, U, V>
+where T: AsRef<[U]>, F: Fn(&U) -> V, V: Values {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        self.value.as_ref().iter().map(|v| (self.f)(v).encoded_len(mode)).sum()
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        self.value.as_ref().iter().try_for_each(|v|
+            (self.f)(v).write_encoded(mode, target)
+        )
     }
 }
 

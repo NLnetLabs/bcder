@@ -14,6 +14,10 @@ New
 *  `OctetString::encode_slice` and `encode_slice_as`: allows encoding a bytes
    slice as an octet string without going through making an `OctetString`
    first.
+*  `encode::Slice` wraps a slice of values encoding `encode::Values` and
+   provides an encoder for it. [(#11)]
+*  new functions: `encode::slice` and `encode::iter` as shortcuts for the
+   respective associated functions. [(#11)]
 
 Bug Fixes
 
@@ -22,6 +26,7 @@ Dependencies
 [(#7)]: https://github.com/NLnetLabs/bcder/pull/7
 [(#9)]: https://github.com/NLnetLabs/bcder/pull/9
 [(#10)]: https://github.com/NLnetLabs/bcder/pull/10
+[(#11)]: https://github.com/NLnetLabs/bcder/pull/11
 
 
 ## 0.1.0
