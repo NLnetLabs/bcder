@@ -7,6 +7,10 @@ Breaking Changes
 *  `PrimitiveContent`’s methods take `self` instead of `&self`. This
    avoids the lifetime argument in `Primitive`, its encoder. [(#7)]
 
+*  For all provided type, change `encode` and `encode_as` methods to take
+   self by value and introduce `encode_ref` and `encode_ref_as` that take
+   self by reference.
+
 New
 
 *  `encode::Values` implemented for tuples of up to twelve elements.

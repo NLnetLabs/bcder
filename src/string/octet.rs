@@ -217,12 +217,22 @@ impl OctetString {
     }
 
     /// Returns a value encoder for the octet string using the natural tag.
-    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+    pub fn encode(self) -> impl encode::Values {
         self.encode_as(Tag::OCTET_STRING)
     }
 
     /// Returns a value encoder for the octet string using the given tag.
-    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+    pub fn encode_as(self, tag: Tag) -> impl encode::Values {
+        OctetStringEncoder::new(self, tag)
+    }
+
+    /// Returns a value encoder for the octet string using the natural tag.
+    pub fn encode_ref<'a>(&'a self) -> impl encode::Values + 'a {
+        self.encode_ref_as(Tag::OCTET_STRING)
+    }
+
+    /// Returns a value encoder for the octet string using the given tag.
+    pub fn encode_ref_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
         OctetStringEncoder::new(self, tag)
     }
 
@@ -245,6 +255,17 @@ impl OctetString {
     /// Returns a value encoder that encodes a bytes slice as an octet string.
     pub fn encode_slice_as<T>(value: T, tag: Tag) -> OctetSliceEncoder<T> {
         OctetSliceEncoder::new(value, tag)
+    }
+}
+
+
+//--- AsRef
+//
+//    We need this for OctetStringEncoder below.
+
+impl AsRef<OctetString> for OctetString {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 
@@ -613,17 +634,17 @@ impl<'a> Iterator for OctetStringOctets<'a> {
 /// [`encode`]: struct.OctetString.html#method.encode
 /// [`encode_as`]: struct.OctetString.html#method.encode_as
 #[derive(Clone, Debug)]
-pub struct OctetStringEncoder<'a> {
+pub struct OctetStringEncoder<T> {
     /// The octet string to encode.
-    value: &'a OctetString,
+    value: T,
 
     /// The tag to used for the encoded value.
     tag: Tag,
 }
 
-impl<'a> OctetStringEncoder<'a> {
+impl<T> OctetStringEncoder<T> {
     /// Creates a new octet string encoder.
-    fn new(value: &'a OctetString, tag: Tag) -> Self {
+    fn new(value: T, tag: Tag) -> Self {
         OctetStringEncoder { value, tag }
     }
 }
@@ -631,11 +652,11 @@ impl<'a> OctetStringEncoder<'a> {
 
 //--- encode::Values
 
-impl<'a> encode::Values for OctetStringEncoder<'a> {
+impl<T: AsRef<OctetString>> encode::Values for OctetStringEncoder<T> {
     fn encoded_len(&self, mode: Mode) -> usize {
         match mode {
             Mode::Ber => {
-                let len = match self.value.0 {
+                let len = match self.value.as_ref().0 {
                     Inner::Primitive(ref bytes) => bytes.len(),
                     Inner::Constructed(ref captured) => captured.len(),
                 };
@@ -647,7 +668,7 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
                 unimplemented!()
             }
             Mode::Der => {
-                let len = self.value.len();
+                let len = self.value.as_ref().len();
                 self.tag.encoded_len()
                 + Length::Definite(len).encoded_len()
                 + len
@@ -662,7 +683,7 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
     ) -> Result<(), io::Error> {
         match mode {
             Mode::Ber => {
-                match self.value.0 {
+                match self.value.as_ref().0 {
                     Inner::Primitive(ref bytes) => {
                         self.tag.write_encoded(false, target)?;
                         Length::Definite(bytes.len()).write_encoded(target)?;
@@ -680,8 +701,10 @@ impl<'a> encode::Values for OctetStringEncoder<'a> {
             }
             Mode::Der => {
                 self.tag.write_encoded(false, target)?;
-                Length::Definite(self.value.len()).write_encoded(target)?;
-                for slice in self.value.iter() {
+                Length::Definite(
+                    self.value.as_ref().len()
+                ).write_encoded(target)?;
+                for slice in self.value.as_ref().iter() {
                     target.write_all(slice)?;
                 }
                 Ok(())

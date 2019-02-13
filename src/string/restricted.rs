@@ -176,13 +176,23 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Returns a value encoder for the character string with the natural tag.
-    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+    pub fn encode(self) -> impl encode::Values {
         self.encode_as(L::TAG)
     }
 
     /// Returns a value encoder for the character string with the given tag.
-    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+    pub fn encode_as(self, tag: Tag) -> impl encode::Values {
         self.octets.encode_as(tag)
+    }
+
+    /// Returns a value encoder for the character string with the natural tag.
+    pub fn encode_ref<'a>(&'a self) -> impl encode::Values + 'a {
+        self.encode_ref_as(L::TAG)
+    }
+
+    /// Returns a value encoder for the character string with the given tag.
+    pub fn encode_ref_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+        self.octets.encode_ref_as(tag)
     }
 }
 
@@ -525,7 +535,7 @@ mod test {
         let ps = PrintableString::new(os).unwrap();
 
         let mut v = Vec::new();
-        ps.encode().write_encoded(Mode::Der, &mut v).unwrap();
+        ps.encode_ref().write_encoded(Mode::Der, &mut v).unwrap();
 
         let decoded = Mode::Der.decode(
             v.as_slice(),

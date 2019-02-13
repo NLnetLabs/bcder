@@ -34,12 +34,13 @@
 //! }
 //! ```
 //! 
-//! The value encoderss all implement the trait [`encode::Values`] which
+//! The value encoders all implement the trait [`encode::Values`] which
 //! represents a sequence of BER-encodable values. The implementation of
 //! our struct could return such an encoder like this:
 //!
 //! ```
 //! # use bcder::{Oid, OctetString};
+//! # use bcder::encode::PrimitiveContent;
 //! use bcder::Tag;
 //! use bcder::encode;
 //!
@@ -49,14 +50,14 @@
 //! # }
 //! # 
 //! impl EncapsulatedContentInfo {
-//!     pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
+//!     pub fn encode(self) -> impl encode::Values {
 //!         self.encode_as(Tag::SEQUENCE)
 //!     }
 //!
-//!     pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+//!     pub fn encode_as(self, tag: Tag) -> impl encode::Values {
 //!         encode::sequence_as(tag, (
 //!             self.content_type.encode(),
-//!             self.content.as_ref().map(|s| s.encode())
+//!             self.content.map(|s| s.encode())
 //!         ))
 //!     }
 //! }
