@@ -7,6 +7,10 @@ Breaking Changes
 *  `PrimitiveContent`’s methods take `self` instead of `&self`. This
    avoids the lifetime argument in `Primitive`, its encoder. [(#7)]
 
+*  For all provided type, change `encode` and `encode_as` methods to take
+   self by value and introduce `encode_ref` and `encode_ref_as` that take
+   self by reference. [(#12)]
+
 New
 
 *  `encode::Values` implemented for tuples of up to twelve elements.
@@ -27,6 +31,7 @@ Dependencies
 [(#9)]: https://github.com/NLnetLabs/bcder/pull/9
 [(#10)]: https://github.com/NLnetLabs/bcder/pull/10
 [(#11)]: https://github.com/NLnetLabs/bcder/pull/11
+[(#12)]: https://github.com/NLnetLabs/bcder/pull/12
 
 
 ## 0.1.0

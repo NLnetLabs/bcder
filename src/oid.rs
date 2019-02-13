@@ -122,16 +122,6 @@ impl<T: AsRef<[u8]>> Oid<T> {
             }
         })
     }
-
-    /// Returns a value encoder for the value using the natural tag.
-    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::encode(self)
-    }
-
-    /// Returns a value encoder for the value using the given tag.
-    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::encode_as(self, tag)
-    }
 }
 
 /// # Access to Sub-identifiers
@@ -204,7 +194,7 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
 
 //--- encode::PrimitiveContent
 
-impl<'a, T: AsRef<[u8]>> encode::PrimitiveContent for &'a Oid<T> {
+impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
     const TAG: Tag = Tag::OID;
 
     fn encoded_len(&self, _: Mode) -> usize {

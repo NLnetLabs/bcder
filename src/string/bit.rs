@@ -187,16 +187,6 @@ impl BitString {
             }
         }
     }
-
-    /*
-    pub fn encode<'a>(&'a self) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::encode(self)
-    }
-
-    pub fn encode_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
-        encode::PrimitiveContent::encode_as(self, tag)
-    }
-    */
 }
 
 
