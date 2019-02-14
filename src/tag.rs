@@ -146,7 +146,7 @@ impl Tag {
     pub const BMP_STRING: Self = Tag(29);
 
     /// The tag context specific tag [0].
-    pub const CTX_0: Self = Tag(Tag::CONTEXT_SPECIFIC | 0);
+    pub const CTX_0: Self = Tag(Tag::CONTEXT_SPECIFIC);
 
     /// The tag context specific tag [1].
     pub const CTX_1: Self = Tag(Tag::CONTEXT_SPECIFIC | 1);
@@ -253,6 +253,7 @@ impl Tag {
     }
 
     /// Returns the number of octets of the encoded form of the tag.
+    #[allow(trivially_copy_pass_by_ref)] // for possible multi-byte tags
     pub fn encoded_len(&self) -> usize {
         1
     }
@@ -261,6 +262,7 @@ impl Tag {
     ///
     /// If `constructed` is `true`, the encoded tag will signal a value in
     /// constructed encoding and primitive encoding otherwise.
+    #[allow(trivially_copy_pass_by_ref)] // for possible multi-byte tags
     pub fn write_encoded<W: io::Write>(
         &self,
         constructed: bool,

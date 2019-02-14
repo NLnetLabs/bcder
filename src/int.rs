@@ -313,7 +313,7 @@ impl Ord for Integer {
                         if l > r {
                             return cmp::Ordering::Greater
                         }
-                        else {
+                        else if l < r {
                             return cmp::Ordering::Less
                         }
                     }
@@ -332,7 +332,7 @@ impl Ord for Integer {
                         if l > r {
                             return cmp::Ordering::Less
                         }
-                        else {
+                        else if l < r {
                             return cmp::Ordering::Greater
                         }
                     }

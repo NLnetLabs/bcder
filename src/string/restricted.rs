@@ -3,7 +3,7 @@
 //! This is an internal module. It’s public items are re-exported by the
 //! parent.
 
-use std::{char, cmp, hash, ops};
+use std::{char, cmp, hash, ops, str};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use ::{decode, encode};
@@ -131,15 +131,6 @@ impl<L: CharSet> RestrictedString<L> {
         Ok(unsafe { Self::new_unchecked(OctetString::new(octets)) })
     }
 
-    /// Creates a new character string from a `str`.
-    ///
-    /// This will require a new bytes value to be created.
-    pub fn from_str(s: &str) -> Result<Self, CharSetError> {
-        Ok(unsafe { Self::new_unchecked(OctetString::new(
-            L::from_str(s)?.into_owned().into()
-        ))})
-    }
-
     /// Creates a string from the character string.
     pub fn to_string(&self) -> String {
         self.chars().collect()
@@ -193,6 +184,18 @@ impl<L: CharSet> RestrictedString<L> {
     /// Returns a value encoder for the character string with the given tag.
     pub fn encode_ref_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
         self.octets.encode_ref_as(tag)
+    }
+}
+
+//--- FromStr
+
+impl<L: CharSet> str::FromStr for RestrictedString<L> {
+    type Err = CharSetError;
+
+    fn from_str(s: &str) -> Result<Self, CharSetError> {
+        Ok(unsafe { Self::new_unchecked(OctetString::new(
+            L::from_str(s)?.into_owned().into()
+        ))})
     }
 }
 

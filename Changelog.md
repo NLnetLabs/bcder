@@ -11,17 +11,25 @@ Breaking Changes
    self by value and introduce `encode_ref` and `encode_ref_as` that take
    self by reference. [(#12)]
 
+*  `RestrictedString::from_str` replaced by an implementation of the
+   `FromStr` trait.
+
 New
 
 *  `encode::Values` implemented for tuples of up to twelve elements.
    [(#9)]
+
 *  `OctetString::encode_slice` and `encode_slice_as`: allows encoding a bytes
    slice as an octet string without going through making an `OctetString`
    first.
+
 *  `encode::Slice` wraps a slice of values encoding `encode::Values` and
    provides an encoder for it. [(#11)]
+
 *  new functions: `encode::slice` and `encode::iter` as shortcuts for the
    respective associated functions. [(#11)]
+
+*  `OctetString::is_empty`
 
 Bug Fixes
 
