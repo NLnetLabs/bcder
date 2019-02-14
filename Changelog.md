@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased next version
+
+Breaking Changes
+
+New
+
+Bug Fixes
+
+Dependencies
+
+
 ## 0.2.0
 
 Breaking Changes
@@ -33,10 +44,6 @@ New
    respective associated functions. [(#11)]
 
 *  `OctetString::is_empty` [(#13)], `OctetString::into_bytes` [(#14)].
-
-Bug Fixes
-
-Dependencies
 
 [(#7)]: https://github.com/NLnetLabs/bcder/pull/7
 [(#9)]: https://github.com/NLnetLabs/bcder/pull/9
