@@ -4,6 +4,9 @@
 
 Breaking Changes
 
+*  Drop use of _failure_ crate. Error types now provide a `Display`
+   implementation only.
+
 *  `PrimitiveContent`’s methods take `self` instead of `&self`. This
    avoids the lifetime argument in `Primitive`, its encoder. [(#7)]
 

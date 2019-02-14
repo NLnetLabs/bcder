@@ -7,14 +7,14 @@
 //------------ Error ---------------------------------------------------------
 
 /// An error happened while decoding data.
-#[derive(Clone, Copy, Debug, Eq, Fail, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
 pub enum Error {
     /// The data didn’t conform to the expected structure.
-    #[fail(display="malformed data")]
+    #[display(fmt="malformed data")]
     Malformed,
 
     /// An encoding used by the data is not yet implemented by the crate.
-    #[fail(display="format not implemented")]
+    #[display(fmt="format not implemented")]
     Unimplemented,
 }
 

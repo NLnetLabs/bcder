@@ -31,7 +31,7 @@
 #![allow(renamed_and_removed_lints, unknown_lints)]
 
 extern crate bytes;
-#[macro_use] extern crate failure;
+#[macro_use] extern crate derive_more;
 
 //--- Re-exports
 
