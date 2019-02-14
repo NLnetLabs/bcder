@@ -4,6 +4,9 @@
 
 Breaking Changes
 
+*  Drop use of _failure_ crate. Error types now provide a `Display`
+   implementation only. [(#15)]
+
 *  `PrimitiveContent`’s methods take `self` instead of `&self`. This
    avoids the lifetime argument in `Primitive`, its encoder. [(#7)]
 
@@ -42,6 +45,7 @@ Dependencies
 [(#12)]: https://github.com/NLnetLabs/bcder/pull/12
 [(#13)]: https://github.com/NLnetLabs/bcder/pull/13
 [(#14)]: https://github.com/NLnetLabs/bcder/pull/14
+[(#14)]: https://github.com/NLnetLabs/bcder/pull/15
 
 
 ## 0.1.0
