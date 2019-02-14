@@ -109,12 +109,27 @@ impl OctetString {
     /// Produces a bytes value with the string’s content.
     ///
     /// If the octet string was encoded as a single primitive value, the
-    /// method will simply clone the contnent. Otherwise it will produce
+    /// method will simply clone the content. Otherwise it will produce
     /// an entirely new bytes value from the concatenated content of all
     /// the primitive values.
     pub fn to_bytes(&self) -> Bytes {
         if let Inner::Primitive(ref inner) = self.0 {
             return inner.clone()
+        }
+        let mut res = BytesMut::new();
+        self.iter().for_each(|x| res.extend_from_slice(x));
+        res.freeze()
+    }
+
+    /// Converts the octet string into bytes value.
+    ///
+    /// If the octet string was encoded as a single primitive value, the
+    /// method will simply return the content. Otherwise it will produce
+    /// an entirely new bytes value from the concatenated content of all
+    /// the primitive values.
+    pub fn into_bytes(self) -> Bytes {
+        if let Inner::Primitive(inner) = self.0 {
+            return inner
         }
         let mut res = BytesMut::new();
         self.iter().for_each(|x| res.extend_from_slice(x));
