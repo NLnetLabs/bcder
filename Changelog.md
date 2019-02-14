@@ -12,7 +12,7 @@ Breaking Changes
    self by reference. [(#12)]
 
 *  `RestrictedString::from_str` replaced by an implementation of the
-   `FromStr` trait.
+   `FromStr` trait. [(#13)]
 
 New
 
@@ -29,7 +29,7 @@ New
 *  new functions: `encode::slice` and `encode::iter` as shortcuts for the
    respective associated functions. [(#11)]
 
-*  `OctetString::is_empty`
+*  `OctetString::is_empty` [(#13)], `OctetString::into_bytes` [(#14)].
 
 Bug Fixes
 
@@ -40,6 +40,8 @@ Dependencies
 [(#10)]: https://github.com/NLnetLabs/bcder/pull/10
 [(#11)]: https://github.com/NLnetLabs/bcder/pull/11
 [(#12)]: https://github.com/NLnetLabs/bcder/pull/12
+[(#13)]: https://github.com/NLnetLabs/bcder/pull/13
+[(#14)]: https://github.com/NLnetLabs/bcder/pull/14
 
 
 ## 0.1.0
