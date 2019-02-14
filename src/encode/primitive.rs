@@ -112,9 +112,9 @@ impl PrimitiveContent for u8 {
         target: &mut W
     ) -> Result<(), io::Error> {
         if *self > 0x7F {
-            target.write(&[0])?;
+            target.write_all(&[0])?;
         }
-        target.write(&[*self])?;
+        target.write_all(&[*self])?;
         Ok(())
     }
 }
@@ -145,12 +145,12 @@ macro_rules! unsigned_content {
                 target: &mut W
             ) -> Result<(), io::Error> {
                 if *self == 0 {
-                    target.write(&[0x00])?;
+                    target.write_all(&[0x00])?;
                 }
                 else {
                     let mut val = self.swap_bytes();
                     if val & 0x80 != 0 {
-                        target.write(&[0x00])?;
+                        target.write_all(&[0x00])?;
                     }
                     let mut i = 0;
                     while i < $len {
@@ -161,7 +161,7 @@ macro_rules! unsigned_content {
                         i += 1
                     }
                     while i < $len {
-                        target.write(&[val as u8])?;
+                        target.write_all(&[val as u8])?;
                         val >>= 8;
                         i += 1
                     }
@@ -190,7 +190,7 @@ impl PrimitiveContent for i8 {
         _: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        target.write(&[*self as u8])?;
+        target.write_all(&[*self as u8])?;
         Ok(())
     }
 }
@@ -218,10 +218,10 @@ macro_rules! signed_content {
                 target: &mut W
             ) -> Result<(), io::Error> {
                 if *self == 0 {
-                    target.write(&[0x00])?;
+                    target.write_all(&[0x00])?;
                 }
                 else if *self == -1 {
-                    target.write(&[0xFF])?;
+                    target.write_all(&[0xFF])?;
                 }
                 else if *self < 0 {
                     let mut val = self.swap_bytes();
@@ -234,7 +234,7 @@ macro_rules! signed_content {
                         i += 1;
                     }
                     while i < $len {
-                        target.write(&[val as u8])?;
+                        target.write_all(&[val as u8])?;
                         val >>= 8;
                         i += 1
                     }
@@ -250,7 +250,7 @@ macro_rules! signed_content {
                         i += 1;
                     }
                     while i < $len {
-                        target.write(&[val as u8])?;
+                        target.write_all(&[val as u8])?;
                         val >>= 8;
                         i += 1
                     }

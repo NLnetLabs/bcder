@@ -103,7 +103,7 @@ impl Length {
                     (source.take_u8()? as usize) << 16 |
                     (source.take_u8()? as usize) << 8 |
                     (source.take_u8()? as usize);
-                if mode.is_ber() || len > 0xFFFFFF {
+                if mode.is_ber() || len > 0x00FF_FFFF {
                     Ok(Length::Definite(len))
                 }
                 else {
@@ -131,7 +131,7 @@ impl Length {
                 if len < 0x80 { 1 }
                 else if len < 0x1_00 { 2 }
                 else if len < 0x1_0000 { 3 }
-                else if len < 0x1_00_0000 { 4 }
+                else if len < 0x100_0000 { 4 }
                 else if len < 0x1_0000_0000 { 5 }
                 else {
                     panic!("excessive length")
@@ -166,7 +166,7 @@ impl Length {
                     target.write_all(&buf)
 
                 }
-                else if len < 0x1_00_0000 {
+                else if len < 0x100_0000 {
                     let buf = [
                         0x83, (len >> 16) as u8, (len >> 8) as u8, len as u8
                     ];

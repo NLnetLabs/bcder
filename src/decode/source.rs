@@ -400,7 +400,7 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     ///
     /// Advances the underlying source to the end of the captured bytes.
     pub fn skip(self) {
-        if let Err(_) = self.source.advance(self.pos) {
+        if self.source.advance(self.pos).is_err() {
             panic!("failed to advance capture source");
         }
     }

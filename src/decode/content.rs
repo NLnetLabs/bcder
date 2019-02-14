@@ -90,6 +90,7 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     }
 }
 
+#[allow(wrong_self_convention)]
 impl<'a, S: Source + 'a> Content<'a, S> {
     /// Converts content into a `u8`.
     ///
@@ -232,6 +233,7 @@ impl<'a, S: 'a> Primitive<'a, S> {
 
 /// # High-level Decoding
 ///
+#[allow(wrong_self_convention)]
 impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Parses the primitive value as a BOOLEAN value.
     pub fn to_bool(&mut self) -> Result<bool, S::Err> {
@@ -499,13 +501,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             }
             State::Indefinite => {
                 let (tag, constructed) = Tag::take_from(self.source)?;
-                if tag != Tag::END_OF_VALUE {
-                    xerr!(Err(Error::Malformed.into()))
-                }
-                else if constructed {
-                    xerr!(Err(Error::Malformed.into()))
-                }
-                else if !Length::take_from(self.source, self.mode)?.is_zero() {
+                if tag != Tag::END_OF_VALUE || constructed
+                    || !Length::take_from(self.source, self.mode)?.is_zero()
+                {
                     xerr!(Err(Error::Malformed.into()))
                 }
                 else {
@@ -611,10 +609,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 Ok(Some(res))
             }
             Length::Indefinite => {
-                if !constructed {
-                    xerr!(return Err(Error::Malformed.into()))
-                }
-                else if self.mode == Mode::Der {
+                if !constructed || self.mode == Mode::Der {
                     xerr!(return Err(Error::Malformed.into()))
                 }
                 let mut content = Content::Constructed(

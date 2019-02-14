@@ -14,7 +14,7 @@ fn from_str(s: &str) -> Result<u32, &'static str> {
 }
 
 fn process_one(arg: &str) -> Result<(), &'static str> {
-    let mut components = arg.split(".");
+    let mut components = arg.split('.');
     let (first, second) = match (components.next(), components.next()) {
         (Some(first), Some(second)) => (first, second),
         _ => {

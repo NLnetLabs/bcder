@@ -28,6 +28,7 @@
 //! [string]: string/index.html
 //! [oid]: oid/index.html
 //! [`Captured`]: captured/struct.Captured.html
+#![allow(renamed_and_removed_lints, unknown_lints)]
 
 extern crate bytes;
 #[macro_use] extern crate failure;

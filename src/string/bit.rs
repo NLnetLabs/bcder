@@ -220,7 +220,7 @@ impl<'a> Iterator for BitStringIter<'a> {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {
-        self.0.next().map(|x| *x)
+        self.0.next().cloned()
     }
 }
 

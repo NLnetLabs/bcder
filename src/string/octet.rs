@@ -132,6 +132,14 @@ impl OctetString {
         self.iter().fold(0, |len, x| len + x.len())
     }
 
+    /// Returns whether the content is empty.
+    pub fn is_empty(&self) -> bool {
+        if let Inner::Primitive(ref inner) = self.0 {
+            return inner.is_empty()
+        }
+        !self.iter().any(|s| !s.is_empty())
+    }
+
     /// Creates a source that can be used to decode the string’s content.
     ///
     /// The returned value contains a clone of the string (which, because of
@@ -326,7 +334,7 @@ impl<T: AsRef<[u8]>> PartialEq<T> for OctetString {
             }
             other = &other[part.len()..]
         }
-        return false
+        false
     }
 }
 
@@ -359,7 +367,7 @@ impl<T: AsRef<[u8]>> PartialOrd<T> for OctetString {
             }
             other = &other[part.len()..]
         }
-        return Some(cmp::Ordering::Less)
+        Some(cmp::Ordering::Less)
     }
 }
 
@@ -601,7 +609,7 @@ impl<'a> OctetStringOctets<'a> {
     fn new(iter: OctetStringIter<'a>) -> Self {
         OctetStringOctets {
             cur: b"",
-            iter: iter
+            iter
         }
     }
 }
