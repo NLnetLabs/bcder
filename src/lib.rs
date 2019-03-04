@@ -30,6 +30,10 @@
 //! [`Captured`]: captured/struct.Captured.html
 #![allow(renamed_and_removed_lints, unknown_lints)]
 
+// We have seemingly redundant closures (i.e., closures where just providing
+// a function would also work) that cannot be removed due to lifetime issues.
+#![allow(redundant_closure)]
+
 extern crate bytes;
 #[macro_use] extern crate derive_more;
 
