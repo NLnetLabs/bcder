@@ -8,7 +8,13 @@ New
 
 Bug Fixes
 
+*  Fix incorrect encoding of primitive unsigned integers for values with a
+   number of leading zero bits divisible by eight. [(#16)]
+
 Dependencies
+
+
+[(#16)]: https://github.com/NLnetLabs/rpki-rs/pull/16
 
 
 ## 0.2.0
