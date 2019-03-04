@@ -130,8 +130,8 @@ macro_rules! unsigned_content {
                 }
                 else {
                     let zeros = self.leading_zeros() as usize;
-                    if zeros == 0 {
-                        $len + 1
+                    if zeros % 8 == 0 {
+                        $len - (zeros >> 3) + 1
                     }
                     else {
                         $len - (zeros >> 3)
@@ -149,9 +149,6 @@ macro_rules! unsigned_content {
                 }
                 else {
                     let mut val = self.swap_bytes();
-                    if val & 0x80 != 0 {
-                        target.write_all(&[0x00])?;
-                    }
                     let mut i = 0;
                     while i < $len {
                         if val as u8 != 0 {
@@ -159,6 +156,9 @@ macro_rules! unsigned_content {
                         }
                         val >>= 8;
                         i += 1
+                    }
+                    if val & 0x80 != 0 {
+                        target.write_all(&[0x00])?;
                     }
                     while i < $len {
                         target.write_all(&[val as u8])?;
@@ -375,8 +375,11 @@ mod test {
     fn encode_u32() {
         test_der(0u32, b"\0");
         test_der(0x12u32, b"\x12");
+        test_der(0xf2u32, b"\0\xf2");
         test_der(0x1234u32, b"\x12\x34");
+        test_der(0xf234u32, b"\0\xf2\x34");
         test_der(0x123400u32, b"\x12\x34\x00");
+        test_der(0xf23400u32, b"\0\xf2\x34\x00");
         test_der(0x12345678u32, b"\x12\x34\x56\x78");
         test_der(0xA2345678u32, b"\x00\xA2\x34\x56\x78");
     }
