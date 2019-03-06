@@ -4,10 +4,11 @@
 
 use std::io;
 use bytes::Bytes;
-use ::{decode, encode};
-use ::decode::Source;
-use ::mode::Mode;
-use ::tag::Tag;
+use crate::{decode, encode};
+use crate::decode::Source;
+use crate::length::Length;
+use crate::mode::Mode;
+use crate::tag::Tag;
 
 
 //------------ BitString -----------------------------------------------------
@@ -187,6 +188,20 @@ impl BitString {
             }
         }
     }
+
+    /// Returns a value encoder that encodes a bytes slice as an octet string.
+    pub fn encode_slice<T>(value: T, unused: u8) -> BitSliceEncoder<T> {
+        Self::encode_slice_as(value, unused, Tag::BIT_STRING)
+    }
+
+    /// Returns a value encoder that encodes a bytes slice as an octet string.
+    pub fn encode_slice_as<T>(
+        value: T,
+        unused: u8,
+        tag: Tag
+    ) -> BitSliceEncoder<T> {
+        BitSliceEncoder::new(value, unused, tag)
+    }
 }
 
 
@@ -221,6 +236,56 @@ impl<'a> Iterator for BitStringIter<'a> {
 
     fn next(&mut self) -> Option<u8> {
         self.0.next().cloned()
+    }
+}
+
+
+//------------ BitSliceEncoder -----------------------------------------------
+
+/// A value encoder for a bytes slice as a bit string.
+#[derive(Clone, Debug)]
+pub struct BitSliceEncoder<T> {
+    /// The slice to encode.
+    slice: T,
+
+    /// The unused bits in the last byte.
+    unused: u8,
+
+    /// The tag to be used for encoded value.
+    tag: Tag,
+}
+
+impl<T> BitSliceEncoder<T> {
+    /// Creates a new bit slice encoder.
+    fn new(slice: T, unused: u8, tag: Tag) -> Self {
+        BitSliceEncoder { slice, unused, tag }
+    }
+}
+
+
+//--- encode::Values
+
+impl<T: AsRef<[u8]>> encode::Values for BitSliceEncoder<T> {
+    fn encoded_len(&self, mode: Mode) -> usize {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        let len = self.slice.as_ref().len() + 1;
+        self.tag.encoded_len() + Length::Definite(len).encoded_len() + len
+    }
+
+    fn write_encoded<W: io::Write>(
+        &self,
+        mode: Mode,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        self.tag.write_encoded(false, target)?;
+        Length::Definite(self.slice.as_ref().len() + 1).write_encoded(target)?;
+        target.write_all(&[self.unused])?;
+        target.write_all(self.slice.as_ref())
     }
 }
 
