@@ -41,10 +41,18 @@ fn process_one(arg: &str) -> Result<(), &'static str> {
         else { first = false }
         // 1111 1111  1111 1111  1111 1111  1111 1111
         // EEEE DDDD  DDDC CCCC  CCBB BBBB  BAAA AAAA
-        if item > 0x0FFF_FFFF { print!("{}, ", item >> 28) }
-        if item > 0x001F_FFFF { print!("{}, ", (item >> 21) & 0x7F) }
-        if item > 0x0000_3FFF { print!("{}, ", (item >> 14) & 0x7F) }
-        if item > 0x0000_007F { print!("{}, ", (item >> 7) & 0x7F) }
+        if item > 0x0FFF_FFFF {
+            print!("{}, ", (item >> 28) | 0x80)
+        }
+        if item > 0x001F_FFFF {
+            print!("{}, ", ((item >> 21) & 0x7F) | 0x80)
+        }
+        if item > 0x0000_3FFF {
+            print!("{}, ", ((item >> 14) & 0x7F) | 0x80)
+        }
+        if item > 0x0000_007F {
+            print!("{}, ", ((item >> 7) & 0x7F) | 0x80)
+        }
         print!("{}", item & 0x7F);
     }
     println!("]");

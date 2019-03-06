@@ -12,12 +12,14 @@ Bug Fixes
 
 *  Fix incorrect encoding of primitive unsigned integers for values with a
    number of leading zero bits divisible by eight. [(#16)]
+*  Fix the mkoid tool to correctly encode large subidentifiers. [(#18)]
 
 Dependencies
 
 
 [(#16)]: https://github.com/NLnetLabs/rpki-rs/pull/16
 [(#17)]: https://github.com/NLnetLabs/rpki-rs/pull/17
+[(#18)]: https://github.com/NLnetLabs/rpki-rs/pull/18
 
 
 ## 0.2.0
