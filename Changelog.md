@@ -6,6 +6,8 @@ Breaking Changes
 
 New
 
+*  Add `BitString::encode_slice` and `encode_slice_as`. [(#17)]
+
 Bug Fixes
 
 *  Fix incorrect encoding of primitive unsigned integers for values with a
@@ -15,6 +17,7 @@ Dependencies
 
 
 [(#16)]: https://github.com/NLnetLabs/rpki-rs/pull/16
+[(#17)]: https://github.com/NLnetLabs/rpki-rs/pull/17
 
 
 ## 0.2.0
