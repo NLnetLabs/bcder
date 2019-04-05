@@ -212,6 +212,31 @@ impl Tag {
         Tag(Tag::PRIVATE | number)
     }
 
+    /// Returns whether the tag is of the universal class.
+    pub fn is_universal(self) -> bool {
+        self.0 & Self::CLASS_MASK == Self::UNIVERSAL
+    }
+
+    /// Returns whether the tag is of the application class.
+    pub fn is_application(self) -> bool {
+        self.0 & Self::CLASS_MASK == Self::APPLICATION
+    }
+
+    /// Returns whether the tag is of the context specific class.
+    pub fn is_context_specific(self) -> bool {
+        self.0 & Self::CLASS_MASK == Self::CONTEXT_SPECIFIC
+    }
+
+    /// Returns whether the tag is of the private class.
+    pub fn is_private(self) -> bool {
+        self.0 & Self::CLASS_MASK == Self::PRIVATE
+    }
+
+    /// Returns the number of the tag.
+    pub fn number(self) -> u8 {
+        self.0 & !Self::CLASS_MASK
+    }
+
     /// Takes a tag from the beginning of a source.
     ///
     /// Upon success, returns both the tag and whether the value is

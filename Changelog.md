@@ -6,9 +6,13 @@ Breaking
 
 New
 
+* New methods for checking the class and number on `Tag`. [(#20)]
+
 Bug Fixes
 
 Dependencies
+
+[(#20)]: https://github.com/NLnetLabs/rpki-rs/pull/20
 
 
 ## 0.2.1
