@@ -27,13 +27,16 @@
 #[cfg(feature = "extra-debug")]
 extern crate backtrace;
 
+#[cfg(feature="extra-debug")]
+pub use self::backtrace::Backtrace;
+
 #[cfg(feature = "extra-debug")]
 #[macro_export]
 macro_rules! xerr {
     ($test:expr) => {{
         eprintln!(
             "--- EXTRA DEBUG ---\n{:?}\n--- EXTRA DEBUG ---",
-            backtrace::Backtrace::new()
+            $crate::debug::Backtrace::new()
         );
         $test
     }}
