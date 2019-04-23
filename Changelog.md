@@ -10,6 +10,11 @@ New
 
 Bug Fixes
 
+Other Changes
+
+* The `xerr!` macro now prints a backtrace with the `extra-debug` feature
+  enabled instead of panicking. [(#XX)]
+
 Dependencies
 
 [(#20)]: https://github.com/NLnetLabs/rpki-rs/pull/20

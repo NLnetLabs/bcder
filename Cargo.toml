@@ -9,10 +9,11 @@ categories = ["encoding", "network-programming", "parsing"]
 license = "BSD-3-Clause"
 
 [dependencies]
+backtrace   = { version="^0.3.15", optional=true }
 bytes       = "^0.4"
 derive_more = "^0.14"
 
 [features]
-# Panic when a parsing error occurs. This feature is intended for
+# Print a backtrace when a parsing error occurs. This feature is intended for
 # development use exclusively and MUST NOT be enabled in release builds.
-extra-debug = []
+extra-debug = [ "backtrace" ]
