@@ -4,7 +4,7 @@
 
 Breaking
 
-* The minimum supported Rust version is now 1.34.0. [(#XX)]
+* The minimum supported Rust version is now 1.34.0. [(#22)]
 
 New
 
@@ -22,6 +22,7 @@ Dependencies
 
 [(#20)]: https://github.com/NLnetLabs/rpki-rs/pull/20
 [(#21)]: https://github.com/NLnetLabs/rpki-rs/pull/21
+[(#22)]: https://github.com/NLnetLabs/rpki-rs/pull/22
 
 
 ## 0.2.1
