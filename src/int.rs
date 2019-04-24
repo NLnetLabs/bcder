@@ -13,7 +13,8 @@
 //! [`Integer`]: struct.Integer.html
 //! [`Unsigned`]: struct.Unsigned.html
 
-use std::{cmp, hash, io};
+use std::{cmp, hash, io, mem};
+use std::convert::TryFrom;
 use bytes::Bytes;
 use super::decode;
 use super::decode::Source;
@@ -27,53 +28,68 @@ use super::Mode;
 // These are only for decoding. Encoding via the PrimitiveContent can be found
 // in the `encode::primitive` module.
 
-macro_rules! decode_signed {
-    ( $prim:ident, $type:ident, $len:expr) => {{
-        // Because the value is encoded in two’s complement, we need to fill
-        // in missing left octets by 0x00 for positive numbers and 0xFF for
-        // negative numbers. We achieve this by starting out with either all
-        // bits zero (i.e., 0) or ones (i.e., -1) and then shifting in
-        // present octets from the right.
-        Self::check_head($prim)?;
-        let first = $prim.take_u8()?;
-        let mut res = if first & 0x80 == 0 { 0 }
-                      else { (-1 << 8) | $type::from(first) };
-        for _ in 1..$len {
-            if $prim.remaining() == 0 {
-                break
-            }
-            res = (res << 8) | ($type::from($prim.take_u8()?));
+macro_rules! slice_to_builtin {
+    // Decodes an integer contained in the slice $slice into the builtin
+    // signed integer type $type. Produces an Ok(value) if this works or
+    // an Err($err) if it doesn’t.
+    ( signed, $slice:expr, $type:ident, $err:expr) => {{
+        const LEN: usize = mem::size_of::<$type>();
+        if $slice.len() > LEN {
+            Err($err)
         }
-        Ok(res)
-    }}
-}
+        else {
+            // Start with all zeros if positive or all 0xFF if negative
+            // number. There’s always at least one octet.
+            let mut res = if $slice[0] & 0x80 == 0 { [0; LEN] }
+            else { [0xFF; LEN] };
 
-macro_rules! decode_unsigned {
-    ( $prim:ident, $type:ident, $len:expr) => {{
-        // This is kind of like signed decoding except that we can’t allow
-        // the sign bit to be set. In addition, because of the sign bit, the
-        // encoding requires an extra empty left-most octet if the native
-        // unsigned value has the most significant bit set.
-        Self::check_head($prim)?;
-        if $prim.remaining() > $len {
-            if $prim.take_u8()? != 0 {
-                xerr!(return Err(decode::Malformed.into()));
-            }
+            // Copy over all available octets.
+            res[LEN - $slice.len()..].copy_from_slice($slice);
+            Ok($type::from_be_bytes(res))
         }
-        let mut res = 0;
-        for _ in 0..$len {
-            if $prim.remaining() == 0 {
-                break
+    }};
+
+    // Ditto for unsigned builtin integer types.
+    ( unsigned, $slice:expr, $type:ident, $err:expr) => {{
+        // This is like signed above except that we can simply error
+        // out if the sign bit is set.
+        const LEN: usize = mem::size_of::<$type>();
+        if $slice[0] & 0x80 != 0 {
+            Err($err)
+        }
+        else {
+            let val = if $slice[0] == 0 { &$slice[1..] }
+                      else { $slice };
+            if val.len() == 0 {
+                Ok(0)
+            }
+            else if val.len() > LEN {
+                Err($err)
             }
             else {
-                res = (res << 8) | ($type::from($prim.take_u8()?));
+                let mut res =  [0; LEN];
+                res[LEN - val.len()..].copy_from_slice(val);
+                Ok($type::from_be_bytes(res))
             }
         }
+    }};
+}
+
+macro_rules! decode_builtin {
+    ( $flavor:ident, $prim:expr, $type:ident) => {{
+        Self::check_head($prim)?;
+        let res = {
+            let slice = $prim.slice_all()?;
+            slice_to_builtin!(
+                $flavor, slice, $type, decode::Malformed.into()
+            )?
+        };
+        $prim.skip_all()?;
         Ok(res)
     }}
 }
 
-macro_rules! from_impl {
+macro_rules! from_builtin {
     ( $from:ident, $to:ident) => {
         impl From<$from> for $to {
             fn from(val: $from) -> $to {
@@ -84,6 +100,28 @@ macro_rules! from_impl {
         }
     }
 }
+
+macro_rules! builtin_from {
+    ($flavor:ident, $from:ident, $to:ident, $len:expr) => {
+        impl<'a> TryFrom<&'a $from> for $to {
+            type Error = OverflowError;
+
+            fn try_from(val: &'a $from) -> Result<$to, Self::Error> {
+                let val = val.as_slice();
+                slice_to_builtin!($flavor, val, $to, OverflowError(()))
+            }
+        }
+
+        impl TryFrom<$from> for $to {
+            type Error = OverflowError;
+
+            fn try_from(val: $from) -> Result<$to, Self::Error> {
+                $to::try_from(&val)
+            }
+        }
+    }
+}
+
 
 
 //------------ Integer -------------------------------------------------------
@@ -159,28 +197,28 @@ impl Integer {
     pub fn i16_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i16, S::Err> {
-        decode_signed!(prim, i16, 2)
+        decode_builtin!(signed, prim, i16)
     }
 
     /// Constructs an `i32` from the content of a primitive value.
     pub fn i32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i32, S::Err> {
-        decode_signed!(prim, i32, 4)
+        decode_builtin!(signed, prim, i32)
     }
 
     /// Constructs an `i64` from the content of a primitive value.
     pub fn i64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i64, S::Err> {
-        decode_signed!(prim, i64, 8)
+        decode_builtin!(signed, prim, i64)
     }
 
     /// Constructs an `i128` from the content of a primitive value.
     pub fn i128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<i128, S::Err> {
-        decode_signed!(prim, i128, 16)
+        decode_builtin!(signed, prim, i128)
     }
 
     /// Checks that an integer is started correctly.
@@ -190,8 +228,8 @@ impl Integer {
     ///
     /// The latter ensures that an integer is encoded in the smallest possible
     /// number of octets. If we insist on this rule, we can use the content
-    /// octets as the value for large integers and use simply compare slices
-    /// for comparision.
+    /// octets as the value for large integers and simply compare slices
+    /// for equality comparision.
     fn check_head<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<(), S::Err> {
@@ -241,18 +279,29 @@ impl Integer {
 }
 
 
-//--- From
+//--- From and TryFrom
 
-from_impl!(i8, Integer);
-from_impl!(i16, Integer);
-from_impl!(i32, Integer);
-from_impl!(i64, Integer);
-from_impl!(i128, Integer);
-from_impl!(u8, Integer);
-from_impl!(u16, Integer);
-from_impl!(u32, Integer);
-from_impl!(u64, Integer);
-from_impl!(u128, Integer);
+from_builtin!(i8, Integer);
+from_builtin!(i16, Integer);
+from_builtin!(i32, Integer);
+from_builtin!(i64, Integer);
+from_builtin!(i128, Integer);
+from_builtin!(u8, Integer);
+from_builtin!(u16, Integer);
+from_builtin!(u32, Integer);
+from_builtin!(u64, Integer);
+from_builtin!(u128, Integer);
+
+builtin_from!(signed, Integer, i8, 1);
+builtin_from!(signed, Integer, i16, 2);
+builtin_from!(signed, Integer, i32, 4);
+builtin_from!(signed, Integer, i64, 8);
+builtin_from!(signed, Integer, i128, 16);
+builtin_from!(unsigned, Integer, u8, 1);
+builtin_from!(unsigned, Integer, u16, 2);
+builtin_from!(unsigned, Integer, u32, 4);
+builtin_from!(unsigned, Integer, u64, 8);
+builtin_from!(unsigned, Integer, u128, 16);
 
 
 //--- AsRef
@@ -472,19 +521,22 @@ impl Unsigned {
     pub fn u32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u32, S::Err> {
-        decode_unsigned!(prim, u32, 4)
+        Self::check_head(prim)?;
+        decode_builtin!(unsigned, prim, u32)
     }
 
     pub fn u64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u64, S::Err> {
-        decode_unsigned!(prim, u64, 8)
+        Self::check_head(prim)?;
+        decode_builtin!(unsigned, prim, u64)
     }
 
     pub fn u128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<u128, S::Err> {
-        decode_unsigned!(prim, u128, 16)
+        Self::check_head(prim)?;
+        decode_builtin!(unsigned, prim, u128)
     }
 
     /// Checks that an unsigned integer is started correctly.
@@ -502,16 +554,42 @@ impl Unsigned {
             Ok(())
         }
     }
+
+    /// Trades the integer into a bytes value with the raw content octets.
+    pub fn into_bytes(self) -> Bytes {
+        self.0.into_bytes()
+    }
+
+    /// Returns a bytes slice with the raw content.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    /// Returns whether the number is zero.
+    pub fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
 }
 
 
-//--- From
+//--- From and TryFrom
 
-from_impl!(u8, Unsigned);
-from_impl!(u16, Unsigned);
-from_impl!(u32, Unsigned);
-from_impl!(u64, Unsigned);
-from_impl!(u128, Unsigned);
+from_builtin!(u8, Unsigned);
+from_builtin!(u16, Unsigned);
+from_builtin!(u32, Unsigned);
+from_builtin!(u64, Unsigned);
+from_builtin!(u128, Unsigned);
+
+builtin_from!(signed, Unsigned, i8, 1);
+builtin_from!(signed, Unsigned, i16, 2);
+builtin_from!(signed, Unsigned, i32, 4);
+builtin_from!(signed, Unsigned, i64, 8);
+builtin_from!(signed, Unsigned, i128, 16);
+builtin_from!(unsigned, Unsigned, u8, 1);
+builtin_from!(unsigned, Unsigned, u16, 2);
+builtin_from!(unsigned, Unsigned, u32, 4);
+builtin_from!(unsigned, Unsigned, u64, 8);
+builtin_from!(unsigned, Unsigned, u128, 16);
 
 
 //--- AsRef
@@ -552,6 +630,13 @@ impl<'a> PrimitiveContent for &'a Unsigned {
         (&self.0).write_encoded(mode, target)
     }
 }
+
+
+//------------ OverflowError -------------------------------------------------
+
+#[derive(Clone, Copy, Debug, Display)]
+#[display(fmt="integer out of range")]
+pub struct OverflowError(());
 
 
 //============ Tests =========================================================
@@ -846,5 +931,125 @@ mod test {
             ).unwrap(),
             -32513
         );
+    }
+
+    #[test]
+    fn unsigned_builtin_from() {
+        let int = Integer(b"\x00".as_ref().into());
+        assert_eq!(u8::try_from(&int).unwrap(), 0);
+        assert_eq!(u16::try_from(&int).unwrap(), 0);
+        assert_eq!(u32::try_from(&int).unwrap(), 0);
+        assert_eq!(u64::try_from(&int).unwrap(), 0);
+        assert_eq!(u128::try_from(&int).unwrap(), 0);
+        assert_eq!(i8::try_from(&int).unwrap(), 0);
+        assert_eq!(i16::try_from(&int).unwrap(), 0);
+        assert_eq!(i32::try_from(&int).unwrap(), 0);
+        assert_eq!(i64::try_from(&int).unwrap(), 0);
+        assert_eq!(i128::try_from(&int).unwrap(), 0);
+
+        let int = Integer(b"\x7F".as_ref().into());
+        assert_eq!(u8::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(u16::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(u32::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(u64::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(u128::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(i8::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(i16::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(i32::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(i64::try_from(&int).unwrap(), 0x7F);
+        assert_eq!(i128::try_from(&int).unwrap(), 0x7F);
+
+        let int = Integer(b"\x80".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert!(u32::try_from(&int).is_err());
+        assert!(u64::try_from(&int).is_err());
+        assert!(u128::try_from(&int).is_err());
+        assert_eq!(i8::try_from(&int).unwrap(), -128);
+        assert_eq!(i16::try_from(&int).unwrap(), -128);
+        assert_eq!(i32::try_from(&int).unwrap(), -128);
+        assert_eq!(i64::try_from(&int).unwrap(), -128);
+        assert_eq!(i128::try_from(&int).unwrap(), -128);
+
+        let int = Integer(b"\x00\x80".as_ref().into());
+        assert_eq!(u8::try_from(&int).unwrap(), 0x80);
+        assert_eq!(u16::try_from(&int).unwrap(), 0x80);
+        assert_eq!(u32::try_from(&int).unwrap(), 0x80);
+        assert_eq!(u64::try_from(&int).unwrap(), 0x80);
+        assert_eq!(u128::try_from(&int).unwrap(), 0x80);
+
+        let int = Integer(b"\x12\x34".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert_eq!(u16::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(u32::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(u64::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(u128::try_from(&int).unwrap(), 0x1234);
+        assert!(i8::try_from(&int).is_err());
+        assert_eq!(i16::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(i32::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(i64::try_from(&int).unwrap(), 0x1234);
+        assert_eq!(i128::try_from(&int).unwrap(), 0x1234);
+
+        let int = Integer(b"\xA2\x34".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert!(u32::try_from(&int).is_err());
+        assert!(u64::try_from(&int).is_err());
+        assert!(u128::try_from(&int).is_err());
+        assert!(i8::try_from(&int).is_err());
+        assert_eq!(i16::try_from(&int).unwrap(), -24012);
+        assert_eq!(i32::try_from(&int).unwrap(), -24012);
+        assert_eq!(i64::try_from(&int).unwrap(), -24012);
+        assert_eq!(i128::try_from(&int).unwrap(), -24012);
+
+        let int = Integer(b"\x00\xA2\x34".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert_eq!(u16::try_from(&int).unwrap(), 0xA234);
+        assert_eq!(u32::try_from(&int).unwrap(), 0xA234);
+        assert_eq!(u64::try_from(&int).unwrap(), 0xA234);
+        assert_eq!(u128::try_from(&int).unwrap(), 0xA234);
+
+        let int = Integer(b"\x12\x34\x56".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert_eq!(u32::try_from(&int).unwrap(), 0x123456);
+        assert_eq!(u64::try_from(&int).unwrap(), 0x123456);
+        assert_eq!(u128::try_from(&int).unwrap(), 0x123456);
+        assert!(i8::try_from(&int).is_err());
+        assert!(i16::try_from(&int).is_err());
+        assert_eq!(i32::try_from(&int).unwrap(), 0x123456);
+        assert_eq!(i64::try_from(&int).unwrap(), 0x123456);
+        assert_eq!(i128::try_from(&int).unwrap(), 0x123456);
+
+        let int = Integer(b"\x12\x34\x56\x78".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert_eq!(u32::try_from(&int).unwrap(), 0x12345678);
+        assert_eq!(u64::try_from(&int).unwrap(), 0x12345678);
+        assert_eq!(u128::try_from(&int).unwrap(), 0x12345678);
+        assert!(i8::try_from(&int).is_err());
+        assert!(i16::try_from(&int).is_err());
+        assert_eq!(i32::try_from(&int).unwrap(), 0x12345678);
+        assert_eq!(i64::try_from(&int).unwrap(), 0x12345678);
+        assert_eq!(i128::try_from(&int).unwrap(), 0x12345678);
+
+        let int = Integer(b"\xA2\x34\x56\x78".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert!(u32::try_from(&int).is_err());
+        assert!(u64::try_from(&int).is_err());
+        assert!(u128::try_from(&int).is_err());
+        assert!(i8::try_from(&int).is_err());
+        assert!(i16::try_from(&int).is_err());
+        assert_eq!(i32::try_from(&int).unwrap(), -1573628296);
+        assert_eq!(i64::try_from(&int).unwrap(), -1573628296);
+        assert_eq!(i128::try_from(&int).unwrap(), -1573628296);
+
+        let int = Integer(b"\x00\xA2\x34\x56\x78".as_ref().into());
+        assert!(u8::try_from(&int).is_err());
+        assert!(u16::try_from(&int).is_err());
+        assert_eq!(u32::try_from(&int).unwrap(), 0xA2345678);
+        assert_eq!(u64::try_from(&int).unwrap(), 0xA2345678);
+        assert_eq!(u128::try_from(&int).unwrap(), 0xA2345678);
     }
 }
