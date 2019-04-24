@@ -9,6 +9,8 @@ Breaking
 New
 
 * New methods for checking the class and number on `Tag`. [(#20)]
+* Implement `TryFrom` for builtin integers and `Integer` and `Unsigned`.
+  [(#23)]
 
 Bug Fixes
 
@@ -23,6 +25,7 @@ Dependencies
 [(#20)]: https://github.com/NLnetLabs/rpki-rs/pull/20
 [(#21)]: https://github.com/NLnetLabs/rpki-rs/pull/21
 [(#22)]: https://github.com/NLnetLabs/rpki-rs/pull/22
+[(#23)]: https://github.com/NLnetLabs/rpki-rs/pull/23
 
 
 ## 0.2.1
