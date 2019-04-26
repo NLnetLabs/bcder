@@ -11,6 +11,7 @@ New
 * New methods for checking the class and number on `Tag`. [(#20)]
 * Implement `TryFrom` for builtin integers and `Integer` and `Unsigned`.
   [(#23)]
+* `RestrictedString::into_bytes` [(#24)]
 
 Bug Fixes
 
@@ -26,6 +27,7 @@ Dependencies
 [(#21)]: https://github.com/NLnetLabs/rpki-rs/pull/21
 [(#22)]: https://github.com/NLnetLabs/rpki-rs/pull/22
 [(#23)]: https://github.com/NLnetLabs/rpki-rs/pull/23
+[(#24)]: https://github.com/NLnetLabs/rpki-rs/pull/24
 
 
 ## 0.2.1
