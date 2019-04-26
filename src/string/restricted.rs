@@ -6,8 +6,9 @@
 use std::{char, cmp, hash, ops, str};
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use ::{decode, encode};
-use ::tag::Tag;
+use bytes::Bytes;
+use crate::{decode, encode};
+use crate::tag::Tag;
 use super::octet::{OctetString, OctetStringIter, OctetStringOctets};
 
 
@@ -139,6 +140,14 @@ impl<L: CharSet> RestrictedString<L> {
     /// Returns an iterator over the character in the character string.
     pub fn chars(&self) -> RestrictedStringChars<L> {
         RestrictedStringChars::new(self.octets.octets())
+    }
+
+    /// Converts the string into its underlying bytes.
+    ///
+    /// Note that the bytes value will contain the raw octets of the string
+    /// which are not necessarily a valid Rust string.
+    pub fn into_bytes(self) -> Bytes {
+        self.octets.into_bytes()
     }
 }
 
