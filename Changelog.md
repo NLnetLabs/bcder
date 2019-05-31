@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased next version
+
+Breaking
+
+New
+
+Bug Fixes
+
+Dependencies
+
+
 ## 0.3.0
 
 Breaking
@@ -12,8 +23,6 @@ New
 * Implement `TryFrom` for builtin integers and `Integer` and `Unsigned`.
   [(#23)]
 * `RestrictedString::into_bytes` [(#24)]
-
-Bug Fixes
 
 Other Changes
 

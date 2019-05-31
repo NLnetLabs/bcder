@@ -1,6 +1,6 @@
 [package]
 name = "bcder"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["The NLnet Labs RPKI Team <rpki@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
 repository = "https://github.com/nlnetlabs/bcder"
