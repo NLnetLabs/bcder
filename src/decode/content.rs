@@ -380,7 +380,7 @@ impl<'a> Primitive<'a, &'a [u8]> {
     where F: FnOnce(&mut Primitive<&[u8]>) -> Result<T, Error> {
         let mut lim = LimitedSource::new(source);
         lim.set_limit(Some(source.len()));
-        let mut prim = Self::new(&mut lim, mode);
+        let mut prim = Primitive::new(&mut lim, mode);
         let res = op(&mut prim)?;
         prim.exhausted()?;
         Ok(res)
@@ -468,7 +468,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     pub fn decode<F, T>(source: S, mode: Mode, op: F) -> Result<T, S::Err>
     where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
         let mut source = LimitedSource::new(source);
-        let mut cons = Self::new(&mut source, State::Unbounded, mode);
+        let mut cons = Constructed::new(&mut source, State::Unbounded, mode);
         let res = op(&mut cons)?;
         cons.exhausted()?;
         Ok(res)
