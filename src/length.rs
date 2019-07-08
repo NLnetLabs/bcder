@@ -124,6 +124,24 @@ impl Length {
     }
 
     /// Returns the length of the encoded representation of the value.
+    #[cfg(not(target_pointer_width = "64"))]
+    pub fn encoded_len(&self) -> usize {
+        match *self {
+            Length::Indefinite => 1,
+            Length::Definite(len) => {
+                if len < 0x80 { 1 }
+                else if len < 0x1_00 { 2 }
+                else if len < 0x1_0000 { 3 }
+                else if len < 0x100_0000 { 4 }
+                else {
+                    panic!("excessive length")
+                }
+            }
+        }
+    }
+
+    /// Returns the length of the encoded representation of the value.
+    #[cfg(target_pointer_width = "64")]
     pub fn encoded_len(&self) -> usize {
         match *self {
             Length::Indefinite => 1,
@@ -141,6 +159,7 @@ impl Length {
     }
 
     /// Writes the encoded value to a target.
+    #[cfg(target_pointer_len = "64")]
     pub fn write_encoded<W: io::Write>(
         &self,
         target: &mut W
@@ -177,6 +196,46 @@ impl Length {
                         0x84,
                         (len >> 24) as u8, (len >> 16) as u8,
                         (len >> 8) as u8, len as u8
+                    ];
+                    target.write_all(&buf)
+                }
+                else {
+                    panic!("excessive length")
+                }
+            }
+        }
+    }
+
+    /// Writes the encoded value to a target.
+    #[cfg(not(target_pointer_len = "64"))]
+    pub fn write_encoded<W: io::Write>(
+        &self,
+        target: &mut W
+    ) -> Result<(), io::Error> {
+        match *self {
+            Length::Indefinite => {
+                let buf = [0x80];
+                target.write_all(&buf)
+            }
+            Length::Definite(len) => {
+                if len < 0x80 {
+                    let buf = [len as u8];
+                    target.write_all(&buf)
+                }
+                else if len < 0x1_00 {
+                    let buf = [0x81, len as u8];
+                    target.write_all(&buf)
+                }
+                else if len < 0x1_0000 {
+                    let buf = [
+                        0x82, (len >> 8) as u8, len as u8
+                    ];
+                    target.write_all(&buf)
+
+                }
+                else if len < 0x100_0000 {
+                    let buf = [
+                        0x83, (len >> 16) as u8, (len >> 8) as u8, len as u8
                     ];
                     target.write_all(&buf)
                 }
