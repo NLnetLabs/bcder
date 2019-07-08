@@ -5,9 +5,14 @@
 Bug Fixes
 
 * Fix a lifetime warning from the new borrow checker. [(#27)]
+* Build on 32 bit systems. [(#29)]
+
+Other Changes
+
 * Switch to Rust edition 2018.
 
 [(#27)]: https://github.com/NLnetLabs/bcder/pull/27
+[(#29)]: https://github.com/NLnetLabs/bcder/pull/29
 
 
 ## 0.3.0
