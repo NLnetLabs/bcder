@@ -11,7 +11,7 @@ license = "BSD-3-Clause"
 [dependencies]
 backtrace   = { version="^0.3.15", optional=true }
 bytes       = "^0.4"
-derive_more = "^0.14"
+derive_more = "^0.15"
 
 [features]
 # Print a backtrace when a parsing error occurs. This feature is intended for
