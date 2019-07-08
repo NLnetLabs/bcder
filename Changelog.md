@@ -2,13 +2,11 @@
 
 ## Unreleased next version
 
-Breaking
-
-New
-
 Bug Fixes
 
-Dependencies
+* Fix a lifetime warning from the new borrow checker. [(#27)]
+
+[(#27)]: https://github.com/NLnetLabs/bcder/pull/27
 
 
 ## 0.3.0
