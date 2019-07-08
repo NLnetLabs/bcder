@@ -2,7 +2,7 @@
 //!
 //! This is a private module. It’s public items are re-exported by the parent.
 
-use super::decode;
+use crate::decode;
 
 
 //------------ Mode ----------------------------------------------------------

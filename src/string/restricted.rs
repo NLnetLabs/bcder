@@ -538,8 +538,8 @@ mod test {
 
     use super::*;
     use bytes::Bytes;
-    use mode::Mode;
-    use encode::Values;
+    use crate::mode::Mode;
+    use crate::encode::Values;
 
     #[test]
     fn should_encode_decode_printable_string() {

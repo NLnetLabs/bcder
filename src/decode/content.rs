@@ -4,11 +4,11 @@
 //! parent.
 
 use bytes::Bytes;
-use ::captured::Captured;
-use ::int::{Integer, Unsigned};
-use ::length::Length;
-use ::mode::Mode;
-use ::tag::Tag;
+use crate::captured::Captured;
+use crate::int::{Integer, Unsigned};
+use crate::length::Length;
+use crate::mode::Mode;
+use crate::tag::Tag;
 use super::error::Error;
 use super::source::{CaptureSource, LimitedSource, Source};
 

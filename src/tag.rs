@@ -3,7 +3,7 @@
 //! This is a private module. Its public items are re-exported by the parent.
 
 use std::{fmt, io};
-use super::decode;
+use crate::decode;
 
 
 //------------ Tag -----------------------------------------------------------

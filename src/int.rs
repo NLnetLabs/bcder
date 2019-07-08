@@ -16,11 +16,11 @@
 use std::{cmp, hash, io, mem};
 use std::convert::TryFrom;
 use bytes::Bytes;
-use super::decode;
-use super::decode::Source;
-use super::tag::Tag;
-use super::encode::PrimitiveContent;
-use super::Mode;
+use crate::decode;
+use crate::decode::Source;
+use crate::encode::PrimitiveContent;
+use crate::mode::Mode;
+use crate::tag::Tag;
 
 
 //------------ Macros for built-in integers ----------------------------------
@@ -646,8 +646,8 @@ pub struct OverflowError(());
 #[cfg(test)]
 mod test {
     use super::*;
-    use ::Mode;
-    use ::decode::Primitive;
+    use crate::Mode;
+    use crate::decode::Primitive;
 
     #[test]
     fn decode_unsigned_builtins() {

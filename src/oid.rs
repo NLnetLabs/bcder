@@ -8,10 +8,10 @@
 
 use std::{fmt, hash, io};
 use bytes::Bytes;
-use super::{decode, encode};
-use super::decode::Source;
-use super::mode::Mode;
-use super::tag::Tag;
+use crate::{decode, encode};
+use crate::decode::Source;
+use crate::mode::Mode;
+use crate::tag::Tag;
 
 
 //------------ Oid -----------------------------------------------------------

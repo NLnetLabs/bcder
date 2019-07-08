@@ -3,8 +3,8 @@
 //! This is a private module. Its public tiems are re-exported by the parent.
 
 use std::io;
-use super::decode;
-use super::mode::Mode;
+use crate::decode;
+use crate::mode::Mode;
 
 
 //------------ Length -------------------------------------------------------

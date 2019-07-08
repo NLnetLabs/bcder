@@ -5,9 +5,9 @@
 
 use std::io;
 use bytes::{BufMut, Bytes, BytesMut};
-use ::length::Length;
-use ::mode::Mode;
-use ::tag::Tag;
+use crate::length::Length;
+use crate::mode::Mode;
+use crate::tag::Tag;
 use super::values::Values;
 
 

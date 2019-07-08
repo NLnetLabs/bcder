@@ -8,11 +8,11 @@
 
 use std::{cmp, hash, io, mem};
 use bytes::{BytesMut, Bytes};
-use ::captured::Captured;
-use ::{decode, encode};
-use ::mode::Mode;
-use ::length::Length;
-use ::tag::Tag;
+use crate::captured::Captured;
+use crate::{decode, encode};
+use crate::mode::Mode;
+use crate::length::Length;
+use crate::tag::Tag;
 
 
 //------------ OctetString ---------------------------------------------------

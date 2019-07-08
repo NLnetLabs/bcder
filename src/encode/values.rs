@@ -5,10 +5,10 @@
 
 use std::io;
 use std::marker::PhantomData;
-use ::captured::Captured;
-use ::length::Length;
-use ::mode::Mode;
-use ::tag::Tag;
+use crate::captured::Captured;
+use crate::length::Length;
+use crate::mode::Mode;
+use crate::tag::Tag;
 
 
 //------------ Values --------------------------------------------------------

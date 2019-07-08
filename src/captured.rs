@@ -4,8 +4,8 @@
 
 use std::{fmt, io, ops};
 use bytes::Bytes;
-use super::{decode, encode};
-use super::mode::Mode;
+use crate::{decode, encode};
+use crate::mode::Mode;
 
 
 //------------ Captured ------------------------------------------------------
