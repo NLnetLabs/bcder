@@ -5,6 +5,7 @@
 Bug Fixes
 
 * Fix a lifetime warning from the new borrow checker. [(#27)]
+* Switch to Rust edition 2018.
 
 [(#27)]: https://github.com/NLnetLabs/bcder/pull/27
 

@@ -4,13 +4,14 @@ version = "0.3.1"
 edition = "2018"
 authors = ["The NLnet Labs RPKI Team <rpki@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
+documentation = "https://docs.rs/bcder/"
 repository = "https://github.com/nlnetlabs/bcder"
 keywords = ["ber", "cer", "der", "asn1", "decoding"]
 categories = ["encoding", "network-programming", "parsing"]
 license = "BSD-3-Clause"
 
 [dependencies]
-backtrace   = { version="^0.3.15", optional=true }
+backtrace   = { version = "^0.3.15", optional = true }
 bytes       = "^0.4"
 derive_more = "^0.15"
 
@@ -18,3 +19,4 @@ derive_more = "^0.15"
 # Print a backtrace when a parsing error occurs. This feature is intended for
 # development use exclusively and MUST NOT be enabled in release builds.
 extra-debug = [ "backtrace" ]
+
