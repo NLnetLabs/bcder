@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased future version
+
+Breaking
+
+New
+
+Bug Fixes
+
+Dependencies
+
+
 ## 0.3.1
 
 Bug Fixes
