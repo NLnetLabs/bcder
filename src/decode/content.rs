@@ -4,6 +4,7 @@
 //! parent.
 
 use bytes::Bytes;
+use smallvec::SmallVec;
 use crate::captured::Captured;
 use crate::int::{Integer, Unsigned};
 use crate::length::Length;
@@ -947,6 +948,108 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         self.capture(|cons| cons.skip_all())
     }
 
+    /// Skips over content.
+    pub fn skip<F>(&mut self, mut op: F) -> Result<(), S::Err>
+    where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
+        // The stack for unrolling the recursion. For each level, we keep the
+        // limit the source should be set to when the value ends. For
+        // indefinite values, we keep `None`.
+        let mut stack = SmallVec::<[Option<Option<usize>>; 4]>::new();
+
+        loop {
+            // Get a the ‘header’ of a value.
+            let (tag, constructed) = Tag::take_from(self.source)?;
+            let length = Length::take_from(self.source, self.mode)?;
+
+            if !constructed {
+                if tag == Tag::END_OF_VALUE {
+                    // End-of-value: The top of the stack needs to be an
+                    // indefinite value for it to be allowed. If it is, pop
+                    // that value off the stack and continue. The limit is
+                    // still that from the value one level above.
+                    match stack.pop() {
+                        Some(None) => { }
+                        _ => xerr!(return Err(Error::Malformed.into()))
+                    }
+                }
+                else {
+                    // Primitive value. Check for the length to be definite,
+                    // check that the caller likes it, then try to read over it.
+                    if let Length::Definite(len) = length {
+                        op(tag, constructed, stack.len())?;
+                        self.source.advance(len)?;
+                    }
+                    else {
+                        xerr!(return Err(Error::Malformed.into()));
+                    }
+                }
+                
+                // Now we need to check if we have reached the end of a
+                // constructed value. This happens if the limit of the
+                // source reaches 0. Since the ends of several stacked values
+                // can align, we need to loop here. Also, if we run out of
+                // stack, we are done.
+                loop {
+                    if stack.is_empty() {
+                        return Ok(())
+                    }
+                    else if self.source.limit() == Some(0) {
+                        match stack.pop() {
+                            Some(Some(limit)) => {
+                                self.source.set_limit(limit)
+                            }
+                            Some(None) => {
+                                // We need a End-of-value, so running out of
+                                // data is an error.
+                                xerr!(return Err(Error::Malformed.into()));
+                            }
+                            None => unreachable!(),
+                        }
+                    }
+                    else {
+                        break;
+                    }
+                }
+            }
+            else if let Length::Definite(len) = length {
+                // Definite constructed value. First check if the caller likes
+                // it. Check that there is enough limit left for the value. If
+                // so, push the limit at the end of the value to the stack,
+                // update the limit to our length, and continue.
+                op(tag, constructed, stack.len())?;
+                stack.push(Some(match self.source.limit() {
+                    Some(limit) => {
+                        match limit.checked_sub(len) {
+                            Some(len) => Some(len),
+                            None => {
+                                xerr!(return Err(Error::Malformed.into()));
+                            }
+                        }
+                    }
+                    None => None,
+                }));
+                self.source.set_limit(Some(len));
+            }
+            else {
+                // Indefinite constructed value. Simply push a `None` to the
+                // stack, if the caller likes it.
+                op(tag, constructed, stack.len())?;
+                stack.push(None)
+            }
+        }
+    }
+
+    pub fn skip_opt<F>(&mut self, op: F) -> Result<Option<()>, S::Err>
+    where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
+        if self.is_exhausted() {
+            Ok(None)
+        }
+        else {
+            self.skip(op)?;
+            Ok(Some(()))
+        }
+    }
+
     /// Skips over all remaining content.
     pub fn skip_all(&mut self) -> Result<(), S::Err> {
         while let Some(()) = self.skip_one()? { }
@@ -958,17 +1061,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// If there is a next value, returns `Ok(Some(()))`, if the end of value
     /// has already been reached, returns `Ok(None)`.
     pub fn skip_one(&mut self) -> Result<Option<()>, S::Err> {
-        self.take_opt_value(|_tag, content| {
-            match *content {
-                Content::Primitive(ref mut inner) => {
-                    inner.skip_all()
-                }
-                Content::Constructed(ref mut inner) => {
-                    inner.skip_all()?;
-                    Ok(())
-                }
-            }
-        })
+        if self.is_exhausted() {
+            Ok(None)
+        }
+        else {
+            self.skip(|_, _, _| Ok(()))?;
+            Ok(Some(()))
+        }
     }
 }
 
@@ -1148,5 +1247,74 @@ enum State {
 
     /// Unbounded value: read as far as we get.
     Unbounded,
+}
+ 
+
+//============ Tests =========================================================
+
+#[cfg(test)]
+mod test {
+    use unwrap::unwrap;
+    use super::*;
+
+    #[test]
+    fn constructed_skip() {
+        // Two primitives.
+        unwrap!(
+            Constructed::decode(
+                b"\x02\x01\x00\x02\x01\x00".as_ref(), Mode::Ber, |cons| {
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    Ok(())
+                }
+            )
+        );
+
+        // One definite constructed with two primitives, then one primitive
+        unwrap!(
+            Constructed::decode(
+                b"\x30\x06\x02\x01\x00\x02\x01\x00\x02\x01\x00".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    Ok(())
+                }
+            )
+        );
+
+        // Two nested definite constructeds with two primitives, then one
+        // primitive.
+        unwrap!(
+            Constructed::decode(
+                b"\x30\x08\
+                \x30\x06\
+                \x02\x01\x00\x02\x01\x00\
+                \x02\x01\x00".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    Ok(())
+                }
+            )
+        );
+
+        println!("-----");
+        // One definite constructed with one indefinite with two primitives.
+        unwrap!(
+            Constructed::decode(
+                b"\x30\x0A\
+                \x30\x80\
+                \x02\x01\x00\x02\x01\x00\
+                \0\0".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    unwrap!(cons.skip(|_, _, _| Ok(())));
+                    Ok(())
+                }
+            )
+        );
+    }
 }
 

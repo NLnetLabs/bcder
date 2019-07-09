@@ -17,7 +17,7 @@ use crate::mode::Mode;
 ///
 /// # BER Encoding
 ///
-/// The length can be encoded in one of two basic ways. Which is used is
+/// The length can be encoded in one of two basic ways. Which one is used is
 /// determined by the most significant bit of the first octet. If it is not
 /// set, the length octets is one octet long and the remaining bits of this
 /// first octet provide the definite length. Thus, if the first octet is
@@ -30,14 +30,13 @@ use crate::mode::Mode;
 /// those following octets give the big-endian encoding of the definite
 /// length of the content octets.
 ///
-/// Under both CER and DER rules, a definite length must be encded in the
+/// Under both CER and DER rules, a definite length must be encoded in the
 /// minimum number of octets.
 ///
 /// # Limitation
 ///
-/// The current implementation is limited to 32 bits for an encoded definite
-/// length. This is true even on 64 bit platforms where the `usize` can hold
-/// more bits.
+/// The current implementation is limited to 4 length bytes on 32 bit systems
+/// and 5 length bytes on 64 bit sytems.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Length {
     /// A length value in definite form.

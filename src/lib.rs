@@ -34,9 +34,6 @@
 // a function would also work) that cannot be removed due to lifetime issues.
 #![allow(redundant_closure)]
 
-extern crate bytes;
-#[macro_use] extern crate derive_more;
-
 //--- Re-exports
 
 pub use self::captured::Captured;
