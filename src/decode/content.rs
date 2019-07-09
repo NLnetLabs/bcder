@@ -1006,33 +1006,6 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                         xerr!(return Err(Error::Malformed.into()));
                     }
                 }
-                
-                // Now we need to check if we have reached the end of a
-                // constructed value. This happens if the limit of the
-                // source reaches 0. Since the ends of several stacked values
-                // can align, we need to loop here. Also, if we run out of
-                // stack, we are done.
-                loop {
-                    if stack.is_empty() {
-                        return Ok(Some(()))
-                    }
-                    else if self.source.limit() == Some(0) {
-                        match stack.pop() {
-                            Some(Some(limit)) => {
-                                self.source.set_limit(limit)
-                            }
-                            Some(None) => {
-                                // We need a End-of-value, so running out of
-                                // data is an error.
-                                xerr!(return Err(Error::Malformed.into()));
-                            }
-                            None => unreachable!(),
-                        }
-                    }
-                    else {
-                        break;
-                    }
-                }
             }
             else if let Length::Definite(len) = length {
                 // Definite constructed value. First check if the caller likes
@@ -1057,8 +1030,37 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 // Indefinite constructed value. Simply push a `None` to the
                 // stack, if the caller likes it.
                 op(tag, constructed, stack.len())?;
-                stack.push(None)
+                stack.push(None);
+                continue;
             }
+
+            // Now we need to check if we have reached the end of a
+            // constructed value. This happens if the limit of the
+            // source reaches 0. Since the ends of several stacked values
+            // can align, we need to loop here. Also, if we run out of
+            // stack, we are done.
+            loop {
+                if stack.is_empty() {
+                    return Ok(Some(()))
+                }
+                else if self.source.limit() == Some(0) {
+                    match stack.pop() {
+                        Some(Some(limit)) => {
+                            self.source.set_limit(limit)
+                        }
+                        Some(None) => {
+                            // We need a End-of-value, so running out of
+                            // data is an error.
+                            xerr!(return Err(Error::Malformed.into()));
+                        }
+                        None => unreachable!(),
+                    }
+                }
+                else {
+                    break;
+                }
+            }
+
         }
     }
 
