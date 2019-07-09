@@ -915,7 +915,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             let mut constructed = Constructed::new(
                 &mut source, self.state, self.mode
             );
-            op(&mut constructed)?
+            op(&mut constructed)?;
+            self.state = constructed.state;
         }
         Ok(Captured::new(source.unwrap().into_bytes(), self.mode))
     }
@@ -949,26 +950,50 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     }
 
     /// Skips over content.
-    pub fn skip<F>(&mut self, mut op: F) -> Result<(), S::Err>
+    pub fn skip_opt<F>(&mut self, mut op: F) -> Result<Option<()>, S::Err>
     where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
+        // If we already know we are at the end of the value, we can return.
+        if self.is_exhausted() {
+            return Ok(None)
+        }
+
         // The stack for unrolling the recursion. For each level, we keep the
         // limit the source should be set to when the value ends. For
         // indefinite values, we keep `None`.
         let mut stack = SmallVec::<[Option<Option<usize>>; 4]>::new();
 
         loop {
+            dbg!(&stack);
             // Get a the ‘header’ of a value.
             let (tag, constructed) = Tag::take_from(self.source)?;
             let length = Length::take_from(self.source, self.mode)?;
+            dbg!(tag, constructed, length);
 
             if !constructed {
                 if tag == Tag::END_OF_VALUE {
+                    if length != Length::Definite(0) {
+                        xerr!(return Err(Error::Malformed.into()))
+                    }
+
                     // End-of-value: The top of the stack needs to be an
                     // indefinite value for it to be allowed. If it is, pop
                     // that value off the stack and continue. The limit is
                     // still that from the value one level above.
                     match stack.pop() {
                         Some(None) => { }
+                        None => {
+                            // We read end-of-value as the very first value.
+                            // This can only happen if the outer value is
+                            // an indefinite value. If so, change state and
+                            // return.
+                            if self.state == State::Indefinite {
+                                self.state = State::Done;
+                                return Ok(None)
+                            }
+                            else {
+                                xerr!(return Err(Error::Malformed.into()))
+                            }
+                        }
                         _ => xerr!(return Err(Error::Malformed.into()))
                     }
                 }
@@ -991,7 +1016,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 // stack, we are done.
                 loop {
                     if stack.is_empty() {
-                        return Ok(())
+                        return Ok(Some(()))
                     }
                     else if self.source.limit() == Some(0) {
                         match stack.pop() {
@@ -1031,6 +1056,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 self.source.set_limit(Some(len));
             }
             else {
+                dbg!();
                 // Indefinite constructed value. Simply push a `None` to the
                 // stack, if the caller likes it.
                 op(tag, constructed, stack.len())?;
@@ -1039,14 +1065,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         }
     }
 
-    pub fn skip_opt<F>(&mut self, op: F) -> Result<Option<()>, S::Err>
+    pub fn skip<F>(&mut self, op: F) -> Result<(), S::Err>
     where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
-        if self.is_exhausted() {
-            Ok(None)
+        if self.skip_opt(op)? == None {
+            xerr!(return Err(Error::Malformed.into()));
         }
         else {
-            self.skip(op)?;
-            Ok(Some(()))
+            Ok(())
         }
     }
 
@@ -1234,7 +1259,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 //------------ State ---------------------------------------------------------
 
 /// The processing state of a constructed value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum State {
     /// We are reading until the end of the reader.
     Definite,

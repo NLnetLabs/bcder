@@ -217,7 +217,7 @@ impl OctetString {
                 else {
                     xerr!(Err(decode::Malformed.into()))
                 }
-            })? == Some(()) { }
+            })?.is_some() { }
             Ok(())
         }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
@@ -903,6 +903,21 @@ mod tests {
             unwrap!(decode::Constructed::decode(
                 b"\x24\x08\
                 \x24\x80\
+                \x04\x02ab\
+                \0\0".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+
+        println!("lllllll");
+        // I(p)
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x80\
                 \x04\x02ab\
                 \0\0".as_ref(),
                 Mode::Ber,
