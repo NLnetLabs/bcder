@@ -963,11 +963,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         let mut stack = SmallVec::<[Option<Option<usize>>; 4]>::new();
 
         loop {
-            dbg!(&stack);
             // Get a the ‘header’ of a value.
             let (tag, constructed) = Tag::take_from(self.source)?;
             let length = Length::take_from(self.source, self.mode)?;
-            dbg!(tag, constructed, length);
 
             if !constructed {
                 if tag == Tag::END_OF_VALUE {
@@ -1056,7 +1054,6 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 self.source.set_limit(Some(len));
             }
             else {
-                dbg!();
                 // Indefinite constructed value. Simply push a `None` to the
                 // stack, if the caller likes it.
                 op(tag, constructed, stack.len())?;
