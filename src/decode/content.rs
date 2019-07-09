@@ -1065,7 +1065,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     pub fn skip<F>(&mut self, op: F) -> Result<(), S::Err>
     where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
         if self.skip_opt(op)? == None {
-            xerr!(return Err(Error::Malformed.into()));
+            xerr!(Err(Error::Malformed.into()))
         }
         else {
             Ok(())
