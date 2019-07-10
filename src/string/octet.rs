@@ -207,10 +207,19 @@ impl OctetString {
     ///
     /// It consists octet string values either primitive or constructed.
     fn take_constructed_ber<S: decode::Source>(
-        constructed: &mut decode::Constructed<S>
+        cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
-        constructed.capture(|constructed| skip_nested(constructed))
-            .map(|captured| OctetString(Inner::Constructed(captured)))
+        cons.capture(|cons| {
+            while cons.skip_opt(|tag, _, _| {
+                if tag == Tag::OCTET_STRING {
+                    Ok(())
+                }
+                else {
+                    xerr!(Err(decode::Malformed.into()))
+                }
+            })?.is_some() { }
+            Ok(())
+        }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
 
     /// Parses a constructed CER encoded octet string.
@@ -848,34 +857,96 @@ impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
 }
 
 
-//------------ Helper Functions ----------------------------------------------
-
-fn skip_nested<S>(con: &mut decode::Constructed<S>) -> Result<(), S::Err>
-where S: decode::Source {
-    while let Some(()) = con.take_opt_value_if(Tag::OCTET_STRING, |content| {
-        match content {
-            decode::Content::Constructed(ref mut inner) => {
-                skip_nested(inner)?
-            }
-            decode::Content::Primitive(ref mut inner) => {
-                inner.skip_all()?
-            }
-        }
-        Ok(())
-    })? { }
-    Ok(())
-}
-
-
 //------------ Tests ---------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
+    use unwrap::unwrap;
+    use crate::encode::{Values, PrimitiveContent};
     use super::*;
-    use encode::{Values, PrimitiveContent};
 
     #[test]
-    fn should_wrap_content_in_octetstring() {
+    fn take_from_ber() {
+        // D .. definite constructed
+        // I .. indefinied constructed
+        // p .. primitive
+
+        // D(p)
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x04\
+                \x04\x02ab".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+
+        // D(pp)
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x06\
+                \x04\x01a\
+                \x04\x01b".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+
+        // D(I(p))
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x08\
+                \x24\x80\
+                \x04\x02ab\
+                \0\0".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+
+        println!("lllllll");
+        // I(p)
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x80\
+                \x04\x02ab\
+                \0\0".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+
+        // D(pI(p))
+        assert_eq!(
+            unwrap!(decode::Constructed::decode(
+                b"\x24\x0a\
+                \x04\x01a\
+                \x24\x80\
+                \x04\x01b\
+                \0\0".as_ref(),
+                Mode::Ber,
+                |cons| {
+                    OctetString::take_from(cons)
+                }
+            )).to_bytes(),
+            "ab"
+        );
+    }
+
+    #[test]
+    fn encode_wrapped() {
         let mut v = Vec::new();
         let enc = OctetString::encode_wrapped(Mode::Der, true.encode());
         enc.write_encoded(Mode::Der, &mut v).unwrap();

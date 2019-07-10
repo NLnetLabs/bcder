@@ -3,6 +3,8 @@
 //! This is a private module. Its public content is being re-exported by the
 //! parent module.
 
+use derive_more::Display;
+
 
 //------------ Error ---------------------------------------------------------
 

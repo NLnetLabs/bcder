@@ -16,6 +16,7 @@
 use std::{cmp, hash, io, mem};
 use std::convert::TryFrom;
 use bytes::Bytes;
+use derive_more::Display;
 use crate::decode;
 use crate::decode::Source;
 use crate::encode::PrimitiveContent;
