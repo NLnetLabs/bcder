@@ -8,8 +8,14 @@ New
 
 Bug Fixes
 
+* Safely decode deeply nested BER such as octet strings. Decoding such
+  types now uses an allocated artifical stack and will thus not overflow
+  the regular one anymore. [(#30)]
+
 Dependencies
 
+
+[(#30)]: https://github.com/NLnetLabs/bcder/pull/30
 
 ## 0.3.1
 
