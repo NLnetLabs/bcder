@@ -1,14 +1,12 @@
 # Change Log
 
-## Unreleased future version
+## 0.4.0
 
 Breaking
 
 * Dropped `RestrictedString::to_string` and implemented it via `Display`
   instead. Therefore, you will have to `use std::fmt::Display` to get it
   back. [(#33)]
-
-New
 
 Bug Fixes
 
