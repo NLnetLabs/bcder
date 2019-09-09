@@ -9,13 +9,18 @@ New
 Bug Fixes
 
 * Safely decode deeply nested BER such as octet strings. Decoding such
-  types now uses an allocated artifical stack and will thus not overflow
-  the regular one anymore. [(#30)]
+  types now uses an allocated artificial stack and will thus not overflow
+  the regular one. [(#30)]
 
-Dependencies
+Miscellaneous
 
+* Dropped dependency on `derive_more` for fewer dependencies and faster
+  compiling. ([#32], thanks to [@nocduro]).
 
 [(#30)]: https://github.com/NLnetLabs/bcder/pull/30
+[#32]: https://github.com/NLnetLabs/bcder/pull/32
+[@nocduro]: https://github.com/nocduro
+
 
 ## 0.3.1
 
