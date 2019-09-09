@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.2.2
+
+Bug Fixes
+
+* Fix a lifetime error by the NLL borrow checker. ([#34)]
+
+[(#34)]: https://github.com/NLnetLabs/rpki-rs/pull/34
+
+
 ## 0.2.1
 
 New
