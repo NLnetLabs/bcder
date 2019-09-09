@@ -3,20 +3,26 @@
 //! This is a private module. Its public content is being re-exported by the
 //! parent module.
 
-use derive_more::Display;
+use std::fmt;
 
 
 //------------ Error ---------------------------------------------------------
 
 /// An error happened while decoding data.
-#[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     /// The data didn’t conform to the expected structure.
-    #[display(fmt="malformed data")]
     Malformed,
 
     /// An encoding used by the data is not yet implemented by the crate.
-    #[display(fmt="format not implemented")]
     Unimplemented,
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Malformed => write!(f, "malformed data"),
+            Error::Unimplemented => write!(f, "format not implemented"),
+        }
+    }
+}

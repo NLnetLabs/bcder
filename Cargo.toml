@@ -13,7 +13,6 @@ license = "BSD-3-Clause"
 [dependencies]
 backtrace   = { version = "^0.3.15", optional = true }
 bytes       = "^0.4"
-derive_more = "^0.15"
 smallvec    = "^0.6.10"
 unwrap      = "^1.2.1"
 

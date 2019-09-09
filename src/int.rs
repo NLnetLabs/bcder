@@ -13,10 +13,9 @@
 //! [`Integer`]: struct.Integer.html
 //! [`Unsigned`]: struct.Unsigned.html
 
-use std::{cmp, hash, io, mem};
+use std::{cmp, fmt, hash, io, mem};
 use std::convert::TryFrom;
 use bytes::Bytes;
-use derive_more::Display;
 use crate::decode;
 use crate::decode::Source;
 use crate::encode::PrimitiveContent;
@@ -635,9 +634,14 @@ impl<'a> PrimitiveContent for &'a Unsigned {
 
 //------------ OverflowError -------------------------------------------------
 
-#[derive(Clone, Copy, Debug, Display)]
-#[display(fmt="integer out of range")]
+#[derive(Clone, Copy, Debug)]
 pub struct OverflowError(());
+
+impl fmt::Display for OverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "integer out of range")
+    }
+}
 
 
 //============ Tests =========================================================
