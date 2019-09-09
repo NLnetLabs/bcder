@@ -3,7 +3,7 @@
 //! This is an internal module. It’s public items are re-exported by the
 //! parent.
 
-use std::{char, cmp, hash, ops, str};
+use std::{char, cmp, fmt, hash, ops, str};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use bytes::Bytes;
@@ -130,11 +130,6 @@ impl<L: CharSet> RestrictedString<L> {
             Cow::Owned(owned) => owned.into(),
         };
         Ok(unsafe { Self::new_unchecked(OctetString::new(octets)) })
-    }
-
-    /// Creates a string from the character string.
-    pub fn to_string(&self) -> String {
-        self.chars().collect()
     }
 
     /// Returns an iterator over the character in the character string.
@@ -272,6 +267,15 @@ impl<'a, L: CharSet> IntoIterator for &'a RestrictedString<L> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+
+//--- Display
+
+impl<L: CharSet> fmt::Display for RestrictedString<L> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        self.chars().try_for_each(|ch| fmt::Display::fmt(&ch, fmt))
     }
 }
 

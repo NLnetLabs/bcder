@@ -4,6 +4,10 @@
 
 Breaking
 
+* Dropped `RestrictedString::to_string` and implemented it via `Display`
+  instead. Therefore, you will have to `use std::fmt::Display` to get it
+  back. [(#33)]
+
 New
 
 Bug Fixes
@@ -19,6 +23,7 @@ Miscellaneous
 
 [(#30)]: https://github.com/NLnetLabs/bcder/pull/30
 [#32]: https://github.com/NLnetLabs/bcder/pull/32
+[(#33)]: https://github.com/NLnetLabs/bcder/pull/33
 [@nocduro]: https://github.com/nocduro
 
 
