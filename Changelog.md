@@ -4,9 +4,11 @@
 
 Bug Fixes
 
-* Fix a lifetime error by the NLL borrow checker. ([#34)]
+* Fix a lifetime error by the NLL borrow checker. ([#31], thanks to
+  [@Mark-Simulacrum])
 
-[(#34)]: https://github.com/NLnetLabs/rpki-rs/pull/34
+[#31]: https://github.com/NLnetLabs/rpki-rs/pull/31
+[@Mark-Simulacrum]: https://github.com/Mark-Simulacrum
 
 
 ## 0.2.1
