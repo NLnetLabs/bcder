@@ -200,15 +200,22 @@ macro_rules! signed_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
+            #[allow(clippy::verbose_bit_mask)]
             fn encoded_len(&self, _: Mode) -> usize {
                 if *self == 0 || *self == -1 {
-                    1
+                    return 1
                 }
-                else if *self < 0 {
-                    $len - (((!*self).leading_zeros() as usize) >> 3)
+                let zeros = if *self < 0 {
+                    (!*self).leading_zeros() as usize
                 }
                 else {
-                    $len - ((self.leading_zeros() as usize) >> 3)
+                    self.leading_zeros() as usize
+                };
+                if zeros & 0x07 == 0 { // i.e., zeros % 8 == 1
+                    $len + 1 - (zeros >> 3)
+                }
+                else {
+                    $len - (zeros >> 3)
                 }
             }
 
@@ -226,12 +233,18 @@ macro_rules! signed_content {
                 else if *self < 0 {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
+                    // Skip over leading 0xFF.
                     while i < $len {
                         if val as u8 != 0xFF {
                             break
                         }
                         val >>= 8;
                         i += 1;
+                    }
+                    // If the first non-0xFF doesn’t have the left-most bit
+                    // set, we need an 0xFF for the sign.
+                    if val & 0x80 != 0x80 {
+                        target.write_all(&[0xFF])?;
                     }
                     while i < $len {
                         target.write_all(&[val as u8])?;
@@ -242,12 +255,18 @@ macro_rules! signed_content {
                 else {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
+                    // Skip over leading zero bytes.
                     while i < $len {
                         if val as u8 != 0x00 {
                             break
                         }
                         val >>= 8;
                         i += 1;
+                    }
+                    // If the first non-zero has the left-most bit
+                    // set, we need an 0x00 for the sign.
+                    if val & 0x80 == 0x80 {
+                        target.write_all(&[0x00])?;
                     }
                     while i < $len {
                         target.write_all(&[val as u8])?;
@@ -388,10 +407,15 @@ mod test {
     fn encode_i32() {
         test_der(0i32, b"\0");
         test_der(0x12i32, b"\x12");
+        test_der(0xf2i32, b"\0\xf2");
         test_der(0x1234i32, b"\x12\x34");
+        test_der(0xf234i32, b"\0\xf2\x34");
         test_der(0x123400i32, b"\x12\x34\x00");
+        test_der(0xf23400i32, b"\0\xf2\x34\x00");
         test_der(0x12345678i32, b"\x12\x34\x56\x78");
         test_der(-1i32, b"\xFF");
+        test_der(-0xF0i32, b"\xFF\x10");
+        test_der(-0xF000i32, b"\xFF\x10\x00");
         test_der(-12000i32, b"\xD1\x20");
         test_der(-1200000i32, b"\xED\xB0\x80");
     }
