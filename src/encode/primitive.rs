@@ -200,6 +200,7 @@ macro_rules! signed_content {
         impl PrimitiveContent for $type {
             const TAG: Tag = Tag::INTEGER;
 
+            #[allow(clippy::verbose_bit_mask)]
             fn encoded_len(&self, _: Mode) -> usize {
                 if *self == 0 || *self == -1 {
                     return 1
@@ -210,7 +211,7 @@ macro_rules! signed_content {
                 else {
                     self.leading_zeros() as usize
                 };
-                if zeros.trailing_zeros() >= 3 { // i.e., zeros % 8 == 1
+                if zeros & 0x07 == 0 { // i.e., zeros % 8 == 1
                     $len + 1 - (zeros >> 3)
                 }
                 else {
