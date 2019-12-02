@@ -267,7 +267,10 @@ impl Integer {
     ///
     /// Also returns `false` if the number is zero.
     pub fn is_positive(&self) -> bool {
-        self.0[0] & 0x81 == 0x01 // XXX I think this is right ...
+        if self.0[0] == 0 && self.0.get(1).is_none() {
+            return false
+        }
+        self.0[0] & 0x80 == 0x00
     }
 
     /// Returns whether the integer is negative.
@@ -350,44 +353,33 @@ impl PartialOrd for Integer {
 impl Ord for Integer {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         match (self.is_positive(), other.is_positive()) {
-            (false, false) => { // i.e., both > 0
-                if self.0.len() > other.0.len() {
-                    cmp::Ordering::Greater
-                }
-                else if self.0.len() < other.0.len() {
-                    cmp::Ordering::Less
-                }
-                else {
-                    for (&l, &r) in self.0.iter().zip(other.0.iter()) {
-                        if l > r {
-                            return cmp::Ordering::Greater
+            (true, true) => { // i.e., both > 0
+                match self.0.len().cmp(&other.0.len()) {
+                    cmp::Ordering::Equal => {
+                        for (l, r) in self.0.iter().zip(other.0.iter()) {
+                            match l.cmp(r) {
+                                cmp::Ordering::Equal => { }
+                                cmp => return cmp
+                            }
                         }
-                        else if l < r {
-                            return cmp::Ordering::Less
-                        }
+                        cmp::Ordering::Equal
                     }
-                    cmp::Ordering::Equal
+                    cmp => cmp
                 }
             }
-            (true, true) => { // i.e., both <= 0
-                if self.0.len() > other.0.len() {
-                    cmp::Ordering::Less
-                }
-                else if self.0.len() < other.0.len() {
-                    cmp::Ordering::Greater
-                }
-                else {
-                    for (&l, &r) in self.0.iter().zip(other.0.iter()) {
-                        if l > r {
-                            return cmp::Ordering::Less
+            (false, false) => { // i.e., both <= 0
+                match self.0.len().cmp(&other.0.len()) {
+                    cmp::Ordering::Equal => {
+                        for (l, r) in self.0.iter().zip(other.0.iter()) {
+                            match l.cmp(r) {
+                                cmp::Ordering::Equal => { }
+                                cmp => return cmp.reverse()
+                            }
                         }
-                        else if l < r {
-                            return cmp::Ordering::Greater
-                        }
+                        cmp::Ordering::Equal
                     }
-                    cmp::Ordering::Equal
+                    cmp => cmp.reverse()
                 }
-
             }
             (false, true) => cmp::Ordering::Less,
             (true, false) => cmp::Ordering::Greater,
@@ -653,6 +645,37 @@ mod test {
     use super::*;
     use crate::Mode;
     use crate::decode::Primitive;
+
+    #[test]
+    fn is_positive_negative() {
+        let neg = [-0xF74402, -0xF744, -0xF7];
+        let pos = [0xF7, 0xF744, 0xF74402];
+
+        for &i in &neg {
+            assert_eq!(Integer::from(i).is_positive(), false, "{}", i);
+            assert_eq!(Integer::from(i).is_negative(), true, "{}", i);
+        }
+        for &i in &pos {
+            assert_eq!(Integer::from(i).is_positive(), true, "{}", i);
+            assert_eq!(Integer::from(i).is_negative(), false, "{}", i);
+        }
+        assert_eq!(Integer::from(0).is_positive(), false);
+        assert_eq!(Integer::from(0).is_negative(), false);
+    }
+
+    #[test]
+    fn cmp() {
+        let ints = [-0xF74402, -0xF744, -0xF7, 0, 0xF7, 0xF744, 0xF74402];
+        for &left in &ints {
+            for &right in &ints {
+                assert_eq!(
+                    Integer::from(left).cmp(&Integer::from(right)),
+                    left.cmp(&right),
+                    "comparision of {} and {} failed", left, right
+                )
+            }
+        }
+    }
 
     #[test]
     fn decode_unsigned_builtins() {
@@ -1057,4 +1080,5 @@ mod test {
         assert_eq!(u64::try_from(&int).unwrap(), 0xA2345678);
         assert_eq!(u128::try_from(&int).unwrap(), 0xA2345678);
     }
+
 }
