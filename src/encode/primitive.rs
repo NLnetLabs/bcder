@@ -226,12 +226,18 @@ macro_rules! signed_content {
                 else if *self < 0 {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
+                    // Skip over leading 0xFF.
                     while i < $len {
                         if val as u8 != 0xFF {
                             break
                         }
                         val >>= 8;
                         i += 1;
+                    }
+                    // If the first non-0xFF doesn’t have the left-most bit
+                    // set, we need an 0xFF for the sign.
+                    if val & 0x80 != 0x80 {
+                        target.write_all(&[0xFF])?;
                     }
                     while i < $len {
                         target.write_all(&[val as u8])?;
@@ -242,12 +248,18 @@ macro_rules! signed_content {
                 else {
                     let mut val = self.swap_bytes();
                     let mut i = 0;
+                    // Skip over leading zero bytes.
                     while i < $len {
                         if val as u8 != 0x00 {
                             break
                         }
                         val >>= 8;
                         i += 1;
+                    }
+                    // If the first non-zero has the left-most bit
+                    // set, we need an 0x00 for the sign.
+                    if val & 0x80 == 0x80 {
+                        target.write_all(&[0x00])?;
                     }
                     while i < $len {
                         target.write_all(&[val as u8])?;
