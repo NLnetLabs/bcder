@@ -62,7 +62,7 @@
 //!         cons.take_sequence(|cons| {
 //!             Ok(EncapsulatedContentInfo {
 //!                 content_type: Oid::take_from(cons)?,
-//!                 content: cons.take_opt_constructed_if(Tag::CTX_0, |cons| {
+//!                 content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
 //!                     OctetString::take_from(cons)
 //!                 })?
 //!             })
@@ -101,7 +101,7 @@
 //!     ) -> Result<Self, S::Err> {
 //!         Ok(EncapsulatedContentInfo {
 //!             content_type: Oid::take_from(cons)?,
-//!             content: cons.take_opt_constructed_if(Tag::CTX_0, |cons| {
+//!             content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
 //!                 OctetString::take_from(cons)
 //!             })?
 //!         })
