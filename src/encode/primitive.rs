@@ -210,7 +210,7 @@ macro_rules! signed_content {
                 else {
                     self.leading_zeros() as usize
                 };
-                if zeros & 0x07 == 0 { // i.e., zeros % 8 == 1
+                if zeros.trailing_zeros() >= 3 { // i.e., zeros % 8 == 1
                     $len + 1 - (zeros >> 3)
                 }
                 else {
