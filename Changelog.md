@@ -8,7 +8,12 @@ New
 
 Bug Fixes
 
+* Fix encoding of signed builtin integer (`i8`, `i16`, …). [(#39)]
+
 Dependencies
+
+
+[(#39)]: https://github.com/NLnetLabs/bcder/pull/39
 
 
 ## 0.4.0
