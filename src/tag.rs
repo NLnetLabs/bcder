@@ -311,7 +311,7 @@ impl Tag {
         } else {
             return Ok((Tag(data), constructed));
         }
-        xerr!(return Err(decode::Error::Unimplemented.into()))
+        xerr!(Err(decode::Error::Unimplemented.into()))
     }
 
     /// Takes a tag from the beginning of a resource if it matches this tag.
