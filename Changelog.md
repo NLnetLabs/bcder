@@ -1,24 +1,20 @@
 # Change Log
 
-## Unreleased next version
-
-Breaking
+## 0.4.1
 
 New
 
 * Support for multi-byte tags with tag numbers of up to `0x1F_FFFF`.
-  ([#37], contributed by [dovreshef])
+  ([#37], thanks to by [@dovreshef])
 
 Bug Fixes
 
 * Fix encoding of signed builtin integer (`i8`, `i16`, …). [(#39)]
 
-Dependencies
-
 
 [#37]: https://github.com/NLnetLabs/bcder/pull/37
 [(#39)]: https://github.com/NLnetLabs/bcder/pull/39
-[dovreshef]: https://github.com/dovreshef
+[@dovreshef]: https://github.com/dovreshef
 
 
 ## 0.4.0
