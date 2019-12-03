@@ -300,21 +300,18 @@ impl Tag {
         let byte = source.take_u8()?;
         // clear constructed bit
         let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
+        let constructed = byte & Tag::CONSTRUCTED_MASK != 0;
         if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
-            let mut i = 1;
-            loop {
+            for i in 1..=3 {
                 data[i] = source.take_u8()?;
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
-                    break
+                    return Ok((Tag(data), constructed));
                 }
-                // We don’t support tags larger than 4 bytes.
-                if i == 3 {
-                    xerr!(return Err(decode::Error::Unimplemented.into()))
-                }
-                i += 1;
             }
+        } else {
+            return Ok((Tag(data), constructed));
         }
-        Ok((Tag(data), byte & Tag::CONSTRUCTED_MASK != 0))
+        xerr!(return Err(decode::Error::Unimplemented.into()))
     }
 
     /// Takes a tag from the beginning of a resource if it matches this tag.
