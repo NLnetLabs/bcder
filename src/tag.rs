@@ -20,10 +20,6 @@ use crate::decode;
 /// The tag in turn consists of two parts: the class and the number – the
 /// `Tag` type includes both of them.
 ///
-/// At the moment, you can only compare two tags. All necessary values are
-/// defined as associated constants; there is no other way to create new tag
-/// values.
-///
 /// # Limitations
 ///
 /// We can only decode up to four identifier octets. That is, we only support tag
@@ -42,16 +38,24 @@ impl Tag {
     /// The mask for checking the class.
     const CLASS_MASK: u8 = 0xc0;
 
-    /// The mask for checking whether the value is a primitive - 0 indicates primitive.
+    /// The mask for checking whether the value is a primitive
+    ///
+    /// A value of 0 indicates primitive.
     const CONSTRUCTED_MASK: u8 = 0x20;
 
-    /// The mask for the fourth octet data (bits 24-32) (5 bits - 0b0001_1111).
+    /// The mask for the fourth octet data (bits 24-32).
+    ///
+    /// (5 bits – 0b0001_1111).
     const SINGLEBYTE_DATA_MASK: u8 = 0x1f;
 
-    /// The mask for octet data (7 bits - 0b0111_1111).
+    /// The mask for octet data.
+    ///
+    /// (7 bits – 0b0111_1111).
     const MULTIBYTE_DATA_MASK: u8 = 0x7f;
 
-    /// The mask for the last octet with identifier data (1 bit - 0b1000_0000) (it is cleared in the last octet).
+    /// The mask for the last octet with identifier data
+    ///
+    /// (1 bit – 0b1000_0000, it is cleared in the last octet).
     const LAST_OCTET_MASK: u8 = 0x80;
     
     /// The largest tag number possible with three octets.
@@ -63,7 +67,7 @@ impl Tag {
     /// The largest tag number possible with one octet.
     const MAX_VAL_SPAN_1_OCTET: u32 = 0x7f;
 
-    /// The largest tag number possible with the fourth octet (single byte case).
+    /// The largest tag number possible with the fourth octet.
     const MAX_VAL_FOURTH_OCTET: u32 = 0x1e;
 
     /// The tag value representing for the ‘universal’ class.
@@ -195,21 +199,23 @@ impl Tag {
 }
 
 impl Tag {
-    /// Encodes a number into the identifier representation. There are two forms:
+    /// Encodes a number into the identifier representation.
+    ///
+    /// There are two forms:
     /// * low tag number (for tag numbers between 0 and 30):
-    ///     One octet. Bits 8 and 7 specify the class , bit 6 indicates whether the encoding
-    ///     is primitive (0), and bits 5-1 give the tag number.
-    /// * High tag number (for tag numbers 31 and greater):
-    ///     Two or more octets. First octet is as in low-tag-number form, except that bits 5-1 all
-    ///     have value 1.
-    ///     Second and following octets give the tag number, base 128, most significant digit first,
-    ///     with as few digits as possible, and with the bit 8 of each octet except the last set
-    ///     to 1.
+    ///     One octet. Bits 8 and 7 specify the class, bit 6 indicates whether
+    ///     the encoding is primitive (0), and bits 5-1 give the tag number.
+    /// * high tag number (for tag numbers 31 and greater):
+    ///     Two or more octets. First octet is as in low-tag-number form,
+    ///     except that bits 5-1 all have value 1. Second and following octets
+    ///     give the tag number, base 128, most significant digit first, with
+    ///     as few digits as possible, and with the bit 8 of each octet except
+    ///     the last set to 1.
     //
     /// # Panics
     ///
-    /// Currently, this function panics if the tag number is greater than
-    /// `MAX_VAL_SPAN_3_OCTETS`.
+    /// This function panics if the tag number is greater than
+    /// `Self::MAX_VAL_SPAN_3_OCTETS`.
     #[inline]
     fn new(class_mask: u8, number: u32) -> Self {
         assert!(number <= Tag::MAX_VAL_SPAN_3_OCTETS);
@@ -221,15 +227,30 @@ impl Tag {
             Tag([class_mask | Tag::SINGLEBYTE_DATA_MASK, number, 0, 0])
         } else if number <= Tag::MAX_VAL_SPAN_2_OCTETS {
             // Fit the number in the second and the third octets
-            let first_part = Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8) | Tag::LAST_OCTET_MASK;
+            let first_part = {
+                Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8)
+                | Tag::LAST_OCTET_MASK
+            };
             let second_part = Tag::MULTIBYTE_DATA_MASK & (number as u8);
-            Tag([class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part, second_part, 0])
+            Tag([
+                class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part,
+                second_part, 0
+            ])
         } else {
             // Fit the number in the first, second and the third octets
-            let first_part = Tag::MULTIBYTE_DATA_MASK & ((number >> 14) as u8) | Tag::LAST_OCTET_MASK;
-            let second_part = Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8) | Tag::LAST_OCTET_MASK;
+            let first_part = {
+                Tag::MULTIBYTE_DATA_MASK & ((number >> 14) as u8)
+                | Tag::LAST_OCTET_MASK
+            };
+            let second_part = {
+                Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8)
+                | Tag::LAST_OCTET_MASK
+            };
             let third_part = Tag::MULTIBYTE_DATA_MASK & (number as u8);
-            Tag([class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part, second_part, third_part])
+            Tag([
+                class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part,
+                second_part, third_part
+            ])
         }
     }
 
@@ -302,14 +323,15 @@ impl Tag {
             // It's a multibyte that starts and ends in the third octet
             u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1])
         } else if Tag::LAST_OCTET_MASK & self.0[2] == 0 {
-            // It's a multibyte that starts in the second octet and ends in the third octet
-            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 7 |
-                u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2])
+            // It's a multibyte that starts in the second octet and ends in
+            // the third octet
+            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 7
+            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2])
         } else {
             // It's a multibyte that spans the first three octets
-            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 14 |
-                u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2]) << 7 |
-                u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[3])
+            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 14
+            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2]) << 7
+            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[3])
         }
     }
 
@@ -474,7 +496,9 @@ mod test {
     #[test]
     fn test_single_octet_tags() {
         // Test edge cases.
-        let range: Vec<u32> = (0..5).chain(Tag::MAX_VAL_FOURTH_OCTET-5..Tag::MAX_VAL_FOURTH_OCTET).collect();
+        let range: Vec<u32> = (0..5).chain(
+            Tag::MAX_VAL_FOURTH_OCTET-5..Tag::MAX_VAL_FOURTH_OCTET
+        ).collect();
         for &typ in TYPES {
             for i in range.clone() {
                 let tag = Tag::new(typ, i);
@@ -497,12 +521,17 @@ mod test {
     #[test]
     fn test_double_octets_tags() {
         // Test edge cases.
-        let range: Vec<u32> = (Tag::MAX_VAL_FOURTH_OCTET+1..Tag::MAX_VAL_FOURTH_OCTET+5)
-            .chain(Tag::MAX_VAL_SPAN_1_OCTET-5..Tag::MAX_VAL_SPAN_1_OCTET).collect();
+        let range: Vec<u32> = (
+            Tag::MAX_VAL_FOURTH_OCTET+1..Tag::MAX_VAL_FOURTH_OCTET+5
+        ).chain(
+            Tag::MAX_VAL_SPAN_1_OCTET-5..Tag::MAX_VAL_SPAN_1_OCTET
+        ).collect();
         for &typ in TYPES {
             for i in range.clone() {
                 let tag = Tag::new(typ, i);
-                let expected = Tag([Tag::SINGLEBYTE_DATA_MASK | typ, i as u8, 0, 0]);
+                let expected = Tag([
+                        Tag::SINGLEBYTE_DATA_MASK | typ, i as u8, 0, 0
+                ]);
                 let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
                 assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
                 // The value is not constructed.
@@ -518,8 +547,11 @@ mod test {
     #[test]
     fn test_three_octets_tags() {
         // Test edge cases.
-        let range: Vec<u32> = (Tag::MAX_VAL_SPAN_1_OCTET+1..Tag::MAX_VAL_SPAN_1_OCTET+5)
-            .chain(Tag::MAX_VAL_SPAN_2_OCTETS-5..Tag::MAX_VAL_SPAN_2_OCTETS).collect();
+        let range: Vec<u32> = (
+            Tag::MAX_VAL_SPAN_1_OCTET+1..Tag::MAX_VAL_SPAN_1_OCTET + 5
+        ).chain(
+            Tag::MAX_VAL_SPAN_2_OCTETS-5..Tag::MAX_VAL_SPAN_2_OCTETS
+        ).collect();
         for &typ in TYPES {
             for i in range.clone() {
                 let tag = Tag::new(typ, i);
@@ -544,8 +576,11 @@ mod test {
     #[test]
     fn test_four_octets_tags() {
         // Test edge cases.
-        let range: Vec<u32> = (Tag::MAX_VAL_SPAN_2_OCTETS+1..Tag::MAX_VAL_SPAN_2_OCTETS+5)
-            .chain(Tag::MAX_VAL_SPAN_3_OCTETS-5..Tag::MAX_VAL_SPAN_3_OCTETS).collect();
+        let range: Vec<u32> = (
+            Tag::MAX_VAL_SPAN_2_OCTETS+1..Tag::MAX_VAL_SPAN_2_OCTETS + 5
+        ).chain(
+            Tag::MAX_VAL_SPAN_3_OCTETS-5..Tag::MAX_VAL_SPAN_3_OCTETS
+        ).collect();
         for &typ in TYPES {
             for i in range.clone() {
                 let tag = Tag::new(typ, i);
@@ -569,9 +604,17 @@ mod test {
 
     #[test]
     fn test_tags_failures() {
-        let large_tag = [0b1111_1111, 0b1000_0000, 0b1000_0000, 0b1000_0000, 0b1000_0000];
-        assert_eq!(Tag::take_from(&mut &large_tag[..]), Err(decode::Error::Unimplemented));
+        let large_tag = [
+            0b1111_1111, 0b1000_0000, 0b1000_0000, 0b1000_0000, 0b1000_0000
+        ];
+        assert_eq!(
+            Tag::take_from(&mut &large_tag[..]),
+            Err(decode::Error::Unimplemented)
+        );
         let short_tag = [0b1111_1111, 0b1000_0000];
-        assert_eq!(Tag::take_from(&mut &short_tag[..]), Err(decode::Error::Malformed));
+        assert_eq!(
+            Tag::take_from(&mut &short_tag[..]),
+            Err(decode::Error::Malformed)
+        );
     }
 }
