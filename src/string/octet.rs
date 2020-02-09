@@ -530,7 +530,8 @@ impl decode::Source for OctetStringSource {
     fn request(&mut self, len: usize) -> Result<usize, decode::Error> {
         if self.current.len() < len && !self.remainder.is_empty() {
             // Make a new current that is at least `len` long.
-            let mut current = BytesMut::from(self.current.clone());
+            let mut current = BytesMut::with_capacity(self.current.len());
+            current.extend_from_slice(&self.current.clone());
             while current.len() < len {
                 if let Some(bytes) = self.next_primitive() {
                     current.extend_from_slice(bytes.as_ref())
@@ -554,7 +555,7 @@ impl decode::Source for OctetStringSource {
                 }
             }
         }
-        self.current.advance(len);
+        self.current.advance(len)?;
         Ok(())
     }
 
@@ -563,7 +564,7 @@ impl decode::Source for OctetStringSource {
     }
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.current.slice(start, end)
+        self.current.slice(start..end)
     }
 }
 
