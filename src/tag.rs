@@ -378,9 +378,9 @@ impl Tag {
         if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
             let mut i = 1;
             loop {
-                if source.request(i+1)? == 0 {
-                    // TODO: Should we return an error instead?
-                    return Ok(None)
+                if source.request(i + 1)? == 0 {
+                    // Not enough data for a complete tag.
+                    xerr!(return Err(decode::Error::Malformed.into()))
                 }
                 data[i] = source.slice()[i];
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
