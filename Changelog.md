@@ -1,19 +1,12 @@
 # Change Log
 
-## Unreleased next version
-
-Breaking 
-
-New
+## 0.4.2
 
 Bug Fixes
 
 * Fix handling of incomplete multi-byte tags. ([#44], based on [#41] by
   [@dovreshef])
 
-Other Changes
-
-Dependencies
 
 [#41]: https://github.com/NLnetLabs/bcder/pull/41
 [#44]: https://github.com/NLnetLabs/bcder/pull/44
