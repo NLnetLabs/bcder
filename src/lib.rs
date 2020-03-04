@@ -30,11 +30,10 @@
 //! [string]: string/index.html
 //! [oid]: oid/index.html
 //! [captured]: captured/index.html
-#![allow(renamed_and_removed_lints, unknown_lints)]
 
 // We have seemingly redundant closures (i.e., closures where just providing
 // a function would also work) that cannot be removed due to lifetime issues.
-#![allow(redundant_closure)]
+#![allow(clippy::redundant_closure)]
 
 //--- Re-exports
 

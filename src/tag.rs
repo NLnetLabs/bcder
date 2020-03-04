@@ -404,7 +404,7 @@ impl Tag {
     }
 
     /// Returns the number of octets of the encoded form of the tag.
-    #[allow(trivially_copy_pass_by_ref)] // for possible multi-byte tags
+    #[allow(clippy::trivially_copy_pass_by_ref)] // for possible multi-byte tags
     pub fn encoded_len(&self) -> usize {
         if (Tag::SINGLEBYTE_DATA_MASK & self.0[0]) != Tag::SINGLEBYTE_DATA_MASK {
             1
@@ -421,7 +421,7 @@ impl Tag {
     ///
     /// If `constructed` is `true`, the encoded tag will signal a value in
     /// constructed encoding and primitive encoding otherwise.
-    #[allow(trivially_copy_pass_by_ref)] // for possible multi-byte tags
+    #[allow(clippy::trivially_copy_pass_by_ref)] // for possible multi-byte tags
     pub fn write_encoded<W: io::Write>(
         &self,
         constructed: bool,

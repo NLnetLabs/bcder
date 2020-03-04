@@ -91,7 +91,7 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     }
 }
 
-#[allow(wrong_self_convention)]
+#[allow(clippy::wrong_self_convention)]
 impl<'a, S: Source + 'a> Content<'a, S> {
     /// Converts content into a `u8`.
     ///
@@ -234,7 +234,7 @@ impl<'a, S: 'a> Primitive<'a, S> {
 
 /// # High-level Decoding
 ///
-#[allow(wrong_self_convention)]
+#[allow(clippy::wrong_self_convention)]
 impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Parses the primitive value as a BOOLEAN value.
     pub fn to_bool(&mut self) -> Result<bool, S::Err> {
