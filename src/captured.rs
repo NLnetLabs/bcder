@@ -3,7 +3,7 @@
 //! This is a private module. Its public items are re-exported by the parent.
 
 use std::{fmt, io, ops};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use crate::{decode, encode};
 use crate::mode::Mode;
 
@@ -62,9 +62,9 @@ impl Captured {
     /// with the given mode, and returns the resulting data as a captured
     /// value.
     pub fn from_values<V: encode::Values>(mode: Mode, values: V) -> Self {
-        let mut res = Self::new(Bytes::new(), mode);
-        res.extend(values);
-        res
+        let mut builder = Self::builder(mode);
+        builder.extend(values);
+        builder.freeze()
     }
 
     /// Creates a new empty captured value in the given mode.
@@ -75,15 +75,17 @@ impl Captured {
         }
     }
 
-    /// Extends the captured value by encoding the given values.
+    /// Crates a builder for a captured value in the given mode.
+    pub fn builder(mode: Mode) -> CapturedBuilder {
+        CapturedBuilder::new(mode)
+    }
+
+    /// Converts the captured values into a builder in order to add new values.
     ///
-    /// The function encodes the given values in the captured value’s own mode
-    /// and places the encoded content at the end of the captured value.
-    pub fn extend<V: encode::Values>(&mut self, values: V) {
-        values.write_encoded(
-            self.mode,
-            &mut CapturedWriter(&mut self.bytes)
-        ).unwrap()
+    /// Because the captured values might be shared, this requires copying the
+    /// underlying data.
+    pub fn into_builder(self) -> CapturedBuilder {
+        self.into()
     }
 
     /// Decodes the full content using the provided function argument.
@@ -188,9 +190,57 @@ impl fmt::Debug for Captured {
 }
 
 
+//------------ CapturedBuilder -----------------------------------------------
+
+pub struct CapturedBuilder {
+    bytes: BytesMut,
+    mode: Mode,
+}
+
+impl CapturedBuilder {
+    pub fn new(mode: Mode) -> Self {
+        CapturedBuilder {
+            bytes: BytesMut::new(),
+            mode
+        }
+    }
+
+    pub fn with_capacity(capacity: usize, mode: Mode) -> Self {
+        CapturedBuilder {
+            bytes: BytesMut::with_capacity(capacity),
+            mode
+        }
+    }
+
+    /// Extends the captured value by encoding the given values.
+    ///
+    /// The function encodes the given values in the captured value’s own mode
+    /// and places the encoded content at the end of the captured value.
+    pub fn extend<V: encode::Values>(&mut self, values: V) {
+        values.write_encoded(
+            self.mode,
+            &mut CapturedWriter(&mut self.bytes)
+        ).unwrap()
+    }
+
+    pub fn freeze(self) -> Captured {
+        Captured::new(self.bytes.freeze(), self.mode)
+    }
+}
+
+impl From<Captured> for CapturedBuilder {
+    fn from(src: Captured) -> Self {
+        CapturedBuilder {
+            bytes: src.bytes.as_ref().into(),
+            mode: src.mode
+        }
+    }
+}
+
+
 //------------ CapturedWriter ------------------------------------------------
 
-struct CapturedWriter<'a>(&'a mut Bytes);
+struct CapturedWriter<'a>(&'a mut BytesMut);
 
 impl<'a> io::Write for CapturedWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
