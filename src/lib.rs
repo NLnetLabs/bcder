@@ -36,7 +36,7 @@
 
 //--- Re-exports
 
-pub use self::captured::Captured;
+pub use self::captured::{Captured, CapturedBuilder};
 pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
 pub use self::oid::{ConstOid, Oid};
