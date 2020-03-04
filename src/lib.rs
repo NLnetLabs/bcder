@@ -1,6 +1,6 @@
 //! Handling of data in Basic Encoding Rules.
 //!
-//! This crate allows decoding and encoding of data  encoded in ASN.1’s _Basic
+//! This crate allows decoding and encoding of data encoded in ASN.1’s _Basic
 //! Encoding Rules_ as defined in ITU recommendation X.690 as well as their
 //! stricter companions _Cannonical Encoding Rules_ and _Distringuished
 //! Encoding Rules._
@@ -14,11 +14,13 @@
 //! provide the machinery for implementing decoding and encoding of data.
 //! 
 //! Additionally, the crate provides a number of types that help dealing
-//! with the more difficult universal types in ASN.1. Specifically, the
+//! with the more complex universal types in ASN.1. Specifically, the
 //! module [int] provides variable length integers, the module
 //! [string] contains types for the various kinds of strings defined in
-//! ASN.1, and [oid] deals with object identifiers. Finally, [`Captured`]
+//! ASN.1, and [oid] deals with object identifiers. Finally, [captured]
 //! provides a way to keep encoded data around for later processing.
+//! The most important types from these modules are also re-exported at
+//! library level.
 //!
 //! [guide]: guide/index.html
 //! [decode]: decode/index.html
@@ -27,7 +29,7 @@
 //! [int]: int/index.html
 //! [string]: string/index.html
 //! [oid]: oid/index.html
-//! [`Captured`]: captured/struct.Captured.html
+//! [captured]: captured/index.html
 #![allow(renamed_and_removed_lints, unknown_lints)]
 
 // We have seemingly redundant closures (i.e., closures where just providing
@@ -36,7 +38,7 @@
 
 //--- Re-exports
 
-pub use self::captured::{Captured, CapturedBuilder};
+pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
 pub use self::mode::Mode;
 pub use self::oid::{ConstOid, Oid};
@@ -54,6 +56,7 @@ pub use self::tag::Tag;
 pub mod decode;
 pub mod encode;
 
+pub mod captured;
 pub mod int;
 pub mod oid;
 pub mod string;
@@ -61,7 +64,6 @@ pub mod string;
 
 //--- Private modules
 
-mod captured;
 mod length;
 mod mode;
 mod tag;

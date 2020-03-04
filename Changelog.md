@@ -5,7 +5,9 @@
 Breaking
 
 * Move extending a `Captured` to an explicit `CapturedBuilder`. This
-  becomes necessary with bytes 0.5. [(#46)]
+  becomes necessary with bytes 0.5. Both these types now reside in the
+  module `captured` with `Captured` re-exported at crate level.
+  ([#46], [#47])
 
 New
 
@@ -13,7 +15,8 @@ Bug Fixes
 
 Dependencies
 
-[(#46)]: https://github.com/NLnetLabs/bcder/pull/46
+[#46]: https://github.com/NLnetLabs/bcder/pull/46
+[#47]: https://github.com/NLnetLabs/bcder/pull/47
 
 
 ## 0.4.2
