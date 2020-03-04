@@ -4,11 +4,16 @@
 
 Breaking
 
+* Move extending a `Captured` to an explicit `CapturedBuilder`. This
+  becomes necessary with bytes 0.5. [(#46)]
+
 New
 
 Bug Fixes
 
 Dependencies
+
+[(#46)]: https://github.com/NLnetLabs/bcder/pull/46
 
 
 ## 0.4.2
