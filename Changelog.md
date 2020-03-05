@@ -16,10 +16,12 @@ Bug Fixes
 Dependencies
 
 * Upgrade bytes to 0.5. ([#43], thanks to [@Fabian-Gruenbichler])
+* Upgrade smallvec to 1.1. ([#48])
 
 [#43]: https://github.com/NLnetLabs/bcder/pull/43
 [#46]: https://github.com/NLnetLabs/bcder/pull/46
 [#47]: https://github.com/NLnetLabs/bcder/pull/47
+[#48]: https://github.com/NLnetLabs/bcder/pull/48
 [@Fabian-Gruenbichler]: https://github.com/Fabian-Gruenbichler
 
 
