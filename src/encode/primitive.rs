@@ -4,7 +4,8 @@
 //! parent.
 
 use std::io;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
+use bytes::buf::ext::BufMutExt;
 use crate::length::Length;
 use crate::mode::Mode;
 use crate::tag::Tag;

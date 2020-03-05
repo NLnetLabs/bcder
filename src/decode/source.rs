@@ -125,7 +125,7 @@ impl Source for Bytes {
             Err(Error::Malformed)
         }
         else {
-            self.advance(len);
+            bytes::Buf::advance(self, len);
             Ok(())
         }
     }
@@ -135,7 +135,7 @@ impl Source for Bytes {
     }
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.slice(start, end)
+        self.slice(start..end)
     }
 }
 
@@ -161,7 +161,7 @@ impl<'a> Source for &'a [u8] {
     }
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
-        Bytes::from(&self[start..end])
+        Bytes::copy_from_slice(&self[start..end])
     }
 }
 
