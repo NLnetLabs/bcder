@@ -15,8 +15,12 @@ Bug Fixes
 
 Dependencies
 
+* Upgrade bytes to 0.5. ([#43], thanks to [@Fabian-Gruenbichler])
+
+[#43]: https://github.com/NLnetLabs/bcder/pull/43
 [#46]: https://github.com/NLnetLabs/bcder/pull/46
 [#47]: https://github.com/NLnetLabs/bcder/pull/47
+[@Fabian-Gruenbichler]: https://github.com/Fabian-Gruenbichler
 
 
 ## 0.4.2
