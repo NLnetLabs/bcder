@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased next version
+## 0.5.0 
 
 Breaking
 
@@ -8,10 +8,6 @@ Breaking
   becomes necessary with bytes 0.5. Both these types now reside in the
   module `captured` with `Captured` re-exported at crate level.
   ([#46], [#47])
-
-New
-
-Bug Fixes
 
 Dependencies
 
