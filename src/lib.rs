@@ -35,6 +35,10 @@
 // a function would also work) that cannot be removed due to lifetime issues.
 #![allow(clippy::redundant_closure)]
 
+// Currently, the minimum Rust version is 1.40 which doesn’t have the matches!
+// macro yet.
+#![allow(clippy::unknown_clippy_lints, clippy::match_like_matches_macro)]
+
 //--- Re-exports
 
 pub use self::captured::Captured;
