@@ -1,6 +1,6 @@
 [package]
 name = "bcder"
-version = "0.5.2-dev"
+version = "0.6.0-dev"
 edition = "2018"
 authors = ["The NLnet Labs RPKI Team <rpki@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
@@ -12,7 +12,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 backtrace   = { version = "^0.3.15", optional = true }
-bytes       = "^0.5"
+bytes       = "^1.0"
 smallvec    = "^1.1"
 
 [features]
