@@ -4,11 +4,15 @@
 
 Breaking
 
+* Minimum supported Rust version is now 1.42. ([#56])
+
 New
 
 Bug Fixes
 
 Other Changes
+
+[#56]: https://github.com/NLnetLabs/bcder/pull/56
 
 
 ## 0.5.1
