@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased Future Version
+
+Breaking Changes
+
+New
+
+Bug Fixes
+
+Other Changes
+
+
 ## 0.6.0
 
 Released 2021-01-04.
