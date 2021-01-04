@@ -8,7 +8,11 @@ New
 
 Bug Fixes
 
+* Fix `oid::Iter` to actually iterate over the components. ([#50])
+
 Dependencies
+
+[#50]: https://github.com/NLnetLabs/bcder/pull/50
 
 
 ## 0.5.0 

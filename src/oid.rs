@@ -322,7 +322,6 @@ impl<'a> PartialEq for Component<'a> {
 impl<'a> Eq for Component<'a> { }
 
 
-
 //------------ Iter ----------------------------------------------------------
 
 /// An iterator over the sub-identifiers in an object identifier.
@@ -362,8 +361,10 @@ impl<'a> Iterator for Iter<'a> {
         }
         for i in 0..self.slice.len() {
             if self.slice[i] & 0x80 == 0 {
-                let (res, tail) = self.slice.split_at(i);
-                self.slice = tail;
+                let (res, tail) = self.slice.split_at(i + 1);
+                if self.position != Position::First {
+                    self.slice = tail;
+                }
                 return Some(Component::new(res, self.advance_position()));
             }
         }
@@ -371,3 +372,18 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
+
+//============ Tests ========================================================
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn display() {
+        assert_eq!(
+            "2.5.29.19",
+            format!("{}", Oid(&[85, 29, 19])).as_str()
+        );
+    }
+}
