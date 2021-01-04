@@ -37,7 +37,7 @@
 
 // Currently, the minimum Rust version is 1.40 which doesn’t have the matches!
 // macro yet.
-#![allow(clippy::match_like_matches_macro)]
+#![allow(clippy::unknown_clippy_lints, clippy::match_like_matches_macro)]
 
 //--- Re-exports
 
