@@ -60,26 +60,17 @@ impl Mode {
 
     /// Returns whether the mode is `Mode::Ber`.
     pub fn is_ber(self) -> bool {
-        match self {
-            Mode::Ber => true,
-            _ => false,
-        }
+        matches!(self, Mode::Ber)
     }
 
     /// Returns whether the mode is `Mode::Cer`.
     pub fn is_cer(self) -> bool {
-        match self {
-            Mode::Cer => true,
-            _ => false
-        }
+        matches!(self, Mode::Cer)
     }
 
     /// Returns whether the mode is `Mode::Der`.
     pub fn is_der(self) -> bool {
-        match self {
-            Mode::Der => true,
-            _ => false
-        }
+        matches!(self, Mode::Der)
     }
 }
 

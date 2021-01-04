@@ -118,8 +118,7 @@ impl Length {
 
     /// Returns whether the length is definite and zero.
     pub fn is_zero(&self) -> bool {
-        if let Length::Definite(0) = *self { true }
-        else { false }
+        matches!(*self, Length::Definite(0))
     }
 
     /// Returns the length of the encoded representation of the value.
