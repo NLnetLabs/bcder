@@ -4,8 +4,7 @@
 //! parent.
 
 use std::io;
-use bytes::{Bytes, BytesMut};
-use bytes::buf::ext::BufMutExt;
+use bytes::Bytes;
 use crate::length::Length;
 use crate::mode::Mode;
 use crate::tag::Tag;
@@ -46,9 +45,9 @@ pub trait PrimitiveContent: Sized {
     /// Encodes the value to bytes (useful when you need to sign a structure)
     fn to_encoded_bytes(&self, mode: Mode) -> Bytes {
         let l = self.encoded_len(mode);
-        let mut w = BytesMut::with_capacity(l).writer();
+        let mut w = Vec::with_capacity(l);
         self.write_encoded(mode, &mut w).unwrap();
-        w.into_inner().freeze()
+        w.into()
     }
 
     /// Returns a value encoder for this content using the natural tag.
