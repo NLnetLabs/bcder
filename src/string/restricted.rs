@@ -50,7 +50,7 @@ pub trait CharSet {
     /// The method returns an error if the sequence of the octets represented
     /// by `iter` is not in fact a valid string for this character set.
     fn check<I: Iterator<Item=u8>>(iter: &mut I) -> Result<(), CharSetError> {
-        while let Some(_) = Self::next_char(iter)? { }
+        while Self::next_char(iter)?.is_some() { }
         Ok(())
     }
 }
@@ -181,12 +181,12 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Returns a value encoder for the character string with the natural tag.
-    pub fn encode_ref<'a>(&'a self) -> impl encode::Values + 'a {
+    pub fn encode_ref(&self) -> impl encode::Values + '_ {
         self.encode_ref_as(L::TAG)
     }
 
     /// Returns a value encoder for the character string with the given tag.
-    pub fn encode_ref_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+    pub fn encode_ref_as(&self, tag: Tag) -> impl encode::Values + '_ {
         self.octets.encode_ref_as(tag)
     }
 }
