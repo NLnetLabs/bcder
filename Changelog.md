@@ -1,16 +1,12 @@
 # Change Log
 
-## Unreleased Next Version
+## 0.5.1
 
-Breaking
-
-New
+Released 2021-01-04.
 
 Bug Fixes
 
 * Fix `oid::Iter` to actually iterate over the components. ([#50])
-
-Dependencies
 
 [#50]: https://github.com/NLnetLabs/bcder/pull/50
 
