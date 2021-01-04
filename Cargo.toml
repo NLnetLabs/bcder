@@ -14,7 +14,6 @@ license = "BSD-3-Clause"
 backtrace   = { version = "^0.3.15", optional = true }
 bytes       = "^0.5"
 smallvec    = "^1.1"
-unwrap      = "^1.2.1"
 
 [features]
 # Print a backtrace when a parsing error occurs. This feature is intended for

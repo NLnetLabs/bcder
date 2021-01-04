@@ -862,7 +862,6 @@ impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
 
 #[cfg(test)]
 mod tests {
-    use unwrap::unwrap;
     use crate::encode::{Values, PrimitiveContent};
     use super::*;
 
@@ -874,20 +873,20 @@ mod tests {
 
         // D(p)
         assert_eq!(
-            unwrap!(decode::Constructed::decode(
+            decode::Constructed::decode(
                 b"\x24\x04\
                 \x04\x02ab".as_ref(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)
                 }
-            )).to_bytes(),
+            ).unwrap().to_bytes(),
             "ab"
         );
 
         // D(pp)
         assert_eq!(
-            unwrap!(decode::Constructed::decode(
+            decode::Constructed::decode(
                 b"\x24\x06\
                 \x04\x01a\
                 \x04\x01b".as_ref(),
@@ -895,13 +894,13 @@ mod tests {
                 |cons| {
                     OctetString::take_from(cons)
                 }
-            )).to_bytes(),
+            ).unwrap().to_bytes(),
             "ab"
         );
 
         // D(I(p))
         assert_eq!(
-            unwrap!(decode::Constructed::decode(
+            decode::Constructed::decode(
                 b"\x24\x08\
                 \x24\x80\
                 \x04\x02ab\
@@ -910,14 +909,14 @@ mod tests {
                 |cons| {
                     OctetString::take_from(cons)
                 }
-            )).to_bytes(),
+            ).unwrap().to_bytes(),
             "ab"
         );
 
         println!("lllllll");
         // I(p)
         assert_eq!(
-            unwrap!(decode::Constructed::decode(
+            decode::Constructed::decode(
                 b"\x24\x80\
                 \x04\x02ab\
                 \0\0".as_ref(),
@@ -925,13 +924,13 @@ mod tests {
                 |cons| {
                     OctetString::take_from(cons)
                 }
-            )).to_bytes(),
+            ).unwrap().to_bytes(),
             "ab"
         );
 
         // D(pI(p))
         assert_eq!(
-            unwrap!(decode::Constructed::decode(
+            decode::Constructed::decode(
                 b"\x24\x0a\
                 \x04\x01a\
                 \x24\x80\
@@ -941,7 +940,7 @@ mod tests {
                 |cons| {
                     OctetString::take_from(cons)
                 }
-            )).to_bytes(),
+            ).unwrap().to_bytes(),
             "ab"
         );
     }
