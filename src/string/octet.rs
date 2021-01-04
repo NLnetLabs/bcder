@@ -259,12 +259,12 @@ impl OctetString {
     }
 
     /// Returns a value encoder for the octet string using the natural tag.
-    pub fn encode_ref<'a>(&'a self) -> impl encode::Values + 'a {
+    pub fn encode_ref(&self) -> impl encode::Values + '_ {
         self.encode_ref_as(Tag::OCTET_STRING)
     }
 
     /// Returns a value encoder for the octet string using the given tag.
-    pub fn encode_ref_as<'a>(&'a self, tag: Tag) -> impl encode::Values + 'a {
+    pub fn encode_ref_as(&self, tag: Tag) -> impl encode::Values + '_ {
         OctetStringEncoder::new(self, tag)
     }
 
