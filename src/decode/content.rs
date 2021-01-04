@@ -1278,67 +1278,57 @@ enum State {
 
 #[cfg(test)]
 mod test {
-    use unwrap::unwrap;
     use super::*;
 
     #[test]
     fn constructed_skip() {
         // Two primitives.
-        unwrap!(
-            Constructed::decode(
-                b"\x02\x01\x00\x02\x01\x00".as_ref(), Mode::Ber, |cons| {
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    Ok(())
-                }
-            )
-        );
+        Constructed::decode(
+            b"\x02\x01\x00\x02\x01\x00".as_ref(), Mode::Ber, |cons| {
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                Ok(())
+            }
+        ).unwrap();
 
         // One definite constructed with two primitives, then one primitive
-        unwrap!(
-            Constructed::decode(
-                b"\x30\x06\x02\x01\x00\x02\x01\x00\x02\x01\x00".as_ref(),
-                Mode::Ber,
-                |cons| {
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    Ok(())
-                }
-            )
-        );
+        Constructed::decode(
+            b"\x30\x06\x02\x01\x00\x02\x01\x00\x02\x01\x00".as_ref(),
+            Mode::Ber,
+            |cons| {
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                Ok(())
+            }
+        ).unwrap();
 
         // Two nested definite constructeds with two primitives, then one
         // primitive.
-        unwrap!(
-            Constructed::decode(
-                b"\x30\x08\
-                \x30\x06\
-                \x02\x01\x00\x02\x01\x00\
-                \x02\x01\x00".as_ref(),
-                Mode::Ber,
-                |cons| {
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    Ok(())
-                }
-            )
-        );
+        Constructed::decode(
+            b"\x30\x08\
+            \x30\x06\
+            \x02\x01\x00\x02\x01\x00\
+            \x02\x01\x00".as_ref(),
+            Mode::Ber,
+            |cons| {
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                Ok(())
+            }
+        ).unwrap();
 
-        println!("-----");
         // One definite constructed with one indefinite with two primitives.
-        unwrap!(
-            Constructed::decode(
-                b"\x30\x0A\
-                \x30\x80\
-                \x02\x01\x00\x02\x01\x00\
-                \0\0".as_ref(),
-                Mode::Ber,
-                |cons| {
-                    unwrap!(cons.skip(|_, _, _| Ok(())));
-                    Ok(())
-                }
-            )
-        );
+        Constructed::decode(
+            b"\x30\x0A\
+            \x30\x80\
+            \x02\x01\x00\x02\x01\x00\
+            \0\0".as_ref(),
+            Mode::Ber,
+            |cons| {
+                cons.skip(|_, _, _| Ok(())).unwrap();
+                Ok(())
+            }
+        ).unwrap();
     }
 }
 
