@@ -446,6 +446,41 @@ impl Unsigned {
         Unsigned(Integer::from_bytes_unchecked(bytes))
     }
 
+    /// Given a sequence of unsigned (lacking a sign bit) big-endian bytes, 
+    /// ordered most-significant byte first, create the equivalent `Unsigned`
+    /// integer. One cannot use PrimitiveContent::write_encoded() for &'a [u8]
+    /// for this because that is already defined to mean that the bytes should
+    /// be encoded as a BER OCTET STRING, not as a BER INTEGER.
+    pub fn from_be_bytes<B: AsRef<[u8]>>(bytes: B) -> Self {
+        let whole_slice = bytes.as_ref();
+
+        // Skip any leading zero bytes.
+        let num_leading_zero_bytes = whole_slice.iter().take_while(|&&b| b == 0x00).count();
+        let value_slice = &whole_slice[num_leading_zero_bytes..];
+
+        let is_most_significant_bit_zero = value_slice[0] & 0x80 == 0;
+
+        // Create a new Unsigned integer from the given value bytes, ensuring
+        // that the most-significant bit is zero.
+        let new_bytes = if is_most_significant_bit_zero {
+            // Use the source value bytes as-is.
+            Bytes::copy_from_slice(value_slice)
+        } else if num_leading_zero_bytes > 0 {
+            // Use the value byte sequence and one preceeding zero byte.
+            Bytes::copy_from_slice(&whole_slice[num_leading_zero_bytes-1..])
+        } else {
+            // Prefix a copy of the slice with a leading zero byte.
+            let mut v: Vec<u8> = Vec::with_capacity(value_slice.len() + 1);
+            v.push(0x00);
+            v.extend(value_slice.iter());
+            Bytes::copy_from_slice(v.as_slice())
+        };
+
+        unsafe {
+            Unsigned::from_bytes_unchecked(new_bytes)
+        }
+    }
+
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
