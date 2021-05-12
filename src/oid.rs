@@ -265,8 +265,8 @@ enum Position {
 
 impl<'a> Component<'a> {
     /// Creates a new component.
-    fn new(slice: &'a [u8], position: Position) -> Self {
-        Component { slice, position }
+    fn new(position: Position, slice: &'a [u8]) -> Self {
+        Component { position, slice }
     }
 
     /// Attempts to convert the component to `u32`.
@@ -365,7 +365,7 @@ impl<'a> Iterator for Iter<'a> {
                 if self.position != Position::First {
                     self.slice = tail;
                 }
-                return Some(Component::new(res, self.advance_position()));
+                return Some(Component::new(self.advance_position(), res));
             }
         }
         panic!("illegal object identifier (last octet has bit 8 set)");
