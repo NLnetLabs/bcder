@@ -382,7 +382,6 @@ impl<P: PrimitiveContent> Values for Primitive<P> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Unsigned;
 
     fn test_der<T: PrimitiveContent>(value: T, expected: &[u8]) {
         assert_eq!(value.encoded_len(Mode::Der), expected.len());
@@ -419,30 +418,5 @@ mod test {
         test_der(-0xF000i32, b"\xFF\x10\x00");
         test_der(-12000i32, b"\xD1\x20");
         test_der(-1200000i32, b"\xED\xB0\x80");
-    }
-
-    #[test]
-    fn encode_variable_length_unsigned() {
-        test_der(&Unsigned::from_be_bytes(254u8.to_be_bytes()), b"\x00\xFE");
-        test_der(&Unsigned::from_be_bytes(255u8.to_be_bytes()), b"\x00\xFF");
-        test_der(&Unsigned::from_be_bytes(256u16.to_be_bytes()), b"\x01\x00");
-
-        test_der(&Unsigned::from_be_bytes(32767u16.to_be_bytes()), b"\x7F\xFF");
-        test_der(&Unsigned::from_be_bytes(32768u16.to_be_bytes()), b"\x00\x80\x00");
-        test_der(&Unsigned::from_be_bytes(32769u16.to_be_bytes()), b"\x00\x80\x01");
-
-        test_der(&Unsigned::from_be_bytes(32767u32.to_be_bytes()), b"\x7F\xFF");
-        test_der(&Unsigned::from_be_bytes(32768u32.to_be_bytes()), b"\x00\x80\x00");
-        test_der(&Unsigned::from_be_bytes(32769u32.to_be_bytes()), b"\x00\x80\x01");
-
-        test_der(&Unsigned::from_be_bytes(32767u64.to_be_bytes()), b"\x7F\xFF");
-        test_der(&Unsigned::from_be_bytes(32768u64.to_be_bytes()), b"\x00\x80\x00");
-        test_der(&Unsigned::from_be_bytes(32769u64.to_be_bytes()), b"\x00\x80\x01");
-
-        test_der(&Unsigned::from_be_bytes(&[0xFF]), b"\x00\xFF");
-        test_der(&Unsigned::from_be_bytes(&[0x00, 0xFF]), b"\x00\xFF");
-        test_der(&Unsigned::from_be_bytes(&[0x00, 0x00, 0xFF]), b"\x00\xFF");
-
-        test_der(&Unsigned::from_be_bytes(&[0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]), b"\x00\xDE\xAD\xBE\xEF");
     }
 }
