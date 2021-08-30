@@ -398,7 +398,7 @@ impl<T: AsRef<[u8]>> PartialOrd<T> for OctetString {
 impl Ord for OctetString {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         if let (Some(l), Some(r)) = (self.as_slice(), other.as_slice()) {
-            return l.cmp(&r)
+            return l.cmp(r)
         }
 
         let mut siter = self.iter();
