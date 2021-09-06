@@ -6,9 +6,14 @@ Breaking Changes
 
 New
 
+* `int::Unsigned` can now be created from an arbitrary length big-endian
+  representation of an unsigned integer. ([#59])
+
 Bug Fixes
 
 Other Changes
+
+[#59]: https://github.com/NLnetLabs/bcder/pull/59
 
 
 ## 0.6.0
