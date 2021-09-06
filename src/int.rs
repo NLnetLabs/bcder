@@ -102,7 +102,7 @@ macro_rules! from_builtin {
 }
 
 macro_rules! builtin_from {
-    ($flavor:ident, $from:ident, $to:ident, $len:expr) => {
+    ($flavor:ident, $from:ident, $to:ident) => {
         impl<'a> TryFrom<&'a $from> for $to {
             type Error = OverflowError;
 
@@ -295,16 +295,16 @@ from_builtin!(u32, Integer);
 from_builtin!(u64, Integer);
 from_builtin!(u128, Integer);
 
-builtin_from!(signed, Integer, i8, 1);
-builtin_from!(signed, Integer, i16, 2);
-builtin_from!(signed, Integer, i32, 4);
-builtin_from!(signed, Integer, i64, 8);
-builtin_from!(signed, Integer, i128, 16);
-builtin_from!(unsigned, Integer, u8, 1);
-builtin_from!(unsigned, Integer, u16, 2);
-builtin_from!(unsigned, Integer, u32, 4);
-builtin_from!(unsigned, Integer, u64, 8);
-builtin_from!(unsigned, Integer, u128, 16);
+builtin_from!(signed, Integer, i8);
+builtin_from!(signed, Integer, i16);
+builtin_from!(signed, Integer, i32);
+builtin_from!(signed, Integer, i64);
+builtin_from!(signed, Integer, i128);
+builtin_from!(unsigned, Integer, u8);
+builtin_from!(unsigned, Integer, u16);
+builtin_from!(unsigned, Integer, u32);
+builtin_from!(unsigned, Integer, u64);
+builtin_from!(unsigned, Integer, u128);
 
 
 //--- AsRef
@@ -614,16 +614,16 @@ from_builtin!(u32, Unsigned);
 from_builtin!(u64, Unsigned);
 from_builtin!(u128, Unsigned);
 
-builtin_from!(signed, Unsigned, i8, 1);
-builtin_from!(signed, Unsigned, i16, 2);
-builtin_from!(signed, Unsigned, i32, 4);
-builtin_from!(signed, Unsigned, i64, 8);
-builtin_from!(signed, Unsigned, i128, 16);
-builtin_from!(unsigned, Unsigned, u8, 1);
-builtin_from!(unsigned, Unsigned, u16, 2);
-builtin_from!(unsigned, Unsigned, u32, 4);
-builtin_from!(unsigned, Unsigned, u64, 8);
-builtin_from!(unsigned, Unsigned, u128, 16);
+builtin_from!(signed, Unsigned, i8);
+builtin_from!(signed, Unsigned, i16);
+builtin_from!(signed, Unsigned, i32);
+builtin_from!(signed, Unsigned, i64);
+builtin_from!(signed, Unsigned, i128);
+builtin_from!(unsigned, Unsigned, u8);
+builtin_from!(unsigned, Unsigned, u16);
+builtin_from!(unsigned, Unsigned, u32);
+builtin_from!(unsigned, Unsigned, u64);
+builtin_from!(unsigned, Unsigned, u128);
 
 
 impl<'a> TryFrom<Bytes> for Unsigned {
