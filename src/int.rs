@@ -446,6 +446,48 @@ impl Unsigned {
         Unsigned(Integer::from_bytes_unchecked(bytes))
     }
 
+    /// Constructs `Unsigned` by copying from a `&[u8]`.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Error::Malformed` if the given slice is empty.
+    pub fn from_slice(slice: &[u8]) -> Result<Self, crate::decode::Error> {
+        Self::from_bytes(Bytes::copy_from_slice(slice))
+    }
+
+    /// Constructs `Unsigned` from `Bytes`, copying only if needed.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Error::Malformed` if the given Bytes value is empty.
+    pub fn from_bytes(bytes: Bytes) -> Result<Self, crate::decode::Error> {
+        if bytes.is_empty() {
+            return Err(crate::decode::Error::Malformed);
+        }
+
+        // Skip any leading zero bytes.
+        let num_leading_zero_bytes = bytes.as_ref().iter().take_while(|&&b| b == 0x00).count();
+        let value = bytes.slice(num_leading_zero_bytes..);
+
+        // Create a new Unsigned integer from the given value bytes, ensuring
+        // that the most-significant bit is zero.
+        let new_bytes = if value[0] & 0x80 == 0 {
+            // Use the value bytes as-is.
+            value
+        } else if num_leading_zero_bytes > 0 {
+            // Use the value bytes and one of the preceeding zero "sign" bytes.
+            bytes.slice(num_leading_zero_bytes - 1..)
+        } else {
+            // Copy the bytes in order to prepend a zero "sign" byte.
+            let mut v: Vec<u8> = Vec::with_capacity(value.len() + 1);
+            v.push(0x00);
+            v.extend(value.iter());
+            Bytes::from(v)
+        };
+
+        unsafe { Ok(Unsigned::from_bytes_unchecked(new_bytes)) }
+    }
+
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
@@ -584,6 +626,14 @@ builtin_from!(unsigned, Unsigned, u64, 8);
 builtin_from!(unsigned, Unsigned, u128, 16);
 
 
+impl<'a> TryFrom<Bytes> for Unsigned {
+    type Error = crate::decode::Error;
+
+    fn try_from(value: Bytes) -> Result<Self, Self::Error> {
+        Unsigned::from_bytes(value)
+    }
+}
+
 //--- AsRef
 
 impl AsRef<Integer> for Unsigned {
@@ -645,6 +695,13 @@ mod test {
     use super::*;
     use crate::Mode;
     use crate::decode::Primitive;
+
+    fn test_der<T: PrimitiveContent>(value: T, expected: &[u8]) {
+        assert_eq!(value.encoded_len(Mode::Der), expected.len());
+        let mut target = Vec::new();
+        value.write_encoded(Mode::Der, &mut target).unwrap();
+        assert_eq!(target, expected);
+    }
 
     #[test]
     fn is_positive_negative() {
@@ -1080,5 +1137,31 @@ mod test {
         assert_eq!(u64::try_from(&int).unwrap(), 0xA2345678);
         assert_eq!(u128::try_from(&int).unwrap(), 0xA2345678);
     }
+ 
+    #[test]
+    fn encode_variable_length_unsigned_from_slice() {
+        assert_eq!(Unsigned::from_slice(&[]), Err(crate::decode::Error::Malformed));
+        test_der(&Unsigned::from_slice(&[0xFF]).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_slice(&[0x00, 0xFF]).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_slice(&[0x00, 0x00, 0xFF]).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_slice(&[0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+    }
 
+    #[test]
+    fn encode_variable_length_unsigned_from_bytes() {
+        assert_eq!(Unsigned::from_bytes(Bytes::new()), Err(crate::decode::Error::Malformed));
+        test_der(&Unsigned::from_bytes(Bytes::from(vec![0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0x00, 0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF])).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+    }
+
+    #[test]
+    fn encode_variable_length_unsigned_try_from_bytes() {
+        assert_eq!(Unsigned::try_from(Bytes::new()), Err(crate::decode::Error::Malformed));
+        test_der(&Unsigned::try_from(Bytes::from(vec![0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0x00, 0xFF])).unwrap(), b"\x00\xFF");
+        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF])).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+    }
 }
