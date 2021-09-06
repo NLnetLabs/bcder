@@ -19,9 +19,7 @@ use crate::mode::Mode;
 ///
 /// You usually acquire a value of this type trough the [`capture`] family of
 /// methods on constructed BER content. Alternatively, you can also construct
-/// a new value using regular encoding via the [`from_values`] function or
-/// incrementally by starting with [`empty`] and then adding more content
-/// with [`extent`].
+/// a new value via the [`CapturedBuilder`].
 /// 
 /// Once you have a captured value, you can use the [`decode`] method to
 /// decode the entire captured value or [`decode_partial`] to decode some
@@ -36,7 +34,6 @@ use crate::mode::Mode;
 /// [`capture`]: ../decode/struct.Constructed.html 
 /// [`from_values`]: #method.from_values
 /// [`empty`]: #method.empty
-/// [`extend`]: #method.extend
 /// [`decode`]: #method.decode
 /// [`decode_partial`]: #method.decode
 /// [`Mode`]: ../enum.Mode.html
@@ -75,7 +72,7 @@ impl Captured {
         }
     }
 
-    /// Crates a builder for a captured value in the given mode.
+    /// Creates a builder for a captured value in the given mode.
     pub fn builder(mode: Mode) -> CapturedBuilder {
         CapturedBuilder::new(mode)
     }

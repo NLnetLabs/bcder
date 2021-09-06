@@ -15,14 +15,16 @@ use crate::tag::Tag;
 
 /// A bit string value.
 ///
-/// Bit strings are a sequence of bits. Unlike [`OctetString`]s, they do not
-/// need to contain a multiple of eight bits.
+/// Bit strings are a sequence of bits. Unlike
+/// [`OctetString`][crate::string::OctetString]s, they do not need to contain
+/// a multiple of eight bits.
 /// 
 /// You can parse a bit string value out of a constructed value using the
-/// [`take_from`] method. The [`from_content`] method parses the
+/// [`take_from`][Self::take_from] function. The
+/// [`from_content`][Self::from_content] function parses the
 /// content octets of a bit string value and can be used of the bit string is
 /// implcitely tagged. Alternatively, you can create a new simple bit string
-/// via the [`new`] method.
+/// via the [`new`][Self::new] method.
 ///
 /// There are two types of methods for accessing the data in a bit string.
 /// Methods starting with `bit` operate on the individual bits while those
@@ -56,10 +58,6 @@ use crate::tag::Tag;
 ///
 /// At this time, the `BitString` type does not implement the constructed
 /// encoding of a bit string.
-///
-/// [`OctetString`]: ../ostring/struct.OctetString.html
-/// [`take_from`]: #method.take_from
-/// [`from_content`]: #method.from_content
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BitString {
     /// The number of unused bits in the last byte.

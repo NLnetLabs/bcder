@@ -176,25 +176,25 @@ impl Tag {
     //
     //    These will be removed once we can have `ctx` be a const fn.
 
-    /// The tag context specific tag [0].
+    /// The tag context specific tag `[0]`.
     pub const CTX_0: Self = Tag([Tag::CONTEXT_SPECIFIC, 0, 0, 0]);
 
-    /// The tag context specific tag [1].
+    /// The tag context specific tag `[1]`.
     pub const CTX_1: Self = Tag([Tag::CONTEXT_SPECIFIC | 1, 0, 0, 0]);
 
-    /// The tag context specific tag [2].
+    /// The tag context specific tag `[2]`.
     pub const CTX_2: Self = Tag([Tag::CONTEXT_SPECIFIC | 2, 0, 0, 0]);
 
-    /// The tag context specific tag [3].
+    /// The tag context specific tag `[3]`.
     pub const CTX_3: Self = Tag([Tag::CONTEXT_SPECIFIC | 3, 0, 0, 0]);
 
-    /// The tag context specific tag [4].
+    /// The tag context specific tag `[4]`.
     pub const CTX_4: Self = Tag([Tag::CONTEXT_SPECIFIC | 4, 0, 0, 0]);
 
-    /// The tag context specific tag [5].
+    /// The tag context specific tag `[5]`.
     pub const CTX_5: Self = Tag([Tag::CONTEXT_SPECIFIC | 5, 0, 0, 0]);
 
-    /// The tag context specific tag [6].
+    /// The tag context specific tag `[6]`.
     pub const CTX_6: Self = Tag([Tag::CONTEXT_SPECIFIC | 6, 0, 0, 0]);
 }
 

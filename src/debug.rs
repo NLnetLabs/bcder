@@ -20,7 +20,7 @@
 //!
 //! ```rust,ignore
 //! if foo {
-//!     xerr!(return Err(Error::Malformed)));
+//!     xerr!(return Err(Error::Malformed));
 //! }
 //! ```
 
