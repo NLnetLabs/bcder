@@ -223,14 +223,14 @@ impl OctetString {
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.capture(|cons| {
-            while cons.skip_opt(|tag, _, _| {
+            while cons.skip_opt(|tag, _, _|
                 if tag == Tag::OCTET_STRING {
                     Ok(())
                 }
                 else {
                     xerr!(Err(decode::Malformed.into()))
                 }
-            })?.is_some() { }
+            )?.is_some() { }
             Ok(())
         }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
