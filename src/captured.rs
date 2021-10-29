@@ -150,6 +150,7 @@ impl AsRef<[u8]> for Captured {
 
 //--- encode::Values
 
+#[allow(clippy::if_then_panic)] // Don’t follow suggestion for code clarity.
 impl encode::Values for Captured {
     fn encoded_len(&self, mode: Mode) -> usize {
         if self.mode != mode && mode != Mode::Ber {
