@@ -399,11 +399,11 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     /// Drops the captured bytes.
     ///
     /// Advances the underlying source to the end of the captured bytes.
-    #[allow(clippy::if_then_panic)] // Don’t follow for code clarity.
     pub fn skip(self) {
-        if self.source.advance(self.pos).is_err() {
-            panic!("failed to advance capture source");
-        }
+        assert!(
+            !self.source.advance(self.pos).is_err(),
+            "failed to advance capture source"
+        );
     }
 }
 

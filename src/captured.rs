@@ -150,12 +150,12 @@ impl AsRef<[u8]> for Captured {
 
 //--- encode::Values
 
-#[allow(clippy::if_then_panic)] // Don’t follow suggestion for code clarity.
 impl encode::Values for Captured {
     fn encoded_len(&self, mode: Mode) -> usize {
-        if self.mode != mode && mode != Mode::Ber {
-            panic!("Trying to encode a captured value with incompatible mode");
-        }
+        assert!(
+            !(self.mode != mode && mode != Mode::Ber),
+            "Trying to encode a captured value with incompatible mode"
+        );
         self.bytes.len()
     }
 
@@ -164,9 +164,10 @@ impl encode::Values for Captured {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        if self.mode != mode && mode != Mode::Ber {
-            panic!("Trying to encode a captured value with incompatible mode");
-        }
+        assert!(
+            !(self.mode != mode && mode != Mode::Ber),
+            "Trying to encode a captured value with incompatible mode"
+        );
         target.write_all(self.bytes.as_ref())
     }
 }
