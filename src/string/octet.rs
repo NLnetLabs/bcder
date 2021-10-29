@@ -180,6 +180,19 @@ impl OctetString {
         cons.take_value_if(Tag::OCTET_STRING, Self::from_content)
     }
 
+    /// Takes an optional octet string value from constructed value content.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag `Tag::OCTET_STRING`, then `Ok(None)` is returned.
+    ///
+    /// If there is an octet string, but it is not correctly encoded, a
+    /// malformed error is returned.
+    pub fn take_opt_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
+    ) -> Result<Option<Self>, S::Err> {
+        cons.take_opt_value_if(Tag::OCTET_STRING, Self::from_content)
+    }
+
     /// Takes an octet string value from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
@@ -210,14 +223,14 @@ impl OctetString {
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, S::Err> {
         cons.capture(|cons| {
-            while cons.skip_opt(|tag, _, _| {
+            while cons.skip_opt(|tag, _, _|
                 if tag == Tag::OCTET_STRING {
                     Ok(())
                 }
                 else {
                     xerr!(Err(decode::Malformed.into()))
                 }
-            })?.is_some() { }
+            )?.is_some() { }
             Ok(())
         }).map(|captured| OctetString(Inner::Constructed(captured)))
     }
