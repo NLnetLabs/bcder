@@ -8,12 +8,14 @@ New
 
 * `int::Unsigned` can now be created from an arbitrary length big-endian
   representation of an unsigned integer. ([#59])
+* Add `OctetString::take_opt_from`. ([#61])
 
 Bug Fixes
 
 Other Changes
 
 [#59]: https://github.com/NLnetLabs/bcder/pull/59
+[#61]: https://github.com/NLnetLabs/bcder/pull/61
 
 
 ## 0.6.0
