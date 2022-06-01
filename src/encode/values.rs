@@ -206,7 +206,7 @@ impl<V> Constructed<V> {
     ///
     /// The returned value will encode as a single constructed value with
     /// the given tag and whatever `inner` encodeds to as its content.
-    pub fn new(tag: Tag, inner: V) -> Self {
+    pub const fn new(tag: Tag, inner: V) -> Self {
         Constructed { tag, inner }
     }
 }
@@ -336,7 +336,7 @@ pub struct Iter<T>(pub T);
 
 impl<T> Iter<T> {
     /// Creates a new iterator encoder atop `iter`.
-    pub fn new(iter: T) -> Self {
+    pub const fn new(iter: T) -> Self {
         Iter(iter)
     }
 }
@@ -408,7 +408,7 @@ where T: AsRef<[U]>, F: Fn(&U) -> V {
 impl<T, F, U, V> Slice<T, F, U, V>
 where T: AsRef<[U]>, F: Fn(&U) -> V {
     /// Creates a new wrapper for a given value and closure.
-    pub fn new(value: T, f: F) -> Self {
+    pub const fn new(value: T, f: F) -> Self {
         Slice { value, f, marker: PhantomData }
     }
 }
@@ -418,7 +418,7 @@ where T: AsRef<[U]>, F: Fn(&U) -> V {
 /// The function takes a value of a type that can be converted into a slice of
 /// some type and a function that converts references to slice elements into
 /// some encoder.
-pub fn slice<T, F, U, V>(value: T, f: F) -> Slice<T, F, U, V>
+pub const fn slice<T, F, U, V>(value: T, f: F) -> Slice<T, F, U, V>
 where T: AsRef<[U]>, F: Fn(&U) -> V {
     Slice::new(value, f)
 }
@@ -471,7 +471,7 @@ impl Values for Nothing {
 //============ Standard Functions ============================================
 
 /// Returns a value encoder for a SEQUENCE containing `inner`.
-pub fn sequence<V: Values>(inner: V) -> impl Values {
+pub const fn sequence<V: Values>(inner: V) -> Constructed<V> {
     Constructed::new(Tag::SEQUENCE, inner)
 }
 
@@ -479,12 +479,12 @@ pub fn sequence<V: Values>(inner: V) -> impl Values {
 ///
 /// This is identical to `Constructed::new(tag, inner)`. It merely provides a
 /// more memorial name.
-pub fn sequence_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+pub const fn sequence_as<V: Values>(tag: Tag, inner: V) -> Constructed<V> {
     Constructed::new(tag, inner)
 }
 
 /// Returns a value encoder for a SET containing `inner`.
-pub fn set<V: Values>(inner: V) -> impl Values {
+pub const fn set<V: Values>(inner: V) -> Constructed<V> {
     Constructed::new(Tag::SET, inner)
 }
 
@@ -492,7 +492,7 @@ pub fn set<V: Values>(inner: V) -> impl Values {
 ///
 /// This is identical to `Constructed::new(tag, inner)`. It merely provides a
 /// more memorial name.
-pub fn set_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+pub const fn set_as<V: Values>(tag: Tag, inner: V) -> Constructed<V> {
     Constructed::new(tag, inner)
 }
 
