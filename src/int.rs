@@ -629,7 +629,7 @@ builtin_from!(unsigned, Unsigned, u64);
 builtin_from!(unsigned, Unsigned, u128);
 
 
-impl<'a> TryFrom<Bytes> for Unsigned {
+impl TryFrom<Bytes> for Unsigned {
     type Error = InvalidInteger;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
