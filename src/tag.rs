@@ -4,6 +4,7 @@
 
 use std::{fmt, io};
 use crate::decode;
+use crate::decode::Error as _;
 
 
 //------------ Tag -----------------------------------------------------------
@@ -342,7 +343,7 @@ impl Tag {
     /// an error is returned.
     pub fn take_from<S: decode::Source>(
         source: &mut S,
-    ) -> Result<(Self, bool), S::Err> {
+    ) -> Result<(Self, bool), S::Error> {
         let byte = source.take_u8()?;
         // clear constructed bit
         let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
@@ -357,7 +358,9 @@ impl Tag {
         } else {
             return Ok((Tag(data), constructed));
         }
-        xerr!(Err(decode::Error::Unimplemented.into()))
+        Err(S::Error::unimplemented(
+            "tag values longer than 4 bytes not implemented"
+        ))
     }
 
     /// Takes a tag from the beginning of a resource if it matches this tag.
@@ -368,7 +371,7 @@ impl Tag {
     pub fn take_from_if<S: decode::Source>(
         self,
         source: &mut S,
-    ) -> Result<Option<bool>, S::Err> {
+    ) -> Result<Option<bool>, S::Error> {
         if source.request(1)? == 0 {
             return Ok(None)
         }
@@ -380,7 +383,7 @@ impl Tag {
             loop {
                 if source.request(i + 1)? == 0 {
                     // Not enough data for a complete tag.
-                    xerr!(return Err(decode::Error::Malformed.into()))
+                    return Err(S::Error::malformed("short tag value"))
                 }
                 data[i] = source.slice()[i];
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
@@ -388,7 +391,9 @@ impl Tag {
                 }
                 // We don’t support tags larger than 4 bytes.
                 if i == 3 {
-                    xerr!(return Err(decode::Error::Unimplemented.into()))
+                    return Err(S::Error::unimplemented(
+                        "tag values longer than 4 bytes not implemented"
+                    ))
                 }
                 i += 1;
             }
@@ -504,9 +509,12 @@ mod test {
                 let tag = Tag::new(typ, i);
                 let expected = Tag([typ | i as u8, 0, 0, 0]);
                 let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                assert_eq!(
+                    tag.take_from_if(&mut &tag.0[..]).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 // We get the same number back.
@@ -533,9 +541,12 @@ mod test {
                         Tag::SINGLEBYTE_DATA_MASK | typ, i as u8, 0, 0
                 ]);
                 let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                assert_eq!(
+                    tag.take_from_if(&mut &tag.0[..]).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -562,9 +573,12 @@ mod test {
                     0
                 ]);
                 let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                assert_eq!(
+                    tag.take_from_if(&mut &tag.0[..]).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -591,9 +605,12 @@ mod test {
                     i as u8 & !Tag::LAST_OCTET_MASK
                 ]);
                 let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                assert_eq!(
+                    tag.take_from_if(&mut &tag.0[..]).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -607,14 +624,12 @@ mod test {
         let large_tag = [
             0b1111_1111, 0b1000_0000, 0b1000_0000, 0b1000_0000, 0b1000_0000
         ];
-        assert_eq!(
-            Tag::take_from(&mut &large_tag[..]),
-            Err(decode::Error::Unimplemented)
+        assert!(
+            Tag::take_from(&mut &large_tag[..]).is_err()
         );
         let short_tag = [0b1111_1111, 0b1000_0000];
-        assert_eq!(
-            Tag::take_from(&mut &short_tag[..]),
-            Err(decode::Error::Malformed)
+        assert!(
+            Tag::take_from(&mut &short_tag[..]).is_err()
         );
     }
 }

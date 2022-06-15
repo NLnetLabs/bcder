@@ -5,7 +5,7 @@
 use std::io;
 use bytes::Bytes;
 use crate::{decode, encode};
-use crate::decode::Source;
+use crate::decode::{Error as _, Source};
 use crate::length::Length;
 use crate::mode::Mode;
 use crate::tag::Tag;
@@ -129,25 +129,27 @@ impl BitString {
     /// Takes a single bit string value from constructed content.
     pub fn take_from<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         constructed.take_value_if(Tag::BIT_STRING, Self::from_content)
     }
 
     /// Skip over a single bit string value inside constructed content.
     pub fn skip_in<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), S::Error> {
         cons.take_value_if(Tag::BIT_STRING, Self::skip_content)
     }
  
     /// Parses the content octets of a bit string value.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         match *content {
             decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()))
+                    return Err(S::Error::malformed(
+                        "long bit string component in CER mode"
+                    ))
                 }
                 Ok(BitString {
                     unused: inner.take_u8()?,
@@ -156,10 +158,14 @@ impl BitString {
             }
             decode::Content::Constructed(ref inner) => {
                 if inner.mode() == Mode::Der {
-                    xerr!(Err(decode::Error::Malformed.into()))
+                    Err(S::Error::malformed(
+                       "constructed bit string in DER mode"
+                    ))
                 }
                 else {
-                    xerr!(Err(decode::Error::Unimplemented.into()))
+                    Err(S::Error::unimplemented(
+                        "constructed bit string not implemented"
+                    ))
                 }
             }
         }
@@ -168,20 +174,26 @@ impl BitString {
     /// Skips over the content octets of a bit string value.
     pub fn skip_content<S: decode::Source>(
         content: &mut decode::Content<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), S::Error> {
         match *content {
             decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()))
+                    return Err(S::Error::malformed(
+                        "long bit string component in CER mode"
+                    ))
                 }
                 inner.skip_all()
             }
             decode::Content::Constructed(ref inner) => {
                 if inner.mode() == Mode::Der {
-                    xerr!(Err(decode::Error::Malformed.into()))
+                    Err(S::Error::malformed(
+                       "constructed bit string in DER mode"
+                    ))
                 }
                 else {
-                    xerr!(Err(decode::Error::Unimplemented.into()))
+                    Err(S::Error::unimplemented(
+                        "constructed bit string not implemented"
+                    ))
                 }
             }
         }

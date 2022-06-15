@@ -9,7 +9,7 @@
 use std::{fmt, hash, io};
 use bytes::Bytes;
 use crate::{decode, encode};
-use crate::decode::Source;
+use crate::decode::{Error as _, Source};
 use crate::mode::Mode;
 use crate::tag::Tag;
 
@@ -44,7 +44,7 @@ use crate::tag::Tag;
 /// and produces the `u8` array for their encoded value. You can install
 /// this binary via `cargo install ber`.
 #[derive(Clone, Debug)]
-pub struct Oid<T: AsRef<[u8]>=Bytes>(pub T);
+pub struct Oid<T: AsRef<[u8]> = Bytes>(pub T);
 
 /// A type alias for `Oid<&'static [u8]>.
 ///
@@ -62,7 +62,7 @@ impl Oid<Bytes> {
     /// error.
     pub fn skip_in<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), S::Error> {
         cons.take_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
 
@@ -73,7 +73,7 @@ impl Oid<Bytes> {
     /// tag but is not a primitive value, returns a malformed error.
     pub fn skip_opt_in<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Option<()>, S::Err> {
+    ) -> Result<Option<()>, S::Error> {
         cons.take_opt_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
 
@@ -84,7 +84,7 @@ impl Oid<Bytes> {
     /// error.
     pub fn take_from<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         constructed.take_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
         })
@@ -97,7 +97,7 @@ impl Oid<Bytes> {
     /// tag but is not a primitive value, returns a malformed error.
     pub fn take_opt_from<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
-    ) -> Result<Option<Self>, S::Err> {
+    ) -> Result<Option<Self>, S::Error> {
         constructed.take_opt_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
         })
@@ -109,7 +109,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
     pub fn skip_if<S: decode::Source>(
         &self,
         constructed: &mut decode::Constructed<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), S::Error> {
         constructed.take_primitive_if(Tag::OID, |content| {
             let len = content.remaining();
             content.request(len)?;
@@ -118,7 +118,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
                 Ok(())
             }
             else {
-                xerr!(Err(decode::Error::Malformed.into()))
+                Err(S::Error::malformed("object identifier mismatch"))
             }
         })
     }

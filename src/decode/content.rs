@@ -37,7 +37,7 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     /// Checkes that the content has been parsed completely.
     ///
     /// Returns a malformed error if not.
-    fn exhausted(self) -> Result<(), S::Err> {
+    fn exhausted(self) -> Result<(), S::Error> {
         match self {
             Content::Primitive(inner) => inner.exhausted(),
             Content::Constructed(mut inner) => inner.exhausted()
@@ -69,11 +69,13 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     }
 
     /// Converts a reference into into one to a primitive value or errors out.
-    pub fn as_primitive(&mut self) -> Result<&mut Primitive<'a, S>, S::Err> {
+    pub fn as_primitive(
+        &mut self
+    ) -> Result<&mut Primitive<'a, S>, S::Error> {
         match *self {
             Content::Primitive(ref mut inner) => Ok(inner),
             Content::Constructed(_) => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("expected primitive value"))
             }
         }
     }
@@ -81,10 +83,10 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     /// Converts a reference into on to a constructed value or errors out.
     pub fn as_constructed(
         &mut self
-    ) -> Result<&mut Constructed<'a, S>, S::Err> {
+    ) -> Result<&mut Constructed<'a, S>, S::Error> {
         match *self {
             Content::Primitive(_) => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("expected constructed value"))
             }
             Content::Constructed(ref mut inner) => Ok(inner),
         }
@@ -97,12 +99,12 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     ///
     /// If the content is not primitive or does not contain a single BER
     /// encoded INTEGER value between 0 and 256, returns a malformed error.
-    pub fn to_u8(&mut self) -> Result<u8, S::Err> {
+    pub fn to_u8(&mut self) -> Result<u8, S::Error> {
         if let Content::Primitive(ref mut prim) = *self {
             prim.to_u8()
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("expected integer (0..255)"))
         }
     }
 
@@ -111,13 +113,15 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     /// The content needs to be primitive and contain a validly encoded
     /// integer of value `expected` or else a malformed error will be
     /// returned.
-    pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), S::Err> {
+    pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), S::Error> {
         let res = self.to_u8()?;
         if res == expected {
             Ok(())
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed(
+                format!("expected integer {}", expected)
+            ))
         }
     }
 
@@ -125,12 +129,12 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     ///
     /// If the content is not primitive or does not contain a single BER
     /// encoded INTEGER value between 0 and 2^16-1, returns a malformed error.
-    pub fn to_u16(&mut self) -> Result<u16, S::Err> {
+    pub fn to_u16(&mut self) -> Result<u16, S::Error> {
         if let Content::Primitive(ref mut prim) = *self {
             prim.to_u16()
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("expected integer (0..65535)"))
         }
     }
 
@@ -138,12 +142,12 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     ///
     /// If the content is not primitive or does not contain a single BER
     /// encoded INTEGER value between 0 and 2^32-1, returns a malformed error.
-    pub fn to_u32(&mut self) -> Result<u32, S::Err> {
+    pub fn to_u32(&mut self) -> Result<u32, S::Error> {
         if let Content::Primitive(ref mut prim) = *self {
             prim.to_u32()
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("expected integer (0..4294967295)"))
         }
     }
 
@@ -151,12 +155,12 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     ///
     /// If the content is not primitive or does not contain a single BER
     /// encoded INTEGER value between 0 and 2^64-1, returns a malformed error.
-    pub fn to_u64(&mut self) -> Result<u64, S::Err> {
+    pub fn to_u64(&mut self) -> Result<u64, S::Error> {
         if let Content::Primitive(ref mut prim) = *self {
             prim.to_u64()
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("expected integer (0..2**64-1)"))
         }
     }
 
@@ -164,12 +168,12 @@ impl<'a, S: Source + 'a> Content<'a, S> {
     ///
     /// If the content isn’t primitive and contains a single BER encoded
     /// NULL value (i.e., nothing), returns a malformed error.
-    pub fn to_null(&mut self) -> Result<(), S::Err> {
+    pub fn to_null(&mut self) -> Result<(), S::Error> {
         if let Content::Primitive(ref mut prim) = *self {
             prim.to_null()
         }
         else {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("expected NULL"))
         }
     }
 }
@@ -237,14 +241,14 @@ impl<'a, S: 'a> Primitive<'a, S> {
 #[allow(clippy::wrong_self_convention)]
 impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// Parses the primitive value as a BOOLEAN value.
-    pub fn to_bool(&mut self) -> Result<bool, S::Err> {
+    pub fn to_bool(&mut self) -> Result<bool, S::Error> {
         let res = self.take_u8()?;
         if self.mode != Mode::Ber {
             match res {
                 0 => Ok(false),
                 0xFF => Ok(true),
                 _ => {
-                    xerr!(Err(Error::Malformed.into()))
+                    Err(S::Error::malformed("invalid boolean"))
                 }
             }
         }
@@ -254,59 +258,59 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     }
 
     /// Parses the primitive value as an INTEGER limited to a `i8`.
-    pub fn to_i8(&mut self) -> Result<i8, S::Err> {
+    pub fn to_i8(&mut self) -> Result<i8, S::Error> {
         Integer::i8_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `i8`.
-    pub fn to_i16(&mut self) -> Result<i16, S::Err> {
+    pub fn to_i16(&mut self) -> Result<i16, S::Error> {
         Integer::i16_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `i8`.
-    pub fn to_i32(&mut self) -> Result<i32, S::Err> {
+    pub fn to_i32(&mut self) -> Result<i32, S::Error> {
         Integer::i32_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `i8`.
-    pub fn to_i64(&mut self) -> Result<i64, S::Err> {
+    pub fn to_i64(&mut self) -> Result<i64, S::Error> {
         Integer::i64_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `i8`.
-    pub fn to_i128(&mut self) -> Result<i128, S::Err> {
+    pub fn to_i128(&mut self) -> Result<i128, S::Error> {
         Integer::i128_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `u8`.
-    pub fn to_u8(&mut self) -> Result<u8, S::Err> {
+    pub fn to_u8(&mut self) -> Result<u8, S::Error> {
         Unsigned::u8_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `u16`.
-    pub fn to_u16(&mut self) -> Result<u16, S::Err> {
+    pub fn to_u16(&mut self) -> Result<u16, S::Error> {
         Unsigned::u16_from_primitive(self)
     }
 
     /// Parses the primitive value as an INTEGER limited to a `u32`.
-    pub fn to_u32(&mut self) -> Result<u32, S::Err> {
+    pub fn to_u32(&mut self) -> Result<u32, S::Error> {
         Unsigned::u32_from_primitive(self)
     }
 
     /// Parses the primitive value as a INTEGER value limited to a `u64`.
-    pub fn to_u64(&mut self) -> Result<u64, S::Err> {
+    pub fn to_u64(&mut self) -> Result<u64, S::Error> {
         Unsigned::u64_from_primitive(self)
     }
 
     /// Parses the primitive value as a INTEGER value limited to a `u128`.
-    pub fn to_u128(&mut self) -> Result<u64, S::Err> {
+    pub fn to_u128(&mut self) -> Result<u64, S::Error> {
         Unsigned::u64_from_primitive(self)
     }
 
     /// Converts the content octets to a NULL value.
     ///
     /// Since such a value is empty, this doesn’t really do anything.
-    pub fn to_null(&mut self) -> Result<(), S::Err> {
+    pub fn to_null(&mut self) -> Result<(), S::Error> {
         // The rest is taken care of by the exhausted check later ...
         Ok(())
     }
@@ -329,24 +333,24 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     }
 
     /// Skips the rest of the content.
-    pub fn skip_all(&mut self) -> Result<(), S::Err> {
+    pub fn skip_all(&mut self) -> Result<(), S::Error> {
         self.source.skip_all()
     }
 
     /// Returns the remainder of the content as a `Bytes` value.
-    pub fn take_all(&mut self) -> Result<Bytes, S::Err> {
+    pub fn take_all(&mut self) -> Result<Bytes, S::Error> {
         self.source.take_all()
     }
 
     /// Returns a bytes slice of the remainder of the content.
-    pub fn slice_all(&mut self) -> Result<&[u8], S::Err> {
+    pub fn slice_all(&mut self) -> Result<&[u8], S::Error> {
         let remaining = self.remaining();
         self.source.request(remaining)?;
         Ok(&self.source.slice()[..remaining])
     }
 
     /// Checkes whether all content has been advanced over.
-    fn exhausted(self) -> Result<(), S::Err> {
+    fn exhausted(self) -> Result<(), S::Error> {
         self.source.exhausted()
     }
 }
@@ -377,8 +381,12 @@ impl<'a> Primitive<'a, &'a [u8]> {
         source: &'a [u8],
         mode: Mode,
         op: F
-    ) -> Result<T, Error>
-    where F: FnOnce(&mut Primitive<&[u8]>) -> Result<T, Error> {
+    ) -> Result<T, <&'a [u8] as Source>::Error>
+    where
+        F: FnOnce(
+            &mut Primitive<&[u8]>
+        ) -> Result<T, <&'a [u8] as Source>::Error>
+    {
         let mut lim = LimitedSource::new(source);
         lim.set_limit(Some(source.len()));
         let mut prim = Primitive::new(&mut lim, mode);
@@ -392,13 +400,13 @@ impl<'a> Primitive<'a, &'a [u8]> {
 //--- Source
 
 impl<'a, S: Source + 'a> Source for Primitive<'a, S> {
-    type Err = S::Err;
+    type Error = S::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         self.source.request(len)
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         self.source.advance(len)
     }
 
@@ -466,8 +474,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// This function is identical to calling [`Mode::decode`].
     ///
     /// [`Mode::decode`]: ../enum.Mode.html#method.decode
-    pub fn decode<F, T>(source: S, mode: Mode, op: F) -> Result<T, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    pub fn decode<F, T>(source: S, mode: Mode, op: F) -> Result<T, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         let mut source = LimitedSource::new(source);
         let mut cons = Constructed::new(&mut source, State::Unbounded, mode);
         let res = op(&mut cons)?;
@@ -494,7 +502,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// For a value of definite length, this is the case when the limit of the
     /// source has been reached. For indefinite values, we need to have either
     /// already read or can now read the end-of-value marker.
-    fn exhausted(&mut self) -> Result<(), S::Err> {
+    fn exhausted(&mut self) -> Result<(), S::Error> {
         match self.state {
             State::Done => Ok(()),
             State::Definite => {
@@ -505,7 +513,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                 if tag != Tag::END_OF_VALUE || constructed
                     || !Length::take_from(self.source, self.mode)?.is_zero()
                 {
-                    xerr!(Err(Error::Malformed.into()))
+                    Err(S::Error::malformed("unexpected trailing values"))
                 }
                 else {
                     Ok(())
@@ -546,8 +554,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Option<Tag>,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Error> {
         if self.is_exhausted() {
             return Ok(None)
         }
@@ -568,16 +576,22 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         if tag == Tag::END_OF_VALUE {
             if let State::Indefinite = self.state {
                 if constructed {
-                    xerr!(return Err(Error::Malformed.into()))
+                    return Err(S::Error::malformed(
+                        "constructed end of value"
+                    ))
                 }
                 if !length.is_zero() {
-                    xerr!(return Err(Error::Malformed.into()))
+                    return Err(S::Error::malformed(
+                        "non-empty end of value"
+                    ))
                 }
                 self.state = State::Done;
                 return Ok(None)
             }
             else {
-                xerr!(return Err(Error::Malformed.into()))
+                return Err(S::Error::malformed(
+                    "unexpected end of value"
+                ))
             }
         }
 
@@ -589,7 +603,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                         // Definite length constructed values are not allowed
                         // in CER.
                         if self.mode == Mode::Cer {
-                            xerr!(return Err(Error::Malformed.into()))
+                            return Err(S::Error::malformed(
+                                "definite length constructed in CER mode"
+                            ))
                         }
                         Content::Constructed(
                             Constructed::new(
@@ -611,10 +627,14 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             }
             Length::Indefinite => {
                 if !constructed || self.mode == Mode::Der {
-                    xerr!(return Err(Error::Malformed.into()))
+                    return Err(S::Error::malformed(
+                        "indefinite length constructed in DER mode"
+                    ))
                 }
                 let mut content = Content::Constructed(
-                    Constructed::new(self.source, State::Indefinite, self.mode)
+                    Constructed::new(
+                        self.source, State::Indefinite, self.mode
+                    )
                 );
                 let res = op(tag, &mut content)?;
                 content.exhausted()?;
@@ -638,12 +658,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// method returns a malformed error if there isn’t at least one more
     /// value available. It also returns an error if the closure returns one
     /// or if reading from the source fails.
-    pub fn take_value<F, T>(&mut self, op: F) -> Result<T, S::Err>
-    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Err> {
+    pub fn take_value<F, T>(&mut self, op: F) -> Result<T, S::Error>
+    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Error> {
         match self.process_next_value(None, op)? {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("missing futher values"))
             }
         }
     }
@@ -658,8 +678,10 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// If there are no more values available, the method returns `Ok(None)`.
     /// It returns an error if the closure returns one or if reading from
     /// the source fails.
-    pub fn take_opt_value<F, T>(&mut self, op: F) -> Result<Option<T>, S::Err>
-    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Err> {
+    pub fn take_opt_value<F, T>(
+        &mut self, op: F
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(Tag, &mut Content<S>) -> Result<T, S::Error> {
         self.process_next_value(None, op)
     }
 
@@ -677,15 +699,17 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<T, S::Err>
-    where F: FnOnce(&mut Content<S>) -> Result<T, S::Err> {
+    ) -> Result<T, S::Error>
+    where F: FnOnce(&mut Content<S>) -> Result<T, S::Error> {
         let res = self.process_next_value(Some(expected), |_, content| {
             op(content)
         })?;
         match res {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed(
+                    format!("expected tag {}", expected)
+                ))
             }
         }
     }
@@ -704,8 +728,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(&mut Content<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(&mut Content<S>) -> Result<T, S::Error> {
         self.process_next_value(Some(expected), |_, content| op(content))
     }
 
@@ -719,12 +743,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// value or if the closure doesn’t process the next value completely,
     /// a malformed error is returned. An error is also returned if the
     /// closure returns one or if accessing the underlying source fails.
-    pub fn take_constructed<F, T>(&mut self, op: F) -> Result<T, S::Err>
-    where F: FnOnce(Tag, &mut Constructed<S>) -> Result<T, S::Err> {
+    pub fn take_constructed<F, T>(&mut self, op: F) -> Result<T, S::Error>
+    where F: FnOnce(Tag, &mut Constructed<S>) -> Result<T, S::Error> {
         match self.take_opt_constructed(op)? {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("missing futher values"))
             }
         }
     }
@@ -745,8 +769,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     pub fn take_opt_constructed<F, T>(
         &mut self,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(Tag, &mut Constructed<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(Tag, &mut Constructed<S>) -> Result<T, S::Error> {
         self.process_next_value(None, |tag, content| {
             op(tag, content.as_constructed()?)
         })
@@ -768,12 +792,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<T, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    ) -> Result<T, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         match self.take_opt_constructed_if(expected, op)? {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("missing futher values"))
             }
         }
     }
@@ -796,8 +820,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         self.process_next_value(Some(expected), |_, content| {
             op(content.as_constructed()?)
         })
@@ -813,12 +837,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// reached, or if the closure fails to process the next value’s content
     /// fully, a malformed error is returned. An error is also returned if
     /// the closure returns one or if accessing the underlying source fails.
-    pub fn take_primitive<F, T>(&mut self, op: F) -> Result<T, S::Err>
-    where F: FnOnce(Tag, &mut Primitive<S>) -> Result<T, S::Err> {
+    pub fn take_primitive<F, T>(&mut self, op: F) -> Result<T, S::Error>
+    where F: FnOnce(Tag, &mut Primitive<S>) -> Result<T, S::Error> {
         match self.take_opt_primitive(op)? {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("missing futher values"))
             }
         }
     }
@@ -837,8 +861,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     pub fn take_opt_primitive<F, T>(
         &mut self,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(Tag, &mut Primitive<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(Tag, &mut Primitive<S>) -> Result<T, S::Error> {
         self.process_next_value(None, |tag, content| {
             op(tag, content.as_primitive()?)
         })
@@ -858,12 +882,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<T, S::Err>
-    where F: FnOnce(&mut Primitive<S>) -> Result<T, S::Err> {
+    ) -> Result<T, S::Error>
+    where F: FnOnce(&mut Primitive<S>) -> Result<T, S::Error> {
         match self.take_opt_primitive_if(expected, op)? {
             Some(res) => Ok(res),
             None => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("missing futher values"))
             }
         }
     }
@@ -883,8 +907,8 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         &mut self,
         expected: Tag,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(&mut Primitive<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(&mut Primitive<S>) -> Result<T, S::Error> {
         self.process_next_value(Some(expected), |_, content| {
             op(content.as_primitive()?)
         })
@@ -902,11 +926,11 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// If the closure returns an error, this error is returned.
     ///
     /// [`Captured`]: ../captures/struct.Captured.html
-    pub fn capture<F>(&mut self, op: F) -> Result<Captured, S::Err>
+    pub fn capture<F>(&mut self, op: F) -> Result<Captured, S::Error>
     where
         F: FnOnce(
             &mut Constructed<CaptureSource<LimitedSource<S>>>
-        ) -> Result<(), S::Err>
+        ) -> Result<(), S::Error>
     {
         let limit = self.source.limit();
         let mut source = LimitedSource::new(CaptureSource::new(self.source));
@@ -930,12 +954,12 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// to the underlying source fails, an appropriate error is returned.
     ///
     /// [`Captured`]: ../captures/struct.Captured.html
-    pub fn capture_one(&mut self) -> Result<Captured, S::Err> {
+    pub fn capture_one(&mut self) -> Result<Captured, S::Error> {
         self.capture(|cons| {
             match cons.skip_one()? {
                 Some(()) => Ok(()),
                 None => {
-                    xerr!(Err(Error::Malformed.into()))
+                    Err(S::Error::malformed("missing futher values"))
                 }
             }
         })
@@ -945,13 +969,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// The method takes all remaining values from this value’s content and
     /// returns their encoded form in a `Bytes` value.
-    pub fn capture_all(&mut self) -> Result<Captured, S::Err> {
+    pub fn capture_all(&mut self) -> Result<Captured, S::Error> {
         self.capture(|cons| cons.skip_all())
     }
 
     /// Skips over content.
-    pub fn skip_opt<F>(&mut self, mut op: F) -> Result<Option<()>, S::Err>
-    where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
+    pub fn skip_opt<F>(&mut self, mut op: F) -> Result<Option<()>, S::Error>
+    where F: FnMut(Tag, bool, usize) -> Result<(), S::Error> {
         // If we already know we are at the end of the value, we can return.
         if self.is_exhausted() {
             return Ok(None)
@@ -970,7 +994,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             if !constructed {
                 if tag == Tag::END_OF_VALUE {
                     if length != Length::Definite(0) {
-                        xerr!(return Err(Error::Malformed.into()))
+                        return Err(S::Error::malformed(
+                            "non-empty end of value"
+                        ))
                     }
 
                     // End-of-value: The top of the stack needs to be an
@@ -989,36 +1015,47 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                                 return Ok(None)
                             }
                             else {
-                                xerr!(return Err(Error::Malformed.into()))
+                                return Err(S::Error::malformed(
+                                    "invalid nested values"
+                                ))
                             }
                         }
-                        _ => xerr!(return Err(Error::Malformed.into()))
+                        _ => {
+                            return Err(S::Error::malformed(
+                                "invalid nested values"
+                            ))
+                        }
                     }
                 }
                 else {
                     // Primitive value. Check for the length to be definite,
-                    // check that the caller likes it, then try to read over it.
+                    // check that the caller likes it, then try to read over
+                    // it.
                     if let Length::Definite(len) = length {
                         op(tag, constructed, stack.len())?;
                         self.source.advance(len)?;
                     }
                     else {
-                        xerr!(return Err(Error::Malformed.into()));
+                        return Err(S::Error::malformed(
+                            "primitive value with indefinite length"
+                        ))
                     }
                 }
             }
             else if let Length::Definite(len) = length {
-                // Definite constructed value. First check if the caller likes
-                // it. Check that there is enough limit left for the value. If
-                // so, push the limit at the end of the value to the stack,
-                // update the limit to our length, and continue.
+                // Definite constructed value. First check if the caller
+                // likes it. Check that there is enough limit left for the
+                // value. If so, push the limit at the end of the value to
+                // the stack, update the limit to our length, and continue.
                 op(tag, constructed, stack.len())?;
                 stack.push(Some(match self.source.limit() {
                     Some(limit) => {
                         match limit.checked_sub(len) {
                             Some(len) => Some(len),
                             None => {
-                                xerr!(return Err(Error::Malformed.into()));
+                                return Err(S::Error::malformed(
+                                    "invalid nested values"
+                                ));
                             }
                         }
                     }
@@ -1051,7 +1088,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                         Some(None) => {
                             // We need a End-of-value, so running out of
                             // data is an error.
-                            xerr!(return Err(Error::Malformed.into()));
+                            return Err(S::Error::malformed(
+                                "missing futher values"
+                            ))
                         }
                         None => unreachable!(),
                     }
@@ -1064,10 +1103,10 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         }
     }
 
-    pub fn skip<F>(&mut self, op: F) -> Result<(), S::Err>
-    where F: FnMut(Tag, bool, usize) -> Result<(), S::Err> {
+    pub fn skip<F>(&mut self, op: F) -> Result<(), S::Error>
+    where F: FnMut(Tag, bool, usize) -> Result<(), S::Error> {
         if self.skip_opt(op)? == None {
-            xerr!(Err(Error::Malformed.into()))
+            Err(S::Error::malformed("missing futher values"))
         }
         else {
             Ok(())
@@ -1075,7 +1114,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     }
 
     /// Skips over all remaining content.
-    pub fn skip_all(&mut self) -> Result<(), S::Err> {
+    pub fn skip_all(&mut self) -> Result<(), S::Error> {
         while let Some(()) = self.skip_one()? { }
         Ok(())
     }
@@ -1084,7 +1123,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If there is a next value, returns `Ok(Some(()))`, if the end of value
     /// has already been reached, returns `Ok(None)`.
-    pub fn skip_one(&mut self) -> Result<Option<()>, S::Err> {
+    pub fn skip_one(&mut self) -> Result<Option<()>, S::Error> {
         if self.is_exhausted() {
             Ok(None)
         }
@@ -1103,22 +1142,22 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 /// encoding.
 impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// Processes and returns a mandatory boolean value.
-    pub fn take_bool(&mut self) -> Result<bool, S::Err> {
+    pub fn take_bool(&mut self) -> Result<bool, S::Error> {
         self.take_primitive_if(Tag::BOOLEAN, |prim| prim.to_bool())
     }
 
     /// Processes and returns an optional boolean value.
-    pub fn take_opt_bool(&mut self) -> Result<Option<bool>, S::Err> {
+    pub fn take_opt_bool(&mut self) -> Result<Option<bool>, S::Error> {
         self.take_opt_primitive_if(Tag::BOOLEAN, |prim| prim.to_bool())
     }
 
     /// Processes a mandatory NULL value.
-    pub fn take_null(&mut self) -> Result<(), S::Err> {
+    pub fn take_null(&mut self) -> Result<(), S::Error> {
         self.take_primitive_if(Tag::NULL, |_| Ok(())).map(|_| ())
     }
 
     /// Processes an optional NULL value.
-    pub fn take_opt_null(&mut self) -> Result<(), S::Err> {
+    pub fn take_opt_null(&mut self) -> Result<(), S::Error> {
         self.take_opt_primitive_if(Tag::NULL, |_| Ok(())).map(|_| ())
     }
 
@@ -1126,7 +1165,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 255, a malformed
     /// error is returned.
-    pub fn take_u8(&mut self) -> Result<u8, S::Err> {
+    pub fn take_u8(&mut self) -> Result<u8, S::Error> {
         self.take_primitive_if(Tag::INTEGER, |prim| prim.to_u8())
     }
 
@@ -1134,7 +1173,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 255, a malformed
     /// error is returned.
-    pub fn take_opt_u8(&mut self) -> Result<Option<u8>, S::Err> {
+    pub fn take_opt_u8(&mut self) -> Result<Option<u8>, S::Error> {
         self.take_opt_primitive_if(Tag::INTEGER, |prim| prim.to_u8())
     }
 
@@ -1142,11 +1181,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the next value is an integer but of a different value, returns
     /// a malformed error.
-    pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), S::Err> {
+    pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), S::Error> {
         self.take_primitive_if(Tag::INTEGER, |prim| {
             let got = prim.take_u8()?;
             if got != expected {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed(
+                    format!("expected integer {}", expected)
+                ))
             }
             else {
                 Ok(())
@@ -1158,11 +1199,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the next value is an integer but of a different value, returns
     /// a malformed error.
-    pub fn skip_opt_u8_if(&mut self, expected: u8) -> Result<(), S::Err> {
+    pub fn skip_opt_u8_if(&mut self, expected: u8) -> Result<(), S::Error> {
         self.take_opt_primitive_if(Tag::INTEGER, |prim| {
             let got = prim.take_u8()?;
             if got != expected {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed(
+                    format!("expected integer {}", expected)
+                ))
             }
             else {
                 Ok(())
@@ -1172,17 +1215,17 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 
     /// Processes a mandatory INTEGER value of the `u16` range.
     ///
-    /// If the integer value is less than 0 or greater than 65535, a malformed
-    /// error is returned.
-    pub fn take_u16(&mut self) -> Result<u16, S::Err> {
+    /// If the integer value is less than 0 or greater than 65535, a
+    /// malformed error is returned.
+    pub fn take_u16(&mut self) -> Result<u16, S::Error> {
         self.take_primitive_if(Tag::INTEGER, |prim| prim.to_u16())
     }
 
     /// Processes an optional INTEGER value of the `u16` range.
     ///
-    /// If the integer value is less than 0 or greater than 65535, a malformed
-    /// error is returned.
-    pub fn take_opt_u16(&mut self) -> Result<Option<u16>, S::Err> {
+    /// If the integer value is less than 0 or greater than 65535, a
+    /// malformed error is returned.
+    pub fn take_opt_u16(&mut self) -> Result<Option<u16>, S::Error> {
         self.take_opt_primitive_if(Tag::INTEGER, |prim| prim.to_u16())
     }
 
@@ -1190,7 +1233,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 2^32-1, a
     /// malformed error is returned.
-    pub fn take_u32(&mut self) -> Result<u32, S::Err> {
+    pub fn take_u32(&mut self) -> Result<u32, S::Error> {
         self.take_primitive_if(Tag::INTEGER, |prim| prim.to_u32())
     }
 
@@ -1198,7 +1241,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 2^32-1, a
     /// malformed error is returned.
-    pub fn take_opt_u32(&mut self) -> Result<Option<u32>, S::Err> {
+    pub fn take_opt_u32(&mut self) -> Result<Option<u32>, S::Error> {
         self.take_opt_primitive_if(Tag::INTEGER, |prim| prim.to_u32())
     }
 
@@ -1206,7 +1249,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 2^64-1, a
     /// malformed error is returned.
-    pub fn take_u64(&mut self) -> Result<u64, S::Err> {
+    pub fn take_u64(&mut self) -> Result<u64, S::Error> {
         self.take_primitive_if(Tag::INTEGER, |prim| prim.to_u64())
     }
 
@@ -1214,42 +1257,45 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     ///
     /// If the integer value is less than 0 or greater than 2^64-1, a
     /// malformed error is returned.
-    pub fn take_opt_u64(&mut self) -> Result<Option<u64>, S::Err> {
+    pub fn take_opt_u64(&mut self) -> Result<Option<u64>, S::Error> {
         self.take_opt_primitive_if(Tag::INTEGER, |prim| prim.to_u64())
     }
 
     /// Processes a mandatory SEQUENCE value.
     ///
     /// This is a shortcut for `self.take_constructed(Tag::SEQUENCE, op)`.
-    pub fn take_sequence<F, T>(&mut self, op: F) -> Result<T, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    pub fn take_sequence<F, T>(&mut self, op: F) -> Result<T, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         self.take_constructed_if(Tag::SEQUENCE, op)
     }
 
     /// Processes an optional SEQUENCE value.
     ///
-    /// This is a shortcut for `self.take_opt_constructed(Tag::SEQUENCE, op)`.
+    /// This is a shortcut for
+    /// `self.take_opt_constructed(Tag::SEQUENCE, op)`.
     pub fn take_opt_sequence<F, T>(
         &mut self,
         op: F
-    ) -> Result<Option<T>, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         self.take_opt_constructed_if(Tag::SEQUENCE, op)
     }
 
     /// Processes a mandatory SET value.
     ///
     /// This is a shortcut for `self.take_constructed(Tag::SET, op)`.
-    pub fn take_set<F, T>(&mut self, op: F) -> Result<T, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    pub fn take_set<F, T>(&mut self, op: F) -> Result<T, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         self.take_constructed_if(Tag::SET, op)
     }
 
     /// Processes an optional SET value.
     ///
     /// This is a shortcut for `self.take_opt_constructed(Tag::SET, op)`.
-    pub fn take_opt_set<F, T>(&mut self, op: F) -> Result<Option<T>, S::Err>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Err> {
+    pub fn take_opt_set<F, T>(
+        &mut self, op: F
+    ) -> Result<Option<T>, S::Error>
+    where F: FnOnce(&mut Constructed<S>) -> Result<T, S::Error> {
         self.take_opt_constructed_if(Tag::SET, op)
     }
 }

@@ -90,11 +90,13 @@ impl Captured {
     /// The method consumes the value. If you want to keep it around, simply
     /// clone it first. Since bytes values are cheap to clone, this is
     /// relatively cheap.
-    pub fn decode<F, T>(self, op: F) -> Result<T, decode::Error>
+    pub fn decode<F, T>(
+        self, op: F
+    ) -> Result<T, <Bytes as decode::Source>::Error>
     where
         F: FnOnce(
             &mut decode::Constructed<Bytes>
-        ) -> Result<T, decode::Error>
+        ) -> Result<T, <Bytes as decode::Source>::Error>
     {
         self.mode.decode(self.bytes, op)
     }
@@ -104,11 +106,13 @@ impl Captured {
     /// The method calls `op` to parse a number of values from the beginning
     /// of the value and then advances the content of the captured value until
     /// after the end of these decoded values.
-    pub fn decode_partial<F, T>(&mut self, op: F) -> Result<T, decode::Error>
+    pub fn decode_partial<F, T>(
+        &mut self, op: F
+    ) -> Result<T, <Bytes as decode::Source>::Error>
     where
         F: FnOnce(
             &mut decode::Constructed<&mut Bytes>
-        ) -> Result<T, decode::Error>
+        ) -> Result<T, <Bytes as decode::Source>::Error>
     {
         self.mode.decode(&mut self.bytes, op)
     }

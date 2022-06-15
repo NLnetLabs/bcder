@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use bytes::Bytes;
 use crate::{decode, encode};
+use crate::decode::Error as _;
 use crate::tag::Tag;
 use super::octet::{OctetString, OctetStringIter, OctetStringOctets};
 
@@ -158,16 +159,16 @@ impl<L: CharSet> RestrictedString<L> {
     /// returned.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         cons.take_value_if(L::TAG, Self::from_content)
     }
 
     /// Takes a character set from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         let os = OctetString::from_content(content)?;
-        Self::new(os).map_err(|_| decode::Error::Malformed.into())
+        Self::new(os).map_err(|_| S::Error::malformed("invalid character"))
     }
 
     /// Returns a value encoder for the character string with the natural tag.

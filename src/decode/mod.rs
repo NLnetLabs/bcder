@@ -31,8 +31,8 @@
 
 pub use self::content::{Content, Constructed, Primitive};
 pub use self::error::Error;
-pub use self::error::Error::{Malformed, Unimplemented};
 pub use self::source::{CaptureSource, LimitedSource, Source};
+pub(crate) use self::source::MemorySourceError;
 
 mod content;
 mod error;

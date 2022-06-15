@@ -3,7 +3,7 @@
 //! This is an internal module. It’s public types are re-exported by the
 //! parent.
 
-use std::mem;
+use std::{error, fmt, mem};
 use std::cmp::min;
 use bytes::Bytes;
 use super::error::Error;
@@ -25,14 +25,7 @@ use super::error::Error;
 /// types, we would appreciate feedback what worked well and what didn’t.
 pub trait Source {
     /// The error produced by the source.
-    ///
-    /// The type used here needs to wrap [`ber::decode::Error`] and extends it
-    /// by whatever happens if acquiring additional data fails. If `Source`
-    /// is implemented for types where this acqusition cannot fail,
-    /// `ber::decode::Error` should be used here.
-    ///
-    /// [`ber::decode::Error`]: enum.Error.html
-    type Err: From<Error>;
+    type Error: Error;
 
     /// Request at least `len` bytes to be available.
     ///
@@ -42,21 +35,18 @@ pub trait Source {
     ///
     /// The method should only return an error if the source somehow fails
     /// to get more data such as an IO error or reset connection.
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err>;
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error>;
 
     /// Advance the source by `len` bytes.
     ///
     /// The method advances the start of the view provided by the source by
     /// `len` bytes. Advancing beyond the end of a source is an error.
-    /// Implementations should return their equivalient of
-    /// [`Error::Malformed`].
     ///
     /// The value of `len` may be larger than the last length previously
     /// request via [`request`].
     ///
-    /// [`Error::Malformed`]: enum.Error.html#variant.Malformed
     /// [`request`]: #tymethod.request
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err>;
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error>;
 
     /// Returns a bytes slice with the available data.
     ///
@@ -90,9 +80,9 @@ pub trait Source {
     ///
     /// If there aren’t any more octets available from the source, returns
     /// a malformed error.
-    fn take_u8(&mut self) -> Result<u8, Self::Err> {
+    fn take_u8(&mut self) -> Result<u8, Self::Error> {
         if self.request(1)? < 1 {
-            xerr!(return Err(Error::Malformed.into()))
+            return Err(Self::Error::malformed("unexpected end of data"))
         }
         let res = self.slice()[0];
         self.advance(1)?;
@@ -103,7 +93,7 @@ pub trait Source {
     ///
     /// If there aren’t any more octets available from the source, returns
     /// `Ok(None)`.
-    fn take_opt_u8(&mut self) -> Result<Option<u8>, Self::Err> {
+    fn take_opt_u8(&mut self) -> Result<Option<u8>, Self::Error> {
         if self.request(1)? < 1 {
             return Ok(None)
         }
@@ -114,15 +104,15 @@ pub trait Source {
 }
 
 impl Source for Bytes {
-    type Err = Error;
+    type Error = MemorySourceError;
 
-    fn request(&mut self, _len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
         Ok(self.len())
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         if len > self.len() {
-            Err(Error::Malformed)
+            Err(Self::Error::malformed("unexpected end of data"))
         }
         else {
             bytes::Buf::advance(self, len);
@@ -140,15 +130,15 @@ impl Source for Bytes {
 }
 
 impl<'a> Source for &'a [u8] {
-    type Err = Error;
+    type Error = MemorySourceError;
 
-    fn request(&mut self, _len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
         Ok(self.len())
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         if len > self.len() {
-            Err(Error::Malformed)
+            Err(Self::Error::malformed("unexpected end of data"))
         }
         else {
             *self = &self[len..];
@@ -166,13 +156,13 @@ impl<'a> Source for &'a [u8] {
 }
 
 impl<'a, T: Source> Source for &'a mut T {
-    type Err = T::Err;
+    type Error = T::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         Source::request(*self, len)
     }
     
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         Source::advance(*self, len)
     }
 
@@ -273,7 +263,7 @@ impl<S: Source> LimitedSource<S> {
     /// If there currently is no limit, the method will panic. Otherwise it
     /// will simply advance to the end of the limit which may be something
     /// the underlying source doesn’t like and thus produce an error.
-    pub fn skip_all(&mut self) -> Result<(), S::Err> {
+    pub fn skip_all(&mut self) -> Result<(), S::Error> {
         let limit = self.limit.unwrap();
         self.advance(limit)
     }
@@ -284,10 +274,10 @@ impl<S: Source> LimitedSource<S> {
     /// tries to acquire a bytes value for the octets from the current
     /// position to the end of the limit and advance to the end of the limit.
     /// This may result in an error by the underlying source.
-    pub fn take_all(&mut self) -> Result<Bytes, S::Err> {
+    pub fn take_all(&mut self) -> Result<Bytes, S::Error> {
         let limit = self.limit.unwrap();
         if self.request(limit)? < limit {
-            return Err(Error::Malformed.into())
+            return Err(S::Error::malformed("unexpected end of data"))
         }
         let res = self.bytes(0, limit);
         self.advance(limit)?;
@@ -303,18 +293,18 @@ impl<S: Source> LimitedSource<S> {
     /// If there is no limit set, the method will try to access one single
     /// octet and return a malformed error if that is actually possible, i.e.,
     /// if there are octets left in the underlying source.
-    pub fn exhausted(&mut self) -> Result<(), S::Err> {
+    pub fn exhausted(&mut self) -> Result<(), S::Error> {
         match self.limit {
             Some(0) => Ok(()),
             Some(_limit) => {
-                xerr!(Err(Error::Malformed.into()))
+                Err(S::Error::malformed("trailing data"))
             }
             None => {
                 if self.source.request(1)? == 0 {
                     Ok(())
                 }
                 else {
-                    xerr!(Err(Error::Malformed.into()))
+                    Err(S::Error::malformed("trailing data"))
                 }
             }
         }
@@ -322,9 +312,9 @@ impl<S: Source> LimitedSource<S> {
 }
 
 impl<S: Source> Source for LimitedSource<S> {
-    type Err = S::Err;
+    type Error = S::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         if let Some(limit) = self.limit {
             Ok(min(limit, self.source.request(min(limit, len))?))
         }
@@ -333,10 +323,10 @@ impl<S: Source> Source for LimitedSource<S> {
         }
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         if let Some(limit) = self.limit {
             if len > limit {
-                xerr!(return Err(Error::Malformed.into()))
+                return Err(Self::Error::malformed("unexpected end of data"))
             }
             self.limit = Some(limit - len);
         }
@@ -401,22 +391,22 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     /// Advances the underlying source to the end of the captured bytes.
     pub fn skip(self) {
         assert!(
-            !self.source.advance(self.pos).is_err(),
+            self.source.advance(self.pos).is_ok(),
             "failed to advance capture source"
         );
     }
 }
 
 impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
-    type Err = S::Err;
+    type Error = S::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         self.source.request(self.pos + len).map(|res| res - self.pos)
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) -> Result<(), Self::Error> {
         if self.request(len)? < len {
-            return Err(Error::Malformed.into())
+            return Err(Self::Error::malformed("unexpected end of data"))
         }
         self.pos += len;
         Ok(())
@@ -432,6 +422,70 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
 }
 
 
+//------------ MemorySourceError ---------------------------------------------
+
+/// An error type for sources that read data from memory only.
+pub struct MemorySourceError {
+    kind: ErrorKind,
+    msg: Option<Box<dyn fmt::Display + Send + Sync>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ErrorKind {
+    Malformed,
+    Unimplemented,
+}
+
+impl Error for MemorySourceError {
+    fn malformed<T: fmt::Display + Send + Sync + 'static>(
+        msg: T
+    ) -> Self {
+        MemorySourceError {
+            kind: ErrorKind::Malformed,
+            msg: Some(Box::new(msg))
+        }
+    }
+
+    fn unimplemented<T: fmt::Display + Send + Sync + 'static>(
+        msg: T
+    ) -> Self {
+        MemorySourceError {
+            kind: ErrorKind::Unimplemented,
+            msg: Some(Box::new(msg))
+        }
+    }
+}
+
+impl fmt::Debug for MemorySourceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = f.debug_struct("MemorySourceError");
+        let s = s.field("kind", &self.kind);
+        let s = if let Some(msg) = self.msg.as_ref() {
+            s.field("msg", &format_args!("Some({})", msg))
+        }
+        else {
+            s.field("msg", &format_args!("None"))
+        };
+        s.finish()
+    }
+}
+
+impl fmt::Display for MemorySourceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.kind {
+            ErrorKind::Malformed => write!(f, "malformed data")?,
+            ErrorKind::Unimplemented => write!(f, "format not implemented")?,
+        }
+        if let Some(msg) = self.msg.as_ref() {
+            write!(f, ": {}", msg)?;
+        }
+        Ok(())
+    }
+}
+
+impl error::Error for MemorySourceError { }
+
+
 //============ Tests =========================================================
 
 #[cfg(test)]
@@ -441,19 +495,19 @@ mod test {
     #[test]
     fn take_u8() {
         let mut source = &b"123"[..];
-        assert_eq!(source.take_u8(), Ok(b'1'));
-        assert_eq!(source.take_u8(), Ok(b'2'));
-        assert_eq!(source.take_u8(), Ok(b'3'));
-        assert_eq!(source.take_u8(), Err(Error::Malformed));
+        assert_eq!(source.take_u8().unwrap(), b'1');
+        assert_eq!(source.take_u8().unwrap(), b'2');
+        assert_eq!(source.take_u8().unwrap(), b'3');
+        assert!(source.take_u8().is_err())
     }
 
     #[test]
     fn take_opt_u8() {
         let mut source = &b"123"[..];
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'1')));
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'2')));
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'3')));
-        assert_eq!(source.take_opt_u8(), Ok(None));
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'1'));
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'2'));
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'3'));
+        assert_eq!(source.take_opt_u8().unwrap(), None);
     }
 
     #[test]
@@ -467,11 +521,8 @@ mod test {
         assert!(&Source::slice(&bytes)[..4] == b"5678");
         Source::advance(&mut bytes, 4).unwrap();
         assert_eq!(bytes.request(4).unwrap(), 2);
-        assert!(&Source::slice(&bytes)[..] == b"90");
-        assert_eq!(
-            Source::advance(&mut bytes, 4).unwrap_err(),
-            Error::Malformed
-        );
+        assert!(&Source::slice(&bytes) == b"90");
+        assert!(Source::advance(&mut bytes, 4).is_err());
     }
 
     #[test]
@@ -485,11 +536,8 @@ mod test {
         assert!(&Source::slice(&bytes)[..4] == b"5678");
         Source::advance(&mut bytes, 4).unwrap();
         assert_eq!(bytes.request(4).unwrap(), 2);
-        assert!(&Source::slice(&bytes)[..] == b"90");
-        assert_eq!(
-            Source::advance(&mut bytes, 4).unwrap_err(),
-            Error::Malformed
-        );
+        assert!(&Source::slice(&bytes) == b"90");
+        assert!(Source::advance(&mut bytes, 4).is_err());
     }
 
     #[test]
@@ -498,19 +546,19 @@ mod test {
         the_source.set_limit(Some(4));
 
         let mut source = the_source.clone();
-        assert_eq!(source.exhausted(), Err(Error::Malformed));
+        assert!(source.exhausted().is_err());
         assert_eq!(source.request(6).unwrap(), 4);
         source.advance(2).unwrap();
-        assert_eq!(source.exhausted(), Err(Error::Malformed));
+        assert!(source.exhausted().is_err());
         assert_eq!(source.request(6).unwrap(), 2);
         source.advance(2).unwrap();
         source.exhausted().unwrap();
         assert_eq!(source.request(6).unwrap(), 0);
         source.advance(0).unwrap();
-        assert_eq!(source.advance(2).unwrap_err(), Error::Malformed);
+        assert!(source.advance(2).is_err());
 
         let mut source = the_source.clone();
-        assert_eq!(source.advance(5).unwrap_err(), Error::Malformed);
+        assert!(source.advance(5).is_err());
 
         let mut source = the_source.clone();
         source.skip_all().unwrap();

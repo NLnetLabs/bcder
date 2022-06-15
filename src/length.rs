@@ -4,6 +4,7 @@
 
 use std::io;
 use crate::decode;
+use crate::decode::Error as _;
 use crate::mode::Mode;
 
 
@@ -55,7 +56,7 @@ impl Length {
     pub fn take_from<S: decode::Source>(
         source: &mut S,
         mode: Mode
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, S::Error> {
         match source.take_u8()? {
             // Bit 7 clear: other bits are the length
             n if (n & 0x80) == 0 => Ok(Length::Definite(n as usize)),
@@ -70,7 +71,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(S::Error::malformed("invalid length"))
                 }
             }
             0x82 => {
@@ -81,7 +82,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(S::Error::malformed("invalid length"))
                 }
             }
             0x83 => {
@@ -93,7 +94,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(S::Error::malformed("invalid length"))
                 }
             }
             0x84 => {
@@ -106,12 +107,14 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(S::Error::malformed("invalid length"))
                 }
             }
             _ => {
                 // We only implement up to two length bytes for now.
-                Err(decode::Error::Unimplemented.into())
+                Err(S::Error::unimplemented(
+                    "lengths over 4 bytes not implemented"
+                ))
             }
         }
     }

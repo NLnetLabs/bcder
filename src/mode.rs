@@ -50,10 +50,10 @@ impl Mode {
     /// by this value. The closure `op` will be given the content of the
     /// source as a sequence of values. The closure does not need to process
     /// all values in the source.
-    pub fn decode<S, F, T>(self, source: S, op: F) -> Result<T, S::Err>
+    pub fn decode<S, F, T>(self, source: S, op: F) -> Result<T, S::Error>
     where
         S: decode::Source,
-        F: FnOnce(&mut decode::Constructed<S>) -> Result<T, S::Err>
+        F: FnOnce(&mut decode::Constructed<S>) -> Result<T, S::Error>
     {
         decode::Constructed::decode(source, self, op)
     }
