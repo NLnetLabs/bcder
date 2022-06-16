@@ -427,7 +427,7 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
 /// An error type for sources that read data from memory only.
 pub struct MemorySourceError {
     kind: ErrorKind,
-    msg: Option<Box<dyn fmt::Display + Send + Sync>>,
+    msg: Box<dyn fmt::Display + Send + Sync>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -442,7 +442,7 @@ impl Error for MemorySourceError {
     ) -> Self {
         MemorySourceError {
             kind: ErrorKind::Malformed,
-            msg: Some(Box::new(msg))
+            msg: Box::new(msg)
         }
     }
 
@@ -451,22 +451,24 @@ impl Error for MemorySourceError {
     ) -> Self {
         MemorySourceError {
             kind: ErrorKind::Unimplemented,
-            msg: Some(Box::new(msg))
+            msg: Box::new(msg)
+        }
+    }
+
+    fn convert_into<E: Error>(self) -> E {
+        match self.kind {
+            ErrorKind::Malformed => E::malformed(self.msg),
+            ErrorKind::Unimplemented => E::unimplemented(self.msg),
         }
     }
 }
 
 impl fmt::Debug for MemorySourceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut s = f.debug_struct("MemorySourceError");
-        let s = s.field("kind", &self.kind);
-        let s = if let Some(msg) = self.msg.as_ref() {
-            s.field("msg", &format_args!("Some({})", msg))
-        }
-        else {
-            s.field("msg", &format_args!("None"))
-        };
-        s.finish()
+        f.debug_struct("MemorySourceError")
+            .field("kind", &self.kind)
+            .field("msg", &format_args!("{}", &self.msg))
+            .finish()
     }
 }
 
@@ -476,10 +478,7 @@ impl fmt::Display for MemorySourceError {
             ErrorKind::Malformed => write!(f, "malformed data")?,
             ErrorKind::Unimplemented => write!(f, "format not implemented")?,
         }
-        if let Some(msg) = self.msg.as_ref() {
-            write!(f, ": {}", msg)?;
-        }
-        Ok(())
+        write!(f, ": {}", self.msg)
     }
 }
 

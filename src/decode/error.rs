@@ -30,5 +30,8 @@ pub trait Error: Sized + error::Error {
     fn unimplemented<T: fmt::Display + Send + Sync + 'static>(
         msg: T
     ) -> Self;
+
+    /// Converts the error into a different decoding error.
+    fn convert_into<E: Error>(self) -> E;
 }
 
