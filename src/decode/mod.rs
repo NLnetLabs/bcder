@@ -31,8 +31,9 @@
 
 pub use self::content::{Content, Constructed, Primitive};
 pub use self::error::Error;
-pub use self::source::{CaptureSource, LimitedSource, Source};
-pub(crate) use self::source::MemorySourceError;
+pub use self::source::{
+    CaptureSource, LimitedSource, MemorySourceError, Source
+};
 
 mod content;
 mod error;
