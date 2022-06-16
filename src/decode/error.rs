@@ -17,7 +17,7 @@ use std::{error, fmt};
 /// For the latter case, i.e., the encoded data did not conform with the
 /// specification, the method [`Error::malformed`] can be used to provide
 /// additional information.
-pub trait Error: Sized + error::Error {
+pub trait Error: error::Error + From<ContentError> + Sized {
     /// Returns an error signalling that decode wasn’t correctly encoded.
     fn malformed<T: fmt::Display + Send + Sync + 'static>(
         msg: T
