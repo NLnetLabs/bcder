@@ -3,10 +3,10 @@
 //! This is an internal module. It’s public types are re-exported by the
 //! parent.
 
-use std::{error, fmt, mem};
+use std::mem;
 use std::cmp::min;
 use bytes::Bytes;
-use super::error::Error;
+use super::error::{ContentError, Error};
 
 
 //------------ Source --------------------------------------------------------
@@ -104,7 +104,7 @@ pub trait Source {
 }
 
 impl Source for Bytes {
-    type Error = MemorySourceError;
+    type Error = ContentError;
 
     fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
         Ok(self.len())
@@ -130,7 +130,7 @@ impl Source for Bytes {
 }
 
 impl<'a> Source for &'a [u8] {
-    type Error = MemorySourceError;
+    type Error = ContentError;
 
     fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
         Ok(self.len())
@@ -420,69 +420,6 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
         self.source.bytes(start + self.pos, end + self.pos)
     }
 }
-
-
-//------------ MemorySourceError ---------------------------------------------
-
-/// An error type for sources that read data from memory only.
-pub struct MemorySourceError {
-    kind: ErrorKind,
-    msg: Box<dyn fmt::Display + Send + Sync>,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum ErrorKind {
-    Malformed,
-    Unimplemented,
-}
-
-impl Error for MemorySourceError {
-    fn malformed<T: fmt::Display + Send + Sync + 'static>(
-        msg: T
-    ) -> Self {
-        MemorySourceError {
-            kind: ErrorKind::Malformed,
-            msg: Box::new(msg)
-        }
-    }
-
-    fn unimplemented<T: fmt::Display + Send + Sync + 'static>(
-        msg: T
-    ) -> Self {
-        MemorySourceError {
-            kind: ErrorKind::Unimplemented,
-            msg: Box::new(msg)
-        }
-    }
-
-    fn convert_into<E: Error>(self) -> E {
-        match self.kind {
-            ErrorKind::Malformed => E::malformed(self.msg),
-            ErrorKind::Unimplemented => E::unimplemented(self.msg),
-        }
-    }
-}
-
-impl fmt::Debug for MemorySourceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MemorySourceError")
-            .field("kind", &self.kind)
-            .field("msg", &format_args!("{}", &self.msg))
-            .finish()
-    }
-}
-
-impl fmt::Display for MemorySourceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.kind {
-            ErrorKind::Malformed => write!(f, "malformed data")?,
-            ErrorKind::Unimplemented => write!(f, "format not implemented")?,
-        }
-        write!(f, ": {}", self.msg)
-    }
-}
-
-impl error::Error for MemorySourceError { }
 
 
 //============ Tests =========================================================

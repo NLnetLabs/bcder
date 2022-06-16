@@ -30,10 +30,8 @@
 //! [`Source`]: trait.Source.html
 
 pub use self::content::{Content, Constructed, Primitive};
-pub use self::error::Error;
-pub use self::source::{
-    CaptureSource, LimitedSource, MemorySourceError, Source
-};
+pub use self::error::{ContentError, Error};
+pub use self::source::{CaptureSource, LimitedSource, Source};
 
 mod content;
 mod error;

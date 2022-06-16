@@ -547,7 +547,7 @@ impl OctetStringSource {
 }
 
 impl decode::Source for OctetStringSource {
-    type Error = decode::MemorySourceError;
+    type Error = decode::ContentError;
 
     fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         if self.current.len() < len && !self.remainder.is_empty() {
@@ -573,7 +573,7 @@ impl decode::Source for OctetStringSource {
             self.current = match self.next_primitive() {
                 Some(value) => value,
                 None => {
-                    return Err(decode::MemorySourceError::malformed(
+                    return Err(decode::ContentError::malformed(
                         "short string"
                     ))
                 }
