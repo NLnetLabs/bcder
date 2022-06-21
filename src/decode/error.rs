@@ -83,6 +83,12 @@ impl From<String> for ErrorMessage {
     }
 }
 
+impl<T: Error + Send + Sync + 'static> From<T> for ErrorMessage {
+    fn from(err: T) -> Self {
+        Self::from_boxed(Box::new(err))
+    }
+}
+
 impl fmt::Display for ErrorMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.inner {
