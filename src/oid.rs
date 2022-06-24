@@ -8,8 +8,8 @@
 
 use std::{fmt, hash, io};
 use bytes::Bytes;
-use crate::{decode, encode};
-use crate::decode::Source;
+use crate::encode;
+use crate::decode::{Constructed, DecodeError, Source};
 use crate::mode::Mode;
 use crate::tag::Tag;
 
@@ -44,7 +44,7 @@ use crate::tag::Tag;
 /// and produces the `u8` array for their encoded value. You can install
 /// this binary via `cargo install ber`.
 #[derive(Clone, Debug)]
-pub struct Oid<T: AsRef<[u8]>=Bytes>(pub T);
+pub struct Oid<T: AsRef<[u8]> = Bytes>(pub T);
 
 /// A type alias for `Oid<&'static [u8]>.
 ///
@@ -60,9 +60,9 @@ impl Oid<Bytes> {
     /// If the source has reached its end, if the next value does not have
     /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
     /// error.
-    pub fn skip_in<S: decode::Source>(
-        cons: &mut decode::Constructed<S>
-    ) -> Result<(), S::Err> {
+    pub fn skip_in<S: Source>(
+        cons: &mut Constructed<S>
+    ) -> Result<(), DecodeError<S::Error>> {
         cons.take_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
 
@@ -71,9 +71,9 @@ impl Oid<Bytes> {
     /// If the source has reached its end of if the next value does not have
     /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
     /// tag but is not a primitive value, returns a malformed error.
-    pub fn skip_opt_in<S: decode::Source>(
-        cons: &mut decode::Constructed<S>
-    ) -> Result<Option<()>, S::Err> {
+    pub fn skip_opt_in<S: Source>(
+        cons: &mut Constructed<S>
+    ) -> Result<Option<()>, DecodeError<S::Error>> {
         cons.take_opt_primitive_if(Tag::OID, |prim| prim.skip_all())
     }
 
@@ -82,9 +82,9 @@ impl Oid<Bytes> {
     /// If the source has reached its end, if the next value does not have
     /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
     /// error.
-    pub fn take_from<S: decode::Source>(
-        constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    pub fn take_from<S: Source>(
+        constructed: &mut Constructed<S>
+    ) -> Result<Self, DecodeError<S::Error>> {
         constructed.take_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
         })
@@ -95,9 +95,9 @@ impl Oid<Bytes> {
     /// If the source has reached its end of if the next value does not have
     /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
     /// tag but is not a primitive value, returns a malformed error.
-    pub fn take_opt_from<S: decode::Source>(
-        constructed: &mut decode::Constructed<S>
-    ) -> Result<Option<Self>, S::Err> {
+    pub fn take_opt_from<S: Source>(
+        constructed: &mut Constructed<S>
+    ) -> Result<Option<Self>, DecodeError<S::Error>> {
         constructed.take_opt_primitive_if(Tag::OID, |content| {
             content.take_all().map(Oid)
         })
@@ -106,10 +106,9 @@ impl Oid<Bytes> {
 
 impl<T: AsRef<[u8]>> Oid<T> {
     /// Skip over an object identifier if it matches `self`.
-    pub fn skip_if<S: decode::Source>(
-        &self,
-        constructed: &mut decode::Constructed<S>
-    ) -> Result<(), S::Err> {
+    pub fn skip_if<S: Source>(
+        &self, constructed: &mut Constructed<S>,
+    ) -> Result<(), DecodeError<S::Error>> {
         constructed.take_primitive_if(Tag::OID, |content| {
             let len = content.remaining();
             content.request(len)?;
@@ -118,7 +117,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
                 Ok(())
             }
             else {
-                xerr!(Err(decode::Error::Malformed.into()))
+                Err(content.content_err("object identifier mismatch"))
             }
         })
     }
@@ -177,7 +176,7 @@ impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
         //     I can’t be bothered to figure out how to convert a seven
         //     bit integer into decimal.
         let mut components = self.iter();
-        // There’s at least one and it is always an valid u32.
+        // There’s at least one and it is always a valid u32.
         write!(f, "{}", components.next().unwrap().to_u32().unwrap())?;
         for component in components {
             if let Some(val) = component.to_u32() {

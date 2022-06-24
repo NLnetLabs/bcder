@@ -49,6 +49,7 @@
 //! # use bcder::{Oid, OctetString};
 //! use bcder::Tag;
 //! use bcder::decode;
+//! use bcder::decode::DecodeError;
 //!
 //! # pub struct EncapsulatedContentInfo {
 //! #     content_type: Oid,
@@ -58,7 +59,7 @@
 //! impl EncapsulatedContentInfo {
 //!     pub fn take_from<S: decode::Source>(
 //!         cons: &mut decode::Constructed<S>
-//!     ) -> Result<Self, S::Err> {
+//!     ) -> Result<Self, DecodeError<S::Error>> {
 //!         cons.take_sequence(|cons| {
 //!             Ok(EncapsulatedContentInfo {
 //!                 content_type: Oid::take_from(cons)?,
@@ -89,6 +90,7 @@
 //! # use bcder::{Oid, OctetString};
 //! use bcder::Tag;
 //! use bcder::decode;
+//! use bcder::decode::DecodeError;
 //!
 //! # pub struct EncapsulatedContentInfo {
 //! #     content_type: Oid,
@@ -98,7 +100,7 @@
 //! impl EncapsulatedContentInfo {
 //!     pub fn from_constructed<S: decode::Source>(
 //!         cons: &mut decode::Constructed<S>
-//!     ) -> Result<Self, S::Err> {
+//!     ) -> Result<Self, DecodeError<S::Error>> {
 //!         Ok(EncapsulatedContentInfo {
 //!             content_type: Oid::take_from(cons)?,
 //!             content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {

@@ -3,7 +3,7 @@
 //! This is a private module. Its public tiems are re-exported by the parent.
 
 use std::io;
-use crate::decode;
+use crate::decode::{DecodeError, Source};
 use crate::mode::Mode;
 
 
@@ -52,10 +52,10 @@ pub enum Length {
 
 impl Length {
     /// Takes a length value from the beginning of a source.
-    pub fn take_from<S: decode::Source>(
+    pub fn take_from<S: Source>(
         source: &mut S,
         mode: Mode
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         match source.take_u8()? {
             // Bit 7 clear: other bits are the length
             n if (n & 0x80) == 0 => Ok(Length::Definite(n as usize)),
@@ -70,7 +70,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(source.content_err("invalid length"))
                 }
             }
             0x82 => {
@@ -81,7 +81,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(source.content_err("invalid length"))
                 }
             }
             0x83 => {
@@ -93,7 +93,7 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(source.content_err("invalid length"))
                 }
             }
             0x84 => {
@@ -106,12 +106,14 @@ impl Length {
                     Ok(Length::Definite(len))
                 }
                 else {
-                    Err(decode::Error::Malformed.into())
+                    Err(source.content_err("invalid length"))
                 }
             }
             _ => {
                 // We only implement up to two length bytes for now.
-                Err(decode::Error::Unimplemented.into())
+                Err(source.content_err(
+                    "lengths over 4 bytes not implemented"
+                ))
             }
         }
     }

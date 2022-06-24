@@ -13,11 +13,11 @@
 //! [`Integer`]: struct.Integer.html
 //! [`Unsigned`]: struct.Unsigned.html
 
-use std::{cmp, fmt, hash, io, mem};
+use std::{cmp, error, fmt, hash, io, mem};
 use std::convert::TryFrom;
 use bytes::Bytes;
 use crate::decode;
-use crate::decode::Source;
+use crate::decode::{DecodeError, Source};
 use crate::encode::PrimitiveContent;
 use crate::mode::Mode;
 use crate::tag::Tag;
@@ -35,7 +35,7 @@ macro_rules! slice_to_builtin {
     ( signed, $slice:expr, $type:ident, $err:expr) => {{
         const LEN: usize = mem::size_of::<$type>();
         if $slice.len() > LEN {
-            Err($err)
+            $err
         }
         else {
             // Start with all zeros if positive or all 0xFF if negative
@@ -55,7 +55,7 @@ macro_rules! slice_to_builtin {
         // out if the sign bit is set.
         const LEN: usize = mem::size_of::<$type>();
         if $slice[0] & 0x80 != 0 {
-            Err($err)
+            $err
         }
         else {
             let val = if $slice[0] == 0 { &$slice[1..] }
@@ -64,7 +64,7 @@ macro_rules! slice_to_builtin {
                 Ok(0)
             }
             else if val.len() > LEN {
-                Err($err)
+                $err
             }
             else {
                 let mut res =  [0; LEN];
@@ -81,7 +81,8 @@ macro_rules! decode_builtin {
         let res = {
             let slice = $prim.slice_all()?;
             slice_to_builtin!(
-                $flavor, slice, $type, decode::Malformed.into()
+                $flavor, slice, $type,
+                Err($prim.content_err("invalid integer"))
             )?
         };
         $prim.skip_all()?;
@@ -108,7 +109,7 @@ macro_rules! builtin_from {
 
             fn try_from(val: &'a $from) -> Result<$to, Self::Error> {
                 let val = val.as_slice();
-                slice_to_builtin!($flavor, val, $to, OverflowError(()))
+                slice_to_builtin!($flavor, val, $to, Err(OverflowError(())))
             }
         }
 
@@ -161,24 +162,24 @@ impl Integer {
     /// a correctly encoded signed integer.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         cons.take_primitive_if(Tag::INTEGER, Self::from_primitive)
     }
 
     /// Constructs a signed integer from the content of a primitive value.
     pub fn from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         let res = prim.take_all()?;
-        match (res.get(0), res.get(1).map(|x| x & 0x80 != 0)) {
+        match (res.first(), res.get(1).map(|x| x & 0x80 != 0)) {
             (Some(0), Some(false)) => {
-                xerr!(return Err(decode::Error::Malformed.into()))
+                return Err(prim.content_err("invalid integer"))
             }
             (Some(0xFF), Some(true)) => {
-                xerr!(return Err(decode::Error::Malformed.into()))
+                return Err(prim.content_err("invalid integer"))
             }
             (None, _) => {
-                xerr!(return Err(decode::Error::Malformed.into()))
+                return Err(prim.content_err("invalid integer"))
             }
             _ => { }
         }
@@ -188,7 +189,7 @@ impl Integer {
     /// Constructs an `i8` from the content of a primitive value.
     pub fn i8_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<i8, S::Err> {
+    ) -> Result<i8, DecodeError<S::Error>> {
         Self::check_head(prim)?;
         prim.take_u8().map(|x| x as i8)
     }
@@ -196,28 +197,28 @@ impl Integer {
     /// Constructs an `i16` from the content of a primitive value.
     pub fn i16_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<i16, S::Err> {
+    ) -> Result<i16, DecodeError<S::Error>> {
         decode_builtin!(signed, prim, i16)
     }
 
     /// Constructs an `i32` from the content of a primitive value.
     pub fn i32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<i32, S::Err> {
+    ) -> Result<i32, DecodeError<S::Error>> {
         decode_builtin!(signed, prim, i32)
     }
 
     /// Constructs an `i64` from the content of a primitive value.
     pub fn i64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<i64, S::Err> {
+    ) -> Result<i64, DecodeError<S::Error>> {
         decode_builtin!(signed, prim, i64)
     }
 
     /// Constructs an `i128` from the content of a primitive value.
     pub fn i128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<i128, S::Err> {
+    ) -> Result<i128, DecodeError<S::Error>> {
         decode_builtin!(signed, prim, i128)
     }
 
@@ -232,17 +233,17 @@ impl Integer {
     /// for equality comparision.
     fn check_head<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), DecodeError<S::Error>> {
         if prim.request(2)? == 0 {
-            xerr!(return Err(decode::Error::Malformed.into()))
+            return Err(prim.content_err("invalid integer"))
         }
         let slice = prim.slice();
-        match (slice.get(0), slice.get(1).map(|x| x & 0x80 != 0)) {
+        match (slice.first(), slice.get(1).map(|x| x & 0x80 != 0)) {
             (Some(0), Some(false)) => {
-                xerr!(Err(decode::Error::Malformed.into()))
+                Err(prim.content_err("invalid integer"))
             }
             (Some(0xFF), Some(true)) => {
-                xerr!(Err(decode::Error::Malformed.into()))
+                Err(prim.content_err("invalid integer"))
             }
             _ => Ok(())
         }
@@ -450,8 +451,8 @@ impl Unsigned {
     ///
     /// # Errors
     ///
-    /// Will return `Error::Malformed` if the given slice is empty.
-    pub fn from_slice(slice: &[u8]) -> Result<Self, crate::decode::Error> {
+    /// Will return a malformed error if the given slice is empty.
+    pub fn from_slice(slice: &[u8]) -> Result<Self, InvalidInteger> {
         Self::from_bytes(Bytes::copy_from_slice(slice))
     }
 
@@ -459,14 +460,16 @@ impl Unsigned {
     ///
     /// # Errors
     ///
-    /// Will return `Error::Malformed` if the given Bytes value is empty.
-    pub fn from_bytes(bytes: Bytes) -> Result<Self, crate::decode::Error> {
+    /// Will return a malformed error if the given slice is empty.
+    pub fn from_bytes(bytes: Bytes) -> Result<Self, InvalidInteger> {
         if bytes.is_empty() {
-            return Err(crate::decode::Error::Malformed);
+            return Err(InvalidInteger(()))
         }
 
         // Skip any leading zero bytes.
-        let num_leading_zero_bytes = bytes.as_ref().iter().take_while(|&&b| b == 0x00).count();
+        let num_leading_zero_bytes = bytes.as_ref().iter().take_while(|&&b| {
+            b == 0x00
+        }).count();
         let value = bytes.slice(num_leading_zero_bytes..);
 
         // Create a new Unsigned integer from the given value bytes, ensuring
@@ -490,39 +493,39 @@ impl Unsigned {
 
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         cons.take_primitive_if(Tag::INTEGER, Self::from_primitive)
     }
 
     pub fn from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         Self::check_head(prim)?;
         Integer::from_primitive(prim).map(Unsigned)
     }
 
     pub fn u8_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<u8, S::Err> {
+    ) -> Result<u8, DecodeError<S::Error>> {
         Self::check_head(prim)?;
         match prim.remaining() {
             1 => prim.take_u8(), // sign bit has been checked above.
             2 => {
                 // First byte must be 0x00, second is the result.
                 if prim.take_u8()? != 0 {
-                    xerr!(Err(decode::Malformed.into()))
+                    Err(prim.content_err("invalid integer"))
                 }
                 else {
                     prim.take_u8()
                 }
             }
-            _ => xerr!(Err(decode::Malformed.into()))
+            _ => Err(prim.content_err("invalid integer"))
         }
     }
 
     pub fn u16_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<u16, S::Err> {
+    ) -> Result<u16, DecodeError<S::Error>> {
         Self::check_head(prim)?;
         match prim.remaining() {
             1 => Ok(prim.take_u8()?.into()),
@@ -534,7 +537,7 @@ impl Unsigned {
             }
             3 => {
                 if prim.take_u8()? != 0 {
-                    xerr!(return Err(decode::Malformed.into()));
+                    return Err(prim.content_err("invalid integer"))
                 }
                 let res = {
                     u16::from(prim.take_u8()?) << 8 |
@@ -542,34 +545,31 @@ impl Unsigned {
                 };
                 if res < 0x8000 {
                     // This could have been in fewer bytes.
-                    Err(decode::Malformed.into())
+                    Err(prim.content_err("invalid integer"))
                 }
                 else {
                     Ok(res)
                 }
             }
-            _ => xerr!(Err(decode::Malformed.into()))
+            _ => Err(prim.content_err("invalid integer"))
         }
     }
 
     pub fn u32_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<u32, S::Err> {
-        Self::check_head(prim)?;
+    ) -> Result<u32, DecodeError<S::Error>> {
         decode_builtin!(unsigned, prim, u32)
     }
 
     pub fn u64_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<u64, S::Err> {
-        Self::check_head(prim)?;
+    ) -> Result<u64, DecodeError<S::Error>> {
         decode_builtin!(unsigned, prim, u64)
     }
 
     pub fn u128_from_primitive<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<u128, S::Err> {
-        Self::check_head(prim)?;
+    ) -> Result<u128, DecodeError<S::Error>> {
         decode_builtin!(unsigned, prim, u128)
     }
 
@@ -579,10 +579,10 @@ impl Unsigned {
     /// sign bit is not set.
     fn check_head<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<(), S::Err> {
+    ) -> Result<(), DecodeError<S::Error>> {
         Integer::check_head(prim)?;
-        if prim.slice().get(0).unwrap() & 0x80 != 0 {
-            xerr!(Err(decode::Error::Malformed.into()))
+        if prim.slice().first().unwrap() & 0x80 != 0 {
+            Err(prim.content_err("invalid integer"))
         }
         else {
             Ok(())
@@ -626,8 +626,8 @@ builtin_from!(unsigned, Unsigned, u64);
 builtin_from!(unsigned, Unsigned, u128);
 
 
-impl<'a> TryFrom<Bytes> for Unsigned {
-    type Error = crate::decode::Error;
+impl TryFrom<Bytes> for Unsigned {
+    type Error = InvalidInteger;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         Unsigned::from_bytes(value)
@@ -674,6 +674,21 @@ impl<'a> PrimitiveContent for &'a Unsigned {
 }
 
 
+//------------ InvalidInteger ------------------------------------------------
+
+/// A octets slice does not contain a validly encoded integer.
+#[derive(Clone, Copy, Debug)]
+pub struct InvalidInteger(());
+
+impl fmt::Display for InvalidInteger {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid integer")
+    }
+}
+
+impl error::Error for InvalidInteger { }
+
+
 //------------ OverflowError -------------------------------------------------
 
 #[derive(Clone, Copy, Debug)]
@@ -684,6 +699,8 @@ impl fmt::Display for OverflowError {
         write!(f, "integer out of range")
     }
 }
+
+impl error::Error for OverflowError { }
 
 
 //============ Tests =========================================================
@@ -709,15 +726,15 @@ mod test {
         let pos = [0xF7, 0xF744, 0xF74402];
 
         for &i in &neg {
-            assert_eq!(Integer::from(i).is_positive(), false, "{}", i);
-            assert_eq!(Integer::from(i).is_negative(), true, "{}", i);
+            assert!(!Integer::from(i).is_positive(), "{}", i);
+            assert!(Integer::from(i).is_negative(), "{}", i);
         }
         for &i in &pos {
-            assert_eq!(Integer::from(i).is_positive(), true, "{}", i);
-            assert_eq!(Integer::from(i).is_negative(), false, "{}", i);
+            assert!(Integer::from(i).is_positive(), "{}", i);
+            assert!(!Integer::from(i).is_negative(), "{}", i);
         }
-        assert_eq!(Integer::from(0).is_positive(), false);
-        assert_eq!(Integer::from(0).is_negative(), false);
+        assert!(!Integer::from(0).is_positive());
+        assert!(!Integer::from(0).is_negative());
     }
 
     #[test]
@@ -750,12 +767,11 @@ mod test {
             ).unwrap(),
             0x7f
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x80".as_ref(), Mode::Der,
                 |prim| Unsigned::u8_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
         assert_eq!(
             Primitive::decode_slice(
@@ -786,19 +802,17 @@ mod test {
             ).unwrap(),
             0xA234
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\xA2\x34".as_ref(), Mode::Der,
                 |prim| Unsigned::u16_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x00\x12\x34".as_ref(), Mode::Der,
                 |prim| Unsigned::u16_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
 
         assert_eq!(
@@ -836,19 +850,17 @@ mod test {
             ).unwrap(),
             0xA2345678
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x00\x12\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u32_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\xa2\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u32_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
 
         assert_eq!(
@@ -872,19 +884,17 @@ mod test {
             ).unwrap(),
             0xa234567812345678
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\0\x12\x34\x56\x78\x12\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u64_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x30\x12\x34\x56\x78\x12\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u64_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
 
         assert_eq!(
@@ -910,21 +920,19 @@ mod test {
             ).unwrap(),
             0xa2345678123456781234567812345678
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\0\x12\x34\x56\x78\x12\x34\x56\x78
                 \x12\x34\x56\x78\x12\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u128_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x30\x12\x34\x56\x78\x12\x34\x56\x78
                 \x12\x34\x56\x78\x12\x34\x56\x78".as_ref(), Mode::Der,
                 |prim| Unsigned::u128_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
     }
 
@@ -944,19 +952,17 @@ mod test {
             ).unwrap(),
             -1
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x00\xFF".as_ref(), Mode::Der,
                 |prim| Integer::i8_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x40\xFF".as_ref(), Mode::Der,
                 |prim| Integer::i8_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
 
         assert_eq!(
@@ -980,19 +986,17 @@ mod test {
             ).unwrap(),
             -32513
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x80\xFF\x32".as_ref(), Mode::Der,
                 |prim| Integer::i16_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
-        assert_eq!(
+        assert!(
             Primitive::decode_slice(
                 b"\x00\xFF\x32".as_ref(), Mode::Der,
                 |prim| Integer::i16_from_primitive(prim)
-            ).unwrap_err(),
-            decode::Malformed
+            ).is_err()
         );
 
         assert_eq!(
@@ -1140,28 +1144,66 @@ mod test {
  
     #[test]
     fn encode_variable_length_unsigned_from_slice() {
-        assert_eq!(Unsigned::from_slice(&[]), Err(crate::decode::Error::Malformed));
+        assert!(Unsigned::from_slice(&[]).is_err());
         test_der(&Unsigned::from_slice(&[0xFF]).unwrap(), b"\x00\xFF");
         test_der(&Unsigned::from_slice(&[0x00, 0xFF]).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::from_slice(&[0x00, 0x00, 0xFF]).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::from_slice(&[0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+        test_der(
+            &Unsigned::from_slice(&[0x00, 0x00, 0xFF]).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::from_slice(
+                &[0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]
+            ).unwrap(),
+            b"\x00\xDE\xAD\xBE\xEF"
+        );
     }
 
     #[test]
     fn encode_variable_length_unsigned_from_bytes() {
-        assert_eq!(Unsigned::from_bytes(Bytes::new()), Err(crate::decode::Error::Malformed));
-        test_der(&Unsigned::from_bytes(Bytes::from(vec![0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0x00, 0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::from_bytes(Bytes::from(vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF])).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+        assert!(Unsigned::from_bytes(Bytes::new()).is_err());
+        test_der(
+            &Unsigned::from_bytes(Bytes::from(vec![0xFF])).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::from_bytes(Bytes::from(vec![0x00, 0xFF])).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::from_bytes(Bytes::from(
+                vec![0x00, 0x00, 0xFF])
+            ).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::from_bytes(Bytes::from(
+                vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]
+            )).unwrap(),
+            b"\x00\xDE\xAD\xBE\xEF"
+        );
     }
 
     #[test]
     fn encode_variable_length_unsigned_try_from_bytes() {
-        assert_eq!(Unsigned::try_from(Bytes::new()), Err(crate::decode::Error::Malformed));
-        test_der(&Unsigned::try_from(Bytes::from(vec![0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0x00, 0xFF])).unwrap(), b"\x00\xFF");
-        test_der(&Unsigned::try_from(Bytes::from(vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF])).unwrap(), b"\x00\xDE\xAD\xBE\xEF");
+        assert!(Unsigned::try_from(Bytes::new()).is_err());
+        test_der(
+            &Unsigned::try_from(Bytes::from(vec![0xFF])).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::try_from(Bytes::from(vec![0x00, 0xFF])).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::try_from(Bytes::from(vec![0x00, 0x00, 0xFF])).unwrap(),
+            b"\x00\xFF"
+        );
+        test_der(
+            &Unsigned::try_from(Bytes::from(
+                    vec![0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]
+            )).unwrap(),
+            b"\x00\xDE\xAD\xBE\xEF"
+        );
     }
 }

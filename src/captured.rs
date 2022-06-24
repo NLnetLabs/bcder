@@ -2,9 +2,10 @@
 //!
 //! This is a private module. Its public items are re-exported by the parent.
 
-use std::{fmt, io, ops};
+use std::{fmt, io, mem, ops};
 use bytes::{Bytes, BytesMut};
 use crate::{decode, encode};
+use crate::decode::{BytesSource, DecodeError, IntoSource};
 use crate::mode::Mode;
 
 
@@ -90,13 +91,15 @@ impl Captured {
     /// The method consumes the value. If you want to keep it around, simply
     /// clone it first. Since bytes values are cheap to clone, this is
     /// relatively cheap.
-    pub fn decode<F, T>(self, op: F) -> Result<T, decode::Error>
+    pub fn decode<F, T>(
+        self, op: F
+    ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     where
         F: FnOnce(
-            &mut decode::Constructed<Bytes>
-        ) -> Result<T, decode::Error>
+            &mut decode::Constructed<BytesSource>
+        ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     {
-        self.mode.decode(self.bytes, op)
+        self.mode.decode(self.bytes.into_source(), op)
     }
 
     /// Decodes the beginning of the content of the captured value.
@@ -104,13 +107,20 @@ impl Captured {
     /// The method calls `op` to parse a number of values from the beginning
     /// of the value and then advances the content of the captured value until
     /// after the end of these decoded values.
-    pub fn decode_partial<F, T>(&mut self, op: F) -> Result<T, decode::Error>
+    pub fn decode_partial<F, T>(
+        &mut self, op: F
+    ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     where
         F: FnOnce(
-            &mut decode::Constructed<&mut Bytes>
-        ) -> Result<T, decode::Error>
+            &mut decode::Constructed<&mut BytesSource>
+        ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     {
-        self.mode.decode(&mut self.bytes, op)
+        let mut source = mem::replace(
+            &mut self.bytes, Bytes::new()
+        ).into_source();
+        let res = self.mode.decode(&mut source, op);
+        self.bytes = source.into_bytes();
+        res
     }
 
     /// Trades the value for a bytes value with the raw data.

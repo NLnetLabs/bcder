@@ -3,6 +3,7 @@
 //! This is a private module. It’s public items are re-exported by the parent.
 
 use crate::decode;
+use crate::decode::DecodeError;
 
 
 //------------ Mode ----------------------------------------------------------
@@ -50,10 +51,14 @@ impl Mode {
     /// by this value. The closure `op` will be given the content of the
     /// source as a sequence of values. The closure does not need to process
     /// all values in the source.
-    pub fn decode<S, F, T>(self, source: S, op: F) -> Result<T, S::Err>
+    pub fn decode<S, F, T>(
+        self, source: S, op: F,
+    ) -> Result<T, DecodeError<S::Error>>
     where
         S: decode::Source,
-        F: FnOnce(&mut decode::Constructed<S>) -> Result<T, S::Err>
+        F: FnOnce(
+            &mut decode::Constructed<S>
+        ) -> Result<T, DecodeError<S::Error>>,
     {
         decode::Constructed::decode(source, self, op)
     }
