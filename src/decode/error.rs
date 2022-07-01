@@ -4,6 +4,7 @@
 //! parent module.
 
 use std::{error, fmt};
+use std::convert::Infallible;
 
 
 //------------ ContentError --------------------------------------------------
@@ -43,6 +44,16 @@ impl From<String> for ContentError {
         Self::from_boxed(Box::new(msg))
     }
 }
+
+impl From<DecodeError<Infallible>> for ContentError {
+    fn from(err: DecodeError<Infallible>) -> Self {
+        match err.inner {
+            DecodeErrorKind::Source(_) => unreachable!(),
+            DecodeErrorKind::Content { error, .. } => error,
+        }
+    }
+}
+
 
 impl fmt::Display for ContentError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -110,8 +121,23 @@ enum DecodeErrorKind<S> {
 }
 
 impl<S> DecodeError<S> {
-    pub fn content(error: ContentError, pos: usize) -> Self {
-        DecodeError { inner: DecodeErrorKind::Content { error, pos } }
+    /// Creates a decode error from a content error and a position.
+    pub fn content(error: impl Into<ContentError>, pos: usize) -> Self {
+        DecodeError {
+            inner: DecodeErrorKind::Content { error: error.into(), pos },
+        }
+    }
+}
+
+impl DecodeError<Infallible> {
+    /// Converts a decode error from an infallible source into another error.
+    pub fn convert<S>(self) -> DecodeError<S> {
+        match self.inner {
+            DecodeErrorKind::Source(_) => unreachable!(),
+            DecodeErrorKind::Content { error, pos } => {
+                DecodeError::content(error, pos)
+            }
+        }
     }
 }
 
