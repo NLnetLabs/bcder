@@ -510,19 +510,24 @@ pub struct OctetStringSource {
 impl OctetStringSource {
     /// Creates a new source atop an existing octet string.
     fn new(from: OctetString) -> Self {
+        Self::with_pos(from, 0)
+    }
+
+    /// Creates a new source with a given start position.
+    fn with_pos(from: OctetString, pos: usize) -> Self {
         match from.0 {
             Inner::Primitive(inner) => {
                 OctetStringSource {
                     current: inner,
                     remainder: Bytes::new().into_source(),
-                    pos: 0,
+                    pos,
                 }
             }
             Inner::Constructed(inner) => {
                 OctetStringSource {
                     current: Bytes::new(),
                     remainder: inner.into_bytes().into_source(),
-                    pos: 0,
+                    pos,
                 }
             }
         }
