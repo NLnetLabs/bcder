@@ -53,12 +53,12 @@ impl Mode {
     /// all values in the source.
     pub fn decode<S, F, T>(
         self, source: S, op: F,
-    ) -> Result<T, DecodeError<S::Error>>
+    ) -> Result<T, DecodeError<<S::Source as decode::Source>::Error>>
     where
-        S: decode::Source,
+        S: decode::IntoSource,
         F: FnOnce(
-            &mut decode::Constructed<S>
-        ) -> Result<T, DecodeError<S::Error>>,
+            &mut decode::Constructed<S::Source>
+        ) -> Result<T, DecodeError<<S::Source as decode::Source>::Error>>,
     {
         decode::Constructed::decode(source, self, op)
     }

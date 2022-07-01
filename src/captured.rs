@@ -99,7 +99,7 @@ impl Captured {
             &mut decode::Constructed<BytesSource>
         ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     {
-        self.mode.decode(self.bytes.into_source(), op)
+        self.mode.decode(self.bytes, op)
     }
 
     /// Decodes the beginning of the content of the captured value.
@@ -154,6 +154,17 @@ impl AsRef<Bytes> for Captured {
 impl AsRef<[u8]> for Captured {
     fn as_ref(&self) -> &[u8] {
         self.bytes.as_ref()
+    }
+}
+
+
+//--- IntoSource
+
+impl IntoSource for Captured {
+    type Source = BytesSource;
+
+    fn into_source(self) -> Self::Source {
+        self.into_bytes().into_source()
     }
 }
 

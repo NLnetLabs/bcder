@@ -170,6 +170,14 @@ pub trait IntoSource {
     fn into_source(self) -> Self::Source;
 }
 
+impl<T: Source> IntoSource for T {
+    type Source = Self;
+
+    fn into_source(self) -> Self::Source {
+        self
+    }
+}
+
 
 //------------ BytesSource ---------------------------------------------------
 
@@ -584,7 +592,7 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
             self.len >= end,
             "end past the end of data"
         );
-        self.source.bytes(start + self.pos, end + self.pos)
+        self.source.bytes(start, end)
     }
 
     fn advance(&mut self, len: usize) {

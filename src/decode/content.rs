@@ -228,14 +228,18 @@ pub struct Primitive<'a, S: 'a> {
 
     /// The decoding mode to operate in.
     mode: Mode,
+
+    /// The start of the value in the source.
+    start: usize,
 }
 
 /// # Value Management
 ///
 impl<'a, S: 'a> Primitive<'a, S> {
     /// Creates a new primitive from the given source and mode.
-    fn new(source: &'a mut LimitedSource<S>, mode: Mode) -> Self {
-        Primitive { source, mode }
+    fn new(source: &'a mut LimitedSource<S>, mode: Mode) -> Self
+    where S: Source {
+        Primitive { start: source.pos(), source, mode }
     }
 
     /// Returns the current decoding mode.
@@ -257,7 +261,7 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     pub fn content_err(
         &self, err: impl Into<ContentError>,
     ) -> DecodeError<S::Error> {
-        self.source.content_err(err)
+        DecodeError::content(err, self.start)
     }
 }
 
@@ -492,6 +496,9 @@ pub struct Constructed<'a, S: 'a> {
 
     /// The encoding mode to use.
     mode: Mode,
+
+    /// The start position of the value in the source.
+    start: usize,
 }
 
 /// # General Management
@@ -503,10 +510,10 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         state: State,
         mode: Mode
     ) -> Self {
-        Constructed { source, state, mode }
+        Constructed { start: source.pos(), source, state, mode }
     }
 
-    /// Decode a source as a constructed content.
+    /// Decode a source as constructed content.
     ///
     /// The function will start decoding of `source` in the given mode. It
     /// will pass a constructed content value to the closure `op` which
@@ -515,11 +522,14 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     /// This function is identical to calling [`Mode::decode`].
     ///
     /// [`Mode::decode`]: ../enum.Mode.html#method.decode
-    pub fn decode<F, T>(
-        source: S, mode: Mode, op: F,
+    pub fn decode<I, F, T>(
+        source: I, mode: Mode, op: F,
     ) -> Result<T, DecodeError<S::Error>>
-    where F: FnOnce(&mut Constructed<S>) -> Result<T, DecodeError<S::Error>> {
-        let mut source = LimitedSource::new(source);
+    where
+        I: IntoSource<Source = S>,
+        F: FnOnce(&mut Constructed<S>) -> Result<T, DecodeError<S::Error>>
+    {
+        let mut source = LimitedSource::new(source.into_source());
         let mut cons = Constructed::new(&mut source, State::Unbounded, mode);
         let res = op(&mut cons)?;
         cons.exhausted()?;
@@ -538,11 +548,11 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 }
 
 impl<'a, S: Source + 'a> Constructed<'a, S> {
-    /// Produces a content error at the current source position.
+    /// Produces a content error at start of the value.
     pub fn content_err(
         &self, err: impl Into<ContentError>,
     ) -> DecodeError<S::Error> {
-        self.source.content_err(err)
+        DecodeError::content(err, self.start)
     }
 }
 
@@ -630,16 +640,22 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         if tag == Tag::END_OF_VALUE {
             if let State::Indefinite = self.state {
                 if constructed {
-                    return Err(self.content_err("constructed end of value"))
+                    return Err(self.source.content_err(
+                        "constructed end of value"
+                    ))
                 }
                 if !length.is_zero() {
-                    return Err(self.content_err("non-empty end of value"))
+                    return Err(self.source.content_err(
+                        "non-empty end of value"
+                    ))
                 }
                 self.state = State::Done;
                 return Ok(None)
             }
             else {
-                return Err(self.content_err("unexpected end of value"))
+                return Err(self.source.content_err(
+                    "unexpected end of value"
+                ))
             }
         }
 
@@ -651,7 +667,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                         // Definite length constructed values are not allowed
                         // in CER.
                         if self.mode == Mode::Cer {
-                            return Err(self.content_err(
+                            return Err(self.source.content_err(
                                 "definite length constructed in CER mode"
                             ))
                         }
@@ -675,7 +691,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             }
             Length::Indefinite => {
                 if !constructed || self.mode == Mode::Der {
-                    return Err(self.content_err(
+                    return Err(self.source.content_err(
                         "indefinite length constructed in DER mode"
                     ))
                 }
@@ -702,7 +718,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     {
         match op(self)? {
             Some(res) => Ok(res),
-            None => Err(self.content_err("missing futher values")),
+            None => Err(self.source.content_err("missing futher values")),
         }
     }
 }
