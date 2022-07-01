@@ -17,7 +17,7 @@ use crate::mode::Mode;
 use crate::tag::Tag;
 use super::error::{ContentError, DecodeError};
 use super::source::{
-    CaptureSource, IntoSource, LimitedSource, SliceSource, Source,
+    CaptureSource, IntoSource, LimitedSource, Pos, SliceSource, Source,
 };
 
 
@@ -229,8 +229,8 @@ pub struct Primitive<'a, S: 'a> {
     /// The decoding mode to operate in.
     mode: Mode,
 
-    /// The start of the value in the source.
-    start: usize,
+    /// The start position of the value in the source.
+    start: Pos,
 }
 
 /// # Value Management
@@ -443,7 +443,7 @@ impl Primitive<'static, ()> {
 impl<'a, S: Source + 'a> Source for Primitive<'a, S> {
     type Error = S::Error;
 
-    fn pos(&self) -> usize {
+    fn pos(&self) -> Pos {
         self.source.pos()
     }
 
@@ -498,7 +498,7 @@ pub struct Constructed<'a, S: 'a> {
     mode: Mode,
 
     /// The start position of the value in the source.
-    start: usize,
+    start: Pos,
 }
 
 /// # General Management
@@ -1009,6 +1009,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
         ) -> Result<(), DecodeError<S::Error>>
     {
         let limit = self.source.limit();
+        let start = self.source.pos();
         let mut source = LimitedSource::new(CaptureSource::new(self.source));
         source.set_limit(limit);
         {
@@ -1018,7 +1019,9 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             op(&mut constructed)?;
             self.state = constructed.state;
         }
-        Ok(Captured::new(source.unwrap().into_bytes(), self.mode))
+        Ok(Captured::new(
+            source.unwrap().into_bytes(), self.mode, start,
+        ))
     }
 
     /// Captures one value for later processing

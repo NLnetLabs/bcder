@@ -12,7 +12,7 @@ use bytes::{BytesMut, Bytes};
 use crate::captured::Captured;
 use crate::{decode, encode};
 use crate::decode::{
-    BytesSource, DecodeError, IntoSource, SliceSource, Source
+    BytesSource, DecodeError, IntoSource, Pos, SliceSource, Source
 };
 use crate::mode::Mode;
 use crate::length::Length;
@@ -504,30 +504,30 @@ pub struct OctetStringSource {
     remainder: BytesSource,
 
     /// The current position in the string.
-    pos: usize,
+    pos: Pos,
 }
 
 impl OctetStringSource {
     /// Creates a new source atop an existing octet string.
     fn new(from: OctetString) -> Self {
-        Self::with_pos(from, 0)
+        Self::with_offset(from, Pos::default())
     }
 
     /// Creates a new source with a given start position.
-    fn with_pos(from: OctetString, pos: usize) -> Self {
+    fn with_offset(from: OctetString, offset: Pos) -> Self {
         match from.0 {
             Inner::Primitive(inner) => {
                 OctetStringSource {
                     current: inner,
                     remainder: Bytes::new().into_source(),
-                    pos,
+                    pos: offset,
                 }
             }
             Inner::Constructed(inner) => {
                 OctetStringSource {
                     current: Bytes::new(),
                     remainder: inner.into_bytes().into_source(),
-                    pos,
+                    pos: offset,
                 }
             }
         }
@@ -572,7 +572,7 @@ impl OctetStringSource {
 impl decode::Source for OctetStringSource {
     type Error = Infallible;
 
-    fn pos(&self) -> usize {
+    fn pos(&self) -> Pos {
         self.pos
     }
 
@@ -596,6 +596,7 @@ impl decode::Source for OctetStringSource {
 
     fn advance(&mut self, len: usize) {
         assert!(len <= self.current.len());
+        self.pos = self.pos + len.into();
         bytes::Buf::advance(&mut self.current, len)
     }
 

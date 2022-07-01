@@ -41,7 +41,7 @@
 pub use self::content::{Content, Constructed, Primitive};
 pub use self::error::{ContentError, DecodeError};
 pub use self::source::{
-    BytesSource, CaptureSource, IntoSource, LimitedSource, SliceSource,
+    BytesSource, CaptureSource, IntoSource, Pos, LimitedSource, SliceSource,
     Source
 };
 

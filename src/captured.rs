@@ -5,7 +5,7 @@
 use std::{fmt, io, mem, ops};
 use bytes::{Bytes, BytesMut};
 use crate::{decode, encode};
-use crate::decode::{BytesSource, DecodeError, IntoSource};
+use crate::decode::{BytesSource, DecodeError, IntoSource, Pos};
 use crate::mode::Mode;
 
 
@@ -40,8 +40,14 @@ use crate::mode::Mode;
 /// [`Mode`]: ../enum.Mode.html
 #[derive(Clone)]
 pub struct Captured {
+    /// The captured data.
     bytes: Bytes,
+
+    /// The encoding mode of the captured data.
     mode: Mode,
+
+    /// The start position of the data in the original source.
+    start: Pos,
 }
 
 impl Captured {
@@ -50,8 +56,8 @@ impl Captured {
     /// Because we can’t guarantee that the bytes are properly encoded, we
     /// keep this function crate public. The type, however, doesn’t rely on
     /// content being properly encoded so this method isn’t unsafe.
-    pub(crate) fn new(bytes: Bytes, mode: Mode) -> Self {
-        Captured { bytes, mode }
+    pub(crate) fn new(bytes: Bytes, mode: Mode, start: Pos) -> Self {
+        Captured { bytes, mode, start }
     }
 
     /// Creates a captured value by encoding data.
@@ -69,7 +75,8 @@ impl Captured {
     pub fn empty(mode: Mode) -> Self {
         Captured {
             bytes: Bytes::new(),
-            mode
+            mode,
+            start: Pos::default(),
         }
     }
 
@@ -164,7 +171,7 @@ impl IntoSource for Captured {
     type Source = BytesSource;
 
     fn into_source(self) -> Self::Source {
-        self.into_bytes().into_source()
+        BytesSource::with_offset(self.bytes, self.start)
     }
 }
 
@@ -244,7 +251,7 @@ impl CapturedBuilder {
     }
 
     pub fn freeze(self) -> Captured {
-        Captured::new(self.bytes.freeze(), self.mode)
+        Captured::new(self.bytes.freeze(), self.mode, Pos::default())
     }
 }
 

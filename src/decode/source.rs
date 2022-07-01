@@ -3,7 +3,7 @@
 //! This is an internal module. Its public types are re-exported by the
 //! parent.
 
-use std::{error, mem};
+use std::{error, fmt, mem, ops};
 use std::cmp::min;
 use std::convert::Infallible;
 use bytes::Bytes;
@@ -28,8 +28,8 @@ pub trait Source {
     /// The error produced when the source failed to read more data.
     type Error: error::Error;
 
-    /// Returns the current read postion within the sequence of data.
-    fn pos(&self) -> usize;
+    /// Returns the current logical postion within the sequence of data.
+    fn pos(&self) -> Pos;
 
     /// Request at least `len` bytes to be available.
     ///
@@ -155,7 +155,7 @@ impl<'a, T: Source> Source for &'a mut T {
         Source::bytes(*self, start, end)
     }
 
-    fn pos(&self) -> usize {
+    fn pos(&self) -> Pos {
         Source::pos(*self)
     }
 }
@@ -179,18 +179,66 @@ impl<T: Source> IntoSource for T {
 }
 
 
+//------------ Pos -----------------------------------------------------------
+
+/// The logical position within a source.
+///
+/// Values of this type can only be used for diagnostics. They can not be used
+/// to determine how far a source has been advanced since it was created. This
+/// is why we used a newtype.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Pos(usize);
+
+impl From<usize> for Pos {
+    fn from(pos: usize) -> Pos {
+        Pos(pos)
+    }
+}
+
+impl ops::Add for Pos {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Pos(self.0 + rhs.0)
+    }
+}
+
+impl fmt::Display for Pos {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+
 //------------ BytesSource ---------------------------------------------------
 
+/// A source for a bytes value.
 #[derive(Clone, Debug)]
 pub struct BytesSource {
+    /// The bytes.
     data: Bytes,
+
+    /// The current read position in the data.
     pos: usize,
+
+    /// The offset for the reported position.
+    ///
+    /// This is the value reported by `Source::pos` when `self.pos` is zero.
+    offset: Pos,
 }
 
 impl BytesSource {
     /// Creates a new bytes source from a bytes values.
     pub fn new(data: Bytes) -> Self {
-        BytesSource { data, pos: 0 }
+        BytesSource { data, pos: 0, offset: 0.into() }
+    }
+
+    /// Creates a new bytes source with an explicit offset.
+    ///
+    /// When this function is used to create a bytes source, `Source::pos`
+    /// will report a value increates by `offset`.
+    pub fn with_offset(data: Bytes, offset: Pos) -> Self {
+        BytesSource { data, pos: 0, offset }
     }
 
     /// Returns the remaining length of data.
@@ -223,8 +271,8 @@ impl BytesSource {
 impl Source for BytesSource {
     type Error = Infallible;
 
-    fn pos(&self) -> usize {
-        self.pos
+    fn pos(&self) -> Pos {
+        self.offset + self.pos.into()
     }
 
     fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
@@ -295,6 +343,10 @@ impl<'a> SliceSource<'a> {
 impl<'a> Source for SliceSource<'a> {
     type Error = Infallible;
 
+    fn pos(&self) -> Pos {
+        self.pos.into()
+    }
+
     fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
         Ok(self.data.len())
     }
@@ -311,10 +363,6 @@ impl<'a> Source for SliceSource<'a> {
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
         Bytes::copy_from_slice(&self.data[start..end])
-    }
-
-    fn pos(&self) -> usize {
-        self.pos
     }
 }
 
@@ -473,6 +521,10 @@ impl<S: Source> LimitedSource<S> {
 impl<S: Source> Source for LimitedSource<S> {
     type Error = S::Error;
 
+    fn pos(&self) -> Pos {
+        self.source.pos()
+    }
+
     fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         if let Some(limit) = self.limit {
             Ok(min(limit, self.source.request(min(limit, len))?))
@@ -509,10 +561,6 @@ impl<S: Source> Source for LimitedSource<S> {
             assert!(end <= limit);
         }
         self.source.bytes(start, end)
-    }
-
-    fn pos(&self) -> usize {
-        self.source.pos()
     }
 }
 
@@ -568,8 +616,8 @@ impl<'a, S: Source> CaptureSource<'a, S> {
 impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
     type Error = S::Error;
 
-    fn pos(&self) -> usize {
-        self.source.pos() + self.pos
+    fn pos(&self) -> Pos {
+        self.source.pos() + self.pos.into()
     }
 
     fn request(&mut self, len: usize) -> Result<usize, Self::Error> {

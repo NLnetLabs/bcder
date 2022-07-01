@@ -5,6 +5,7 @@
 
 use std::{error, fmt};
 use std::convert::Infallible;
+use super::source::Pos;
 
 
 //------------ ContentError --------------------------------------------------
@@ -116,13 +117,13 @@ enum DecodeErrorKind<S> {
     Source(S),
     Content {
         error: ContentError,
-        pos: usize,
+        pos: Pos,
     }
 }
 
 impl<S> DecodeError<S> {
     /// Creates a decode error from a content error and a position.
-    pub fn content(error: impl Into<ContentError>, pos: usize) -> Self {
+    pub fn content(error: impl Into<ContentError>, pos: Pos) -> Self {
         DecodeError {
             inner: DecodeErrorKind::Content { error: error.into(), pos },
         }
