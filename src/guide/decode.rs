@@ -19,7 +19,7 @@
 //! take them as function arguments such as closures.
 //!
 //! An example will make this concept more clear. Let’s say we have the
-//! following ASN.1 specifiction:
+//! following ASN.1 specification:
 //!
 //! ```text
 //! EncapsulatedContentInfo  ::=  SEQUENCE  {
@@ -55,7 +55,7 @@
 //! #     content_type: Oid,
 //! #     content: Option<OctetString>,
 //! # }
-//! # 
+//! #
 //! impl EncapsulatedContentInfo {
 //!     pub fn take_from<S: decode::Source>(
 //!         cons: &mut decode::Constructed<S>
@@ -96,7 +96,7 @@
 //! #     content_type: Oid,
 //! #     content: Option<OctetString>,
 //! # }
-//! # 
+//! #
 //! impl EncapsulatedContentInfo {
 //!     pub fn from_constructed<S: decode::Source>(
 //!         cons: &mut decode::Constructed<S>
@@ -112,4 +112,3 @@
 //! ```
 //!
 //! _TODO: Elaborate._
-
