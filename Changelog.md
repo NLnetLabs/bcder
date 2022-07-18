@@ -4,6 +4,15 @@
 
 Breaking Changes
 
+* Redesign error handling in `decode` module:
+  * three error types, `Source::Error`, `ContentError`, and `DecodeError`,
+    for data fetching errors, syntax errors, and a combination of these,
+    respectively;
+  * new trait `IntoSource` to convert a type into its `Source`
+    implementation;
+  * `Source::advance` now panics if advancing past the end of seen data.
+
+
 New
 
 Bug Fixes
