@@ -1,6 +1,6 @@
 [package]
 name = "bcder"
-version = "0.7.0-dev"
+version = "0.7.0"
 edition = "2018"
 authors = ["The NLnet Labs RPKI Team <rpki-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
