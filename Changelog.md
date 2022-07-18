@@ -1,10 +1,12 @@
 # Change Log
 
-## Unreleased future version
+## 0.7.0
+
+Released 2022-07-18.
 
 Breaking Changes
 
-* Redesign error handling in `decode` module:
+* Redesign error handling in `decode` module ([#65]):
   * three error types, `Source::Error`, `ContentError`, and `DecodeError`,
     for data fetching errors, syntax errors, and a combination of these,
     respectively;
@@ -12,12 +14,7 @@ Breaking Changes
     implementation;
   * `Source::advance` now panics if advancing past the end of seen data.
 
-
-New
-
-Bug Fixes
-
-Other Changes
+[#65]: https://github.com/NLnetLabs/bcder/pull/65
 
 
 ## 0.6.1
