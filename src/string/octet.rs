@@ -7,9 +7,13 @@
 //!     CER mode. An implementation of that is TODO.
 
 use std::{cmp, hash, io, mem};
+use std::convert::Infallible;
 use bytes::{BytesMut, Bytes};
 use crate::captured::Captured;
 use crate::{decode, encode};
+use crate::decode::{
+    BytesSource, DecodeError, IntoSource, Pos, SliceSource, Source
+};
 use crate::mode::Mode;
 use crate::length::Length;
 use crate::tag::Tag;
@@ -82,7 +86,9 @@ impl OctetString {
                 OctetStringIter(Inner::Primitive(inner.as_ref()))
             }
             Inner::Constructed(ref inner) => {
-                OctetStringIter(Inner::Constructed(inner.as_ref()))
+                OctetStringIter(
+                    Inner::Constructed(inner.as_slice().into_source())
+                )
             }
         }
     }
@@ -154,15 +160,6 @@ impl OctetString {
         }
         !self.iter().any(|s| !s.is_empty())
     }
-
-    /// Creates a source that can be used to decode the string’s content.
-    ///
-    /// The returned value contains a clone of the string (which, because of
-    /// the use of `Bytes` is rather cheap) that implements the `Source`
-    /// trait and thus can be used to decode the string’s content.
-    pub fn to_source(&self) -> OctetStringSource {
-        OctetStringSource::new(self)
-    }
 }
 
 
@@ -176,7 +173,7 @@ impl OctetString {
     /// octet string, a malformed error is returned.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         cons.take_value_if(Tag::OCTET_STRING, Self::from_content)
     }
 
@@ -189,18 +186,20 @@ impl OctetString {
     /// malformed error is returned.
     pub fn take_opt_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Option<Self>, S::Err> {
+    ) -> Result<Option<Self>, DecodeError<S::Error>> {
         cons.take_opt_value_if(Tag::OCTET_STRING, Self::from_content)
     }
 
     /// Takes an octet string value from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         match *content {
             decode::Content::Primitive(ref mut inner) => {
                 if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()))
+                    return Err(content.content_err(
+                        "long string component in CER mode"
+                    ))
                 }
                 Ok(OctetString(Inner::Primitive(inner.take_all()?)))
             }
@@ -209,7 +208,9 @@ impl OctetString {
                     Mode::Ber => Self::take_constructed_ber(inner),
                     Mode::Cer => Self::take_constructed_cer(inner),
                     Mode::Der => {
-                        xerr!(Err(decode::Error::Malformed.into()))
+                        Err(content.content_err(
+                            "constructed string in DER mode"
+                        ))
                     }
                 }
             }
@@ -221,14 +222,14 @@ impl OctetString {
     /// It consists octet string values either primitive or constructed.
     fn take_constructed_ber<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         cons.capture(|cons| {
             while cons.skip_opt(|tag, _, _|
                 if tag == Tag::OCTET_STRING {
                     Ok(())
                 }
                 else {
-                    xerr!(Err(decode::Malformed.into()))
+                    Err("expected octet string".into())
                 }
             )?.is_some() { }
             Ok(())
@@ -241,17 +242,21 @@ impl OctetString {
     /// values each except for the last one exactly 1000 octets long.
     fn take_constructed_cer<S: decode::Source>(
         constructed: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         let mut short = false;
         constructed.capture(|con| {
             while let Some(()) = con.take_opt_primitive_if(Tag::OCTET_STRING,
                                                            |primitive| {
                 if primitive.remaining() > 1000 {
-                    xerr!(return Err(decode::Error::Malformed.into()));
+                    return Err(primitive.content_err(
+                        "long string component in CER mode"
+                    ));
                 }
                 if primitive.remaining() < 1000 {
                     if short {
-                        xerr!(return Err(decode::Error::Malformed.into()));
+                        return Err(primitive.content_err(
+                            "short non-terminal string component in CER mode"
+                        ));
                     }
                     short = true
                 }
@@ -467,11 +472,20 @@ impl<'a> IntoIterator for &'a OctetString {
 }
 
 
+//--- IntoSource
+
+impl IntoSource for OctetString {
+    type Source = OctetStringSource;
+
+    fn into_source(self) -> Self::Source {
+        OctetStringSource::new(self)
+    }
+}
+
+
 //------------ OctetStringSource ---------------------------------------------
 
-/// A source atop an octet string.
-///
-/// You can get a value of this type by calling `OctetString::source`.
+/// A decode source atop an octet string.
 //
 //  Assuming we have a correctly encoded octet string, its content is a
 //  sequence of value headers (i.e., tag and length octets) and actual string
@@ -487,34 +501,52 @@ pub struct OctetStringSource {
     current: Bytes,
 
     /// The remainder of the value after the value in `current`.
-    remainder: Bytes,
+    remainder: BytesSource,
+
+    /// The current position in the string.
+    pos: Pos,
 }
 
 impl OctetStringSource {
     /// Creates a new source atop an existing octet string.
-    fn new(from: &OctetString) -> Self {
+    fn new(from: OctetString) -> Self {
+        Self::with_offset(from, Pos::default())
+    }
+
+    /// Creates a new source with a given start position.
+    fn with_offset(from: OctetString, offset: Pos) -> Self {
         match from.0 {
-            Inner::Primitive(ref inner) => {
+            Inner::Primitive(inner) => {
                 OctetStringSource {
-                    current: inner.clone(),
-                    remainder: Bytes::new(),
+                    current: inner,
+                    remainder: Bytes::new().into_source(),
+                    pos: offset,
                 }
             }
-            Inner::Constructed(ref inner) => {
+            Inner::Constructed(inner) => {
                 OctetStringSource {
                     current: Bytes::new(),
-                    remainder: inner.clone().into_bytes()
+                    remainder: inner.into_bytes().into_source(),
+                    pos: offset,
                 }
             }
         }
     }
 
-    /// Returns the bytes of the next primitive value in the string.
+    /// Returns the next value for `self.current`.
+    ///
+    /// This is the content of the first primitive value found in the
+    /// remainder.
     ///
     /// Returns `None` if we are done.
-    fn next_primitive(&mut self) -> Option<Bytes> {
-        while !self.remainder.is_empty() {
-            let (tag, cons) = Tag::take_from(&mut self.remainder).unwrap();
+    fn next_current(&mut self) -> Option<Bytes> {
+        // Unwrapping here is okay. The only error that can happen is that
+        // the tag is longer that we support. However, we already checked that
+        // there’s only OctetString or End of Value tags which we _do_
+        // support.
+        while let Some((tag, cons)) = Tag::take_opt_from(
+            &mut self.remainder
+        ).unwrap() {
             let length = Length::take_from(
                 &mut self.remainder, Mode::Ber
             ).unwrap();
@@ -538,15 +570,19 @@ impl OctetStringSource {
 }
 
 impl decode::Source for OctetStringSource {
-    type Err = decode::Error;
+    type Error = Infallible;
 
-    fn request(&mut self, len: usize) -> Result<usize, decode::Error> {
+    fn pos(&self) -> Pos {
+        self.pos
+    }
+
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         if self.current.len() < len && !self.remainder.is_empty() {
             // Make a new current that is at least `len` long.
             let mut current = BytesMut::with_capacity(self.current.len());
             current.extend_from_slice(&self.current.clone());
             while current.len() < len {
-                if let Some(bytes) = self.next_primitive() {
+                if let Some(bytes) = self.next_current() {
                     current.extend_from_slice(bytes.as_ref())
                 }
                 else {
@@ -558,18 +594,10 @@ impl decode::Source for OctetStringSource {
         Ok(self.current.len())
     }
 
-    fn advance(&mut self, mut len: usize) -> Result<(), decode::Error> {
-        while len > self.current.len() {
-            len -= self.current.len();
-            self.current = match self.next_primitive() {
-                Some(value) => value,
-                None => {
-                    xerr!(return Err(decode::Error::Malformed))
-                }
-            }
-        }
-        self.current.advance(len)?;
-        Ok(())
+    fn advance(&mut self, len: usize) {
+        assert!(len <= self.current.len());
+        self.pos = self.pos + len.into();
+        bytes::Buf::advance(&mut self.current, len)
     }
 
     fn slice(&self) -> &[u8] {
@@ -589,7 +617,7 @@ impl decode::Source for OctetStringSource {
 /// You can get a value of this type by calling `OctetString::iter` or relying
 /// on the `IntoIterator` impl for a `&OctetString`.
 #[derive(Clone, Debug)]
-pub struct OctetStringIter<'a>(Inner<&'a [u8], &'a [u8]>);
+pub struct OctetStringIter<'a>(Inner<&'a [u8], SliceSource<'a>>);
 
 impl<'a> Iterator for OctetStringIter<'a> {
     type Item = &'a [u8];
@@ -617,9 +645,7 @@ impl<'a> Iterator for OctetStringIter<'a> {
                                 Length::Definite(len) => len,
                                 _ => unreachable!()
                             };
-                            let res = &inner[..length];
-                            *inner = &inner[length..];
-                            return Some(res)
+                            return Some(inner.split_to(length))
                         }
                         Tag::END_OF_VALUE => continue,
                         _ => unreachable!()
@@ -888,7 +914,7 @@ mod tests {
         assert_eq!(
             decode::Constructed::decode(
                 b"\x24\x04\
-                \x04\x02ab".as_ref(),
+                \x04\x02ab".into_source(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)
@@ -902,7 +928,7 @@ mod tests {
             decode::Constructed::decode(
                 b"\x24\x06\
                 \x04\x01a\
-                \x04\x01b".as_ref(),
+                \x04\x01b".into_source(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)
@@ -917,7 +943,7 @@ mod tests {
                 b"\x24\x08\
                 \x24\x80\
                 \x04\x02ab\
-                \0\0".as_ref(),
+                \0\0".into_source(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)
@@ -926,13 +952,12 @@ mod tests {
             "ab"
         );
 
-        println!("lllllll");
         // I(p)
         assert_eq!(
             decode::Constructed::decode(
                 b"\x24\x80\
                 \x04\x02ab\
-                \0\0".as_ref(),
+                \0\0".into_source(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)
@@ -948,7 +973,7 @@ mod tests {
                 \x04\x01a\
                 \x24\x80\
                 \x04\x01b\
-                \0\0".as_ref(),
+                \0\0".into_source(),
                 Mode::Ber,
                 |cons| {
                     OctetString::take_from(cons)

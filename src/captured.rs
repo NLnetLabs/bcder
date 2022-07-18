@@ -2,9 +2,10 @@
 //!
 //! This is a private module. Its public items are re-exported by the parent.
 
-use std::{fmt, io, ops};
+use std::{fmt, io, mem, ops};
 use bytes::{Bytes, BytesMut};
 use crate::{decode, encode};
+use crate::decode::{BytesSource, DecodeError, IntoSource, Pos};
 use crate::mode::Mode;
 
 
@@ -39,8 +40,14 @@ use crate::mode::Mode;
 /// [`Mode`]: ../enum.Mode.html
 #[derive(Clone)]
 pub struct Captured {
+    /// The captured data.
     bytes: Bytes,
+
+    /// The encoding mode of the captured data.
     mode: Mode,
+
+    /// The start position of the data in the original source.
+    start: Pos,
 }
 
 impl Captured {
@@ -49,8 +56,8 @@ impl Captured {
     /// Because we can’t guarantee that the bytes are properly encoded, we
     /// keep this function crate public. The type, however, doesn’t rely on
     /// content being properly encoded so this method isn’t unsafe.
-    pub(crate) fn new(bytes: Bytes, mode: Mode) -> Self {
-        Captured { bytes, mode }
+    pub(crate) fn new(bytes: Bytes, mode: Mode, start: Pos) -> Self {
+        Captured { bytes, mode, start }
     }
 
     /// Creates a captured value by encoding data.
@@ -68,7 +75,8 @@ impl Captured {
     pub fn empty(mode: Mode) -> Self {
         Captured {
             bytes: Bytes::new(),
-            mode
+            mode,
+            start: Pos::default(),
         }
     }
 
@@ -90,11 +98,13 @@ impl Captured {
     /// The method consumes the value. If you want to keep it around, simply
     /// clone it first. Since bytes values are cheap to clone, this is
     /// relatively cheap.
-    pub fn decode<F, T>(self, op: F) -> Result<T, decode::Error>
+    pub fn decode<F, T>(
+        self, op: F
+    ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     where
         F: FnOnce(
-            &mut decode::Constructed<Bytes>
-        ) -> Result<T, decode::Error>
+            &mut decode::Constructed<BytesSource>
+        ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     {
         self.mode.decode(self.bytes, op)
     }
@@ -104,13 +114,20 @@ impl Captured {
     /// The method calls `op` to parse a number of values from the beginning
     /// of the value and then advances the content of the captured value until
     /// after the end of these decoded values.
-    pub fn decode_partial<F, T>(&mut self, op: F) -> Result<T, decode::Error>
+    pub fn decode_partial<F, T>(
+        &mut self, op: F
+    ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     where
         F: FnOnce(
-            &mut decode::Constructed<&mut Bytes>
-        ) -> Result<T, decode::Error>
+            &mut decode::Constructed<&mut BytesSource>
+        ) -> Result<T, DecodeError<<BytesSource as decode::Source>::Error>>
     {
-        self.mode.decode(&mut self.bytes, op)
+        let mut source = mem::replace(
+            &mut self.bytes, Bytes::new()
+        ).into_source();
+        let res = self.mode.decode(&mut source, op);
+        self.bytes = source.into_bytes();
+        res
     }
 
     /// Trades the value for a bytes value with the raw data.
@@ -144,6 +161,17 @@ impl AsRef<Bytes> for Captured {
 impl AsRef<[u8]> for Captured {
     fn as_ref(&self) -> &[u8] {
         self.bytes.as_ref()
+    }
+}
+
+
+//--- IntoSource
+
+impl IntoSource for Captured {
+    type Source = BytesSource;
+
+    fn into_source(self) -> Self::Source {
+        BytesSource::with_offset(self.bytes, self.start)
     }
 }
 
@@ -223,7 +251,7 @@ impl CapturedBuilder {
     }
 
     pub fn freeze(self) -> Captured {
-        Captured::new(self.bytes.freeze(), self.mode)
+        Captured::new(self.bytes.freeze(), self.mode, Pos::default())
     }
 }
 

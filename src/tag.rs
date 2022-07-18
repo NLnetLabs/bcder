@@ -3,7 +3,7 @@
 //! This is a private module. Its public items are re-exported by the parent.
 
 use std::{fmt, io};
-use crate::decode;
+use crate::decode::{DecodeError, Source};
 
 
 //------------ Tag -----------------------------------------------------------
@@ -22,8 +22,8 @@ use crate::decode;
 ///
 /// # Limitations
 ///
-/// We can only decode up to four identifier octets. That is, we only support tag
-/// numbers between 0 and 1fffff.
+/// We can only decode up to four identifier octets. That is, we only support
+/// tag numbers between 0 and 1fffff.
 ///
 /// [`Primitive`]: decode/struct.Primitive.html
 /// [`Constructed`]: decode/struct.Constructed.html
@@ -316,7 +316,9 @@ impl Tag {
 
     /// Returns the number of the tag.
     pub fn number(self) -> u32 {
-        if (Tag::SINGLEBYTE_DATA_MASK & self.0[0]) != Tag::SINGLEBYTE_DATA_MASK {
+        if (Tag::SINGLEBYTE_DATA_MASK & self.0[0])
+            != Tag::SINGLEBYTE_DATA_MASK
+        {
             // It's a single byte identifier
             u32::from(Tag::SINGLEBYTE_DATA_MASK & self.0[0])
         } else if Tag::LAST_OCTET_MASK & self.0[1] == 0 {
@@ -335,15 +337,17 @@ impl Tag {
         }
     }
 
-    /// Takes a tag from the beginning of a source.
+    /// Takes an optional tag from the beginning of a source.
     ///
     /// Upon success, returns both the tag and whether the value is
-    /// constructed. If there are no more octets available in the source,
-    /// an error is returned.
-    pub fn take_from<S: decode::Source>(
+    /// constructed.
+    pub fn take_opt_from<S: Source>(
         source: &mut S,
-    ) -> Result<(Self, bool), S::Err> {
-        let byte = source.take_u8()?;
+    ) -> Result<Option<(Self, bool)>, DecodeError<S::Error>> {
+        let byte = match source.take_opt_u8()? {
+            Some(byte) => byte,
+            None => return Ok(None)
+        };
         // clear constructed bit
         let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
         let constructed = byte & Tag::CONSTRUCTED_MASK != 0;
@@ -351,13 +355,29 @@ impl Tag {
             for i in 1..=3 {
                 data[i] = source.take_u8()?;
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
-                    return Ok((Tag(data), constructed));
+                    return Ok(Some((Tag(data), constructed)));
                 }
             }
         } else {
-            return Ok((Tag(data), constructed));
+            return Ok(Some((Tag(data), constructed)));
         }
-        xerr!(Err(decode::Error::Unimplemented.into()))
+        Err(source.content_err(
+            "tag values longer than 4 bytes not implemented"
+        ))
+    }
+
+    /// Takes a tag from the beginning of a source.
+    ///
+    /// Upon success, returns both the tag and whether the value is
+    /// constructed. If there are no more octets available in the source,
+    /// an error is returned.
+    pub fn take_from<S: Source>(
+        source: &mut S,
+    ) -> Result<(Self, bool), DecodeError<S::Error>> {
+        match Self::take_opt_from(source)? {
+            Some(res) => Ok(res),
+            None => Err(source.content_err("additional values expected"))
+        }
     }
 
     /// Takes a tag from the beginning of a resource if it matches this tag.
@@ -365,10 +385,10 @@ impl Tag {
     /// If there is no more data available in the source or if the tag is
     /// something else, returns `Ok(None)`. If the tag matches `self`, returns
     /// whether the value is constructed.
-    pub fn take_from_if<S: decode::Source>(
+    pub fn take_from_if<S: Source>(
         self,
         source: &mut S,
-    ) -> Result<Option<bool>, S::Err> {
+    ) -> Result<Option<bool>, DecodeError<S::Error>> {
         if source.request(1)? == 0 {
             return Ok(None)
         }
@@ -380,7 +400,7 @@ impl Tag {
             loop {
                 if source.request(i + 1)? == 0 {
                     // Not enough data for a complete tag.
-                    xerr!(return Err(decode::Error::Malformed.into()))
+                    return Err(source.content_err("short tag value"))
                 }
                 data[i] = source.slice()[i];
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
@@ -388,14 +408,16 @@ impl Tag {
                 }
                 // We don’t support tags larger than 4 bytes.
                 if i == 3 {
-                    xerr!(return Err(decode::Error::Unimplemented.into()))
+                    return Err(source.content_err(
+                        "tag values longer than 4 bytes not implemented"
+                    ))
                 }
                 i += 1;
             }
         }
         let (tag, compressed) = (Tag(data), byte & Tag::CONSTRUCTED_MASK != 0);
         if tag == self {
-            source.advance(tag.encoded_len())?;
+            source.advance(tag.encoded_len());
             Ok(Some(compressed))
         }
         else {
@@ -490,6 +512,7 @@ impl fmt::Debug for Tag {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::decode::IntoSource;
 
     const TYPES: &[u8] = &[Tag::UNIVERSAL, Tag::APPLICATION, Tag::CONTEXT_SPECIFIC, Tag::PRIVATE];
 
@@ -503,10 +526,15 @@ mod test {
             for i in range.clone() {
                 let tag = Tag::new(typ, i);
                 let expected = Tag([typ | i as u8, 0, 0, 0]);
-                let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                let decoded = Tag::take_from(
+                    &mut tag.0.into_source()
+                ).unwrap();
+                assert_eq!(
+                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 // We get the same number back.
@@ -532,10 +560,15 @@ mod test {
                 let expected = Tag([
                         Tag::SINGLEBYTE_DATA_MASK | typ, i as u8, 0, 0
                 ]);
-                let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                let decoded = Tag::take_from(
+                    &mut tag.0.into_source()
+                ).unwrap();
+                assert_eq!(
+                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -561,10 +594,15 @@ mod test {
                     i as u8 & !Tag::LAST_OCTET_MASK,
                     0
                 ]);
-                let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                let decoded = Tag::take_from(
+                    &mut tag.0.into_source()
+                ).unwrap();
+                assert_eq!(
+                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -590,10 +628,15 @@ mod test {
                     (i >> 7) as u8 | Tag::LAST_OCTET_MASK,
                     i as u8 & !Tag::LAST_OCTET_MASK
                 ]);
-                let decoded = Tag::take_from(&mut &tag.0[..]).unwrap();
-                assert_eq!(tag.take_from_if(&mut &tag.0[..]), Ok(Some(false)));
+                let decoded = Tag::take_from(
+                    &mut tag.0.into_source()
+                ).unwrap();
+                assert_eq!(
+                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
+                    Some(false)
+                );
                 // The value is not constructed.
-                assert_eq!(decoded.1, false);
+                assert!(!decoded.1);
                 // The tag is the same
                 assert_eq!(decoded.0, expected);
                 assert_eq!(tag.number(), i);
@@ -607,14 +650,12 @@ mod test {
         let large_tag = [
             0b1111_1111, 0b1000_0000, 0b1000_0000, 0b1000_0000, 0b1000_0000
         ];
-        assert_eq!(
-            Tag::take_from(&mut &large_tag[..]),
-            Err(decode::Error::Unimplemented)
+        assert!(
+            Tag::take_from(&mut large_tag.into_source()).is_err()
         );
         let short_tag = [0b1111_1111, 0b1000_0000];
-        assert_eq!(
-            Tag::take_from(&mut &short_tag[..]),
-            Err(decode::Error::Malformed)
+        assert!(
+            Tag::take_from(&mut short_tag.into_source()).is_err()
         );
     }
 }

@@ -51,8 +51,6 @@ pub use self::tag::Tag;
 
 //--- Public modules
 
-#[macro_use] pub mod debug;
-
 pub mod decode;
 pub mod encode;
 

@@ -1,6 +1,6 @@
 [package]
 name = "bcder"
-version = "0.6.2-dev"
+version = "0.7.0-dev"
 edition = "2018"
 authors = ["The NLnet Labs RPKI Team <rpki-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
@@ -11,12 +11,6 @@ categories = ["encoding", "network-programming", "parsing"]
 license = "BSD-3-Clause"
 
 [dependencies]
-backtrace   = { version = "^0.3.15", optional = true }
 bytes       = "^1.0"
 smallvec    = "^1.1"
-
-[features]
-# Print a backtrace when a parsing error occurs. This feature is intended for
-# development use exclusively and MUST NOT be enabled in release builds.
-extra-debug = [ "backtrace" ]
 

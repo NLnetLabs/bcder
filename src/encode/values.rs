@@ -48,7 +48,7 @@ pub trait Values {
     fn to_captured(&self, mode: Mode) -> Captured {
         let mut target = Vec::new();
         self.write_encoded(mode, &mut target).unwrap();
-        Captured::new(target.into(), mode)
+        Captured::new(target.into(), mode, Default::default())
     }
 }
 

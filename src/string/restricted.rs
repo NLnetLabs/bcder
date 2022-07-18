@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use bytes::Bytes;
 use crate::{decode, encode};
+use crate::decode::DecodeError;
 use crate::tag::Tag;
 use super::octet::{OctetString, OctetStringIter, OctetStringOctets};
 
@@ -158,16 +159,16 @@ impl<L: CharSet> RestrictedString<L> {
     /// returned.
     pub fn take_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         cons.take_value_if(L::TAG, Self::from_content)
     }
 
     /// Takes a character set from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
-    ) -> Result<Self, S::Err> {
+    ) -> Result<Self, DecodeError<S::Error>> {
         let os = OctetString::from_content(content)?;
-        Self::new(os).map_err(|_| decode::Error::Malformed.into())
+        Self::new(os).map_err(|_| content.content_err("invalid character"))
     }
 
     /// Returns a value encoder for the character string with the natural tag.
@@ -542,6 +543,7 @@ mod test {
 
     use super::*;
     use bytes::Bytes;
+    use crate::decode::IntoSource;
     use crate::mode::Mode;
     use crate::encode::Values;
 
@@ -554,7 +556,7 @@ mod test {
         ps.encode_ref().write_encoded(Mode::Der, &mut v).unwrap();
 
         let decoded = Mode::Der.decode(
-            v.as_slice(),
+            v.as_slice().into_source(),
             PrintableString::take_from
         ).unwrap();
 

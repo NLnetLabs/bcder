@@ -1,12 +1,13 @@
 //! The source for decoding data.
 //!
-//! This is an internal module. It’s public types are re-exported by the
+//! This is an internal module. Its public types are re-exported by the
 //! parent.
 
-use std::mem;
+use std::{error, fmt, mem, ops};
 use std::cmp::min;
+use std::convert::Infallible;
 use bytes::Bytes;
-use super::error::Error;
+use super::error::{ContentError, DecodeError};
 
 
 //------------ Source --------------------------------------------------------
@@ -17,46 +18,33 @@ use super::error::Error;
 /// decoders.
 ///
 /// A source can only progress forward over time. It provides the ability to
-/// access the next few bytes as a slice, advance forward, or advance forward
-/// returning a Bytes value of the data it advanced over.
+/// access the next few bytes as a slice or a [`Bytes`] value, and advance
+/// forward.
 ///
 /// _Please note:_ This trait may change as we gain more experience with
 /// decoding in different circumstances. If you implement it for your own
 /// types, we would appreciate feedback what worked well and what didn’t.
 pub trait Source {
-    /// The error produced by the source.
-    ///
-    /// The type used here needs to wrap [`ber::decode::Error`] and extends it
-    /// by whatever happens if acquiring additional data fails. If `Source`
-    /// is implemented for types where this acqusition cannot fail,
-    /// `ber::decode::Error` should be used here.
-    ///
-    /// [`ber::decode::Error`]: enum.Error.html
-    type Err: From<Error>;
+    /// The error produced when the source failed to read more data.
+    type Error: error::Error;
+
+    /// Returns the current logical postion within the sequence of data.
+    fn pos(&self) -> Pos;
 
     /// Request at least `len` bytes to be available.
     ///
     /// The method returns the number of bytes that are actually available.
     /// This may only be smaller than `len` if the source ends with less
-    /// bytes available.
+    /// bytes available. It may be larger than `len` but less than the total
+    /// number of bytes still left in the source.
+    ///
+    /// The method can be called multiple times without advancing in between.
+    /// If in this case `len` is larger than when last called, the source
+    /// should try and make the additional data available.
     ///
     /// The method should only return an error if the source somehow fails
     /// to get more data such as an IO error or reset connection.
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err>;
-
-    /// Advance the source by `len` bytes.
-    ///
-    /// The method advances the start of the view provided by the source by
-    /// `len` bytes. Advancing beyond the end of a source is an error.
-    /// Implementations should return their equivalient of
-    /// [`Error::Malformed`].
-    ///
-    /// The value of `len` may be larger than the last length previously
-    /// request via [`request`].
-    ///
-    /// [`Error::Malformed`]: enum.Error.html#variant.Malformed
-    /// [`request`]: #tymethod.request
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err>;
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error>;
 
     /// Returns a bytes slice with the available data.
     ///
@@ -72,16 +60,44 @@ pub trait Source {
     /// The method returns a [`Bytes`] value of the range `start..end` from
     /// the beginning of the current view of the source. Both indexes must
     /// not be greater than the value returned by the last successful call
-    /// to [`request`].
+    /// to [`request`][Self::request].
     ///
     /// # Panics
     ///
-    /// The method panics if `start` or `end` are larger than the last
-    /// successful call to [`request`].
-    ///
-    /// [`Bytes`]: ../../bytes/struct.Bytes.html
-    /// [`request`]: #tymethod.request
+    /// The method panics if `start` or `end` are larger than the result of
+    /// the last successful call to [`request`][Self::request].
     fn bytes(&self, start: usize, end: usize) -> Bytes;
+
+    /// Advance the source by `len` bytes.
+    ///
+    /// The method advances the start of the view provided by the source by
+    /// `len` bytes. This value must not be greater than the value returned
+    /// by the last successful call to [`request`][Self::request].
+    ///
+    /// # Panics
+    ///
+    /// The method panics if `len` is larger than the result of the last
+    /// successful call to [`request`][Self::request].
+    fn advance(&mut self, len: usize);
+
+    /// Skip over the next `len` bytes.
+    ///
+    /// The method attempts to advance the source by `len` bytes or by
+    /// however many bytes are still available if this number is smaller,
+    /// without making these bytes available.
+    ///
+    /// Returns the number of bytes skipped over. This value may only differ
+    /// from len if the remainder of the source contains less than `len`
+    /// bytes.
+    ///
+    /// The default implementation uses `request` and `advance`. However, for
+    /// some sources it may be significantly cheaper to provide a specialised
+    /// implementation.
+    fn skip(&mut self, len: usize) -> Result<usize, Self::Error> {
+        let res = min(self.request(len)?, len);
+        self.advance(res);
+        Ok(res)
+    }
 
 
     //--- Advanced access
@@ -89,13 +105,13 @@ pub trait Source {
     /// Takes a single octet from the source.
     ///
     /// If there aren’t any more octets available from the source, returns
-    /// a malformed error.
-    fn take_u8(&mut self) -> Result<u8, Self::Err> {
+    /// a content error.
+    fn take_u8(&mut self) -> Result<u8, DecodeError<Self::Error>> {
         if self.request(1)? < 1 {
-            xerr!(return Err(Error::Malformed.into()))
+            return Err(self.content_err("unexpected end of data"))
         }
         let res = self.slice()[0];
-        self.advance(1)?;
+        self.advance(1);
         Ok(res)
     }
 
@@ -103,76 +119,31 @@ pub trait Source {
     ///
     /// If there aren’t any more octets available from the source, returns
     /// `Ok(None)`.
-    fn take_opt_u8(&mut self) -> Result<Option<u8>, Self::Err> {
+    fn take_opt_u8(&mut self) -> Result<Option<u8>, Self::Error> {
         if self.request(1)? < 1 {
             return Ok(None)
         }
         let res = self.slice()[0];
-        self.advance(1)?;
+        self.advance(1);
         Ok(Some(res))
     }
-}
 
-impl Source for Bytes {
-    type Err = Error;
-
-    fn request(&mut self, _len: usize) -> Result<usize, Self::Err> {
-        Ok(self.len())
-    }
-
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
-        if len > self.len() {
-            Err(Error::Malformed)
-        }
-        else {
-            bytes::Buf::advance(self, len);
-            Ok(())
-        }
-    }
-
-    fn slice(&self) -> &[u8] {
-        self.as_ref()
-    }
-
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.slice(start..end)
-    }
-}
-
-impl<'a> Source for &'a [u8] {
-    type Err = Error;
-
-    fn request(&mut self, _len: usize) -> Result<usize, Self::Err> {
-        Ok(self.len())
-    }
-
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
-        if len > self.len() {
-            Err(Error::Malformed)
-        }
-        else {
-            *self = &self[len..];
-            Ok(())
-        }
-    }
-
-    fn slice(&self) -> &[u8] {
-        self
-    }
-
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
-        Bytes::copy_from_slice(&self[start..end])
+    /// Returns a content error at the current position of the source.
+    fn content_err(
+        &self, err: impl Into<ContentError>
+    ) -> DecodeError<Self::Error> {
+        DecodeError::content(err.into(), self.pos())
     }
 }
 
 impl<'a, T: Source> Source for &'a mut T {
-    type Err = T::Err;
+    type Error = T::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         Source::request(*self, len)
     }
     
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) {
         Source::advance(*self, len)
     }
 
@@ -182,6 +153,224 @@ impl<'a, T: Source> Source for &'a mut T {
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
         Source::bytes(*self, start, end)
+    }
+
+    fn pos(&self) -> Pos {
+        Source::pos(*self)
+    }
+}
+
+
+//------------ IntoSource ----------------------------------------------------
+
+/// A type that can be converted into a source.
+pub trait IntoSource {
+    type Source: Source;
+
+    fn into_source(self) -> Self::Source;
+}
+
+impl<T: Source> IntoSource for T {
+    type Source = Self;
+
+    fn into_source(self) -> Self::Source {
+        self
+    }
+}
+
+
+//------------ Pos -----------------------------------------------------------
+
+/// The logical position within a source.
+///
+/// Values of this type can only be used for diagnostics. They can not be used
+/// to determine how far a source has been advanced since it was created. This
+/// is why we used a newtype.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Pos(usize);
+
+impl From<usize> for Pos {
+    fn from(pos: usize) -> Pos {
+        Pos(pos)
+    }
+}
+
+impl ops::Add for Pos {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Pos(self.0 + rhs.0)
+    }
+}
+
+impl fmt::Display for Pos {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+
+//------------ BytesSource ---------------------------------------------------
+
+/// A source for a bytes value.
+#[derive(Clone, Debug)]
+pub struct BytesSource {
+    /// The bytes.
+    data: Bytes,
+
+    /// The current read position in the data.
+    pos: usize,
+
+    /// The offset for the reported position.
+    ///
+    /// This is the value reported by `Source::pos` when `self.pos` is zero.
+    offset: Pos,
+}
+
+impl BytesSource {
+    /// Creates a new bytes source from a bytes values.
+    pub fn new(data: Bytes) -> Self {
+        BytesSource { data, pos: 0, offset: 0.into() }
+    }
+
+    /// Creates a new bytes source with an explicit offset.
+    ///
+    /// When this function is used to create a bytes source, `Source::pos`
+    /// will report a value increates by `offset`.
+    pub fn with_offset(data: Bytes, offset: Pos) -> Self {
+        BytesSource { data, pos: 0, offset }
+    }
+
+    /// Returns the remaining length of data.
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns whether there is any data remaining.
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    /// Splits the first `len` bytes off the source and returns them.
+    ///
+    /// # Panics
+    ///
+    /// This method panics of `len` is larger than `self.len()`.
+    pub fn split_to(&mut self, len: usize) -> Bytes {
+        let res = self.data.split_to(len);
+        self.pos += len;
+        res
+    }
+
+    /// Converts the source into the remaining bytes.
+    pub fn into_bytes(self) -> Bytes {
+        self.data
+    }
+}
+
+impl Source for BytesSource {
+    type Error = Infallible;
+
+    fn pos(&self) -> Pos {
+        self.offset + self.pos.into()
+    }
+
+    fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
+        Ok(self.data.len())
+    }
+
+    fn slice(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+
+    fn bytes(&self, start: usize, end: usize) -> Bytes {
+        self.data.slice(start..end)
+    }
+
+    fn advance(&mut self, len: usize) {
+        assert!(len <= self.data.len());
+        bytes::Buf::advance(&mut self.data, len);
+        self.pos += len;
+    }
+}
+
+impl IntoSource for Bytes {
+    type Source = BytesSource;
+
+    fn into_source(self) -> Self::Source {
+        BytesSource::new(self)
+    }
+}
+
+
+//------------ SliceSource ---------------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+pub struct SliceSource<'a> {
+    data: &'a [u8],
+    pos: usize
+}
+
+impl<'a> SliceSource<'a> {
+    /// Creates a new bytes source from a slice.
+    pub fn new(data: &'a [u8]) -> Self {
+        SliceSource { data, pos: 0 }
+    }
+
+    /// Returns the remaining length of data.
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns whether there is any data remaining.
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    /// Splits the first `len` bytes off the source and returns them.
+    ///
+    /// # Panics
+    ///
+    /// This method panics of `len` is larger than `self.len()`.
+    pub fn split_to(&mut self, len: usize) -> &'a [u8] {
+        let (left, right) = self.data.split_at(len);
+        self.data = right;
+        self.pos += len;
+        left
+    }
+}
+
+impl<'a> Source for SliceSource<'a> {
+    type Error = Infallible;
+
+    fn pos(&self) -> Pos {
+        self.pos.into()
+    }
+
+    fn request(&mut self, _len: usize) -> Result<usize, Self::Error> {
+        Ok(self.data.len())
+    }
+
+    fn advance(&mut self, len: usize) {
+        assert!(len <= self.data.len());
+        self.data = &self.data[len..];
+        self.pos += len;
+    }
+
+    fn slice(&self) -> &[u8] {
+        self.data
+    }
+
+    fn bytes(&self, start: usize, end: usize) -> Bytes {
+        Bytes::copy_from_slice(&self.data[start..end])
+    }
+}
+
+impl<'a> IntoSource for &'a [u8] {
+    type Source = SliceSource<'a>;
+
+    fn into_source(self) -> Self::Source {
+        SliceSource::new(self)
     }
 }
 
@@ -273,9 +462,13 @@ impl<S: Source> LimitedSource<S> {
     /// If there currently is no limit, the method will panic. Otherwise it
     /// will simply advance to the end of the limit which may be something
     /// the underlying source doesn’t like and thus produce an error.
-    pub fn skip_all(&mut self) -> Result<(), S::Err> {
+    pub fn skip_all(&mut self) -> Result<(), DecodeError<S::Error>> {
         let limit = self.limit.unwrap();
-        self.advance(limit)
+        if self.request(limit)? < limit {
+            return Err(self.content_err("unexpected end of data"))
+        }
+        self.advance(limit);
+        Ok(())
     }
 
     /// Returns a bytes value containing all octets until the current limit.
@@ -283,14 +476,17 @@ impl<S: Source> LimitedSource<S> {
     /// If there currently is no limit, the method will panic. Otherwise it
     /// tries to acquire a bytes value for the octets from the current
     /// position to the end of the limit and advance to the end of the limit.
-    /// This may result in an error by the underlying source.
-    pub fn take_all(&mut self) -> Result<Bytes, S::Err> {
+    ///
+    /// This will result in a source error if the underlying source returns
+    /// an error. It will result in a content error if the underlying source
+    /// ends before the limit is reached.
+    pub fn take_all(&mut self) -> Result<Bytes, DecodeError<S::Error>> {
         let limit = self.limit.unwrap();
         if self.request(limit)? < limit {
-            return Err(Error::Malformed.into())
+            return Err(self.content_err("unexpected end of data"))
         }
         let res = self.bytes(0, limit);
-        self.advance(limit)?;
+        self.advance(limit);
         Ok(res)
     }
 
@@ -303,18 +499,19 @@ impl<S: Source> LimitedSource<S> {
     /// If there is no limit set, the method will try to access one single
     /// octet and return a malformed error if that is actually possible, i.e.,
     /// if there are octets left in the underlying source.
-    pub fn exhausted(&mut self) -> Result<(), S::Err> {
+    ///
+    /// Any source errors are passed through. If there the data is not
+    /// exhausted as described above, a content error is created.
+    pub fn exhausted(&mut self) -> Result<(), DecodeError<S::Error>> {
         match self.limit {
             Some(0) => Ok(()),
-            Some(_limit) => {
-                xerr!(Err(Error::Malformed.into()))
-            }
+            Some(_limit) => Err(self.content_err("trailing data")),
             None => {
                 if self.source.request(1)? == 0 {
                     Ok(())
                 }
                 else {
-                    xerr!(Err(Error::Malformed.into()))
+                    Err(self.content_err("trailing data"))
                 }
             }
         }
@@ -322,9 +519,13 @@ impl<S: Source> LimitedSource<S> {
 }
 
 impl<S: Source> Source for LimitedSource<S> {
-    type Err = S::Err;
+    type Error = S::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
+    fn pos(&self) -> Pos {
+        self.source.pos()
+    }
+
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
         if let Some(limit) = self.limit {
             Ok(min(limit, self.source.request(min(limit, len))?))
         }
@@ -333,11 +534,12 @@ impl<S: Source> Source for LimitedSource<S> {
         }
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
+    fn advance(&mut self, len: usize) {
         if let Some(limit) = self.limit {
-            if len > limit {
-                xerr!(return Err(Error::Malformed.into()))
-            }
+            assert!(
+                len <= limit,
+                "advanced past end of limit"
+            );
             self.limit = Some(limit - len);
         }
         self.source.advance(len)
@@ -376,7 +578,13 @@ impl<S: Source> Source for LimitedSource<S> {
 ///
 /// [`Constructed::capture`]: struct.Constructed.html#method.capture
 pub struct CaptureSource<'a, S: 'a> {
+    /// The wrapped real source.
     source: &'a mut S,
+
+    /// The number of bytes the source has promised to have for us.
+    len: usize,
+
+    /// The position in the source our view starts at.
     pos: usize,
 }
 
@@ -385,7 +593,8 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     pub fn new(source: &'a mut S) -> Self {
         CaptureSource {
             source,
-            pos: 0
+            len: 0,
+            pos: 0,
         }
     }
 
@@ -400,26 +609,20 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     ///
     /// Advances the underlying source to the end of the captured bytes.
     pub fn skip(self) {
-        assert!(
-            !self.source.advance(self.pos).is_err(),
-            "failed to advance capture source"
-        );
+        self.source.advance(self.pos)
     }
 }
 
 impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
-    type Err = S::Err;
+    type Error = S::Error;
 
-    fn request(&mut self, len: usize) -> Result<usize, Self::Err> {
-        self.source.request(self.pos + len).map(|res| res - self.pos)
+    fn pos(&self) -> Pos {
+        self.source.pos() + self.pos.into()
     }
 
-    fn advance(&mut self, len: usize) -> Result<(), Self::Err> {
-        if self.request(len)? < len {
-            return Err(Error::Malformed.into())
-        }
-        self.pos += len;
-        Ok(())
+    fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
+        self.len = self.source.request(self.pos + len)?;
+        Ok(self.len - self.pos)
     }
 
     fn slice(&self) -> &[u8] {
@@ -427,7 +630,25 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
     }
 
     fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.source.bytes(start + self.pos, end + self.pos)
+        let start = start + self.pos;
+        let end = end + self.pos;
+        assert!(
+            self.len >= start,
+            "start past the end of data"
+        );
+        assert!(
+            self.len >= end,
+            "end past the end of data"
+        );
+        self.source.bytes(start, end)
+    }
+
+    fn advance(&mut self, len: usize) {
+        assert!(
+            self.len >= self.pos + len,
+            "advanced past the end of data"
+        );
+        self.pos += len;
     }
 }
 
@@ -440,77 +661,70 @@ mod test {
 
     #[test]
     fn take_u8() {
-        let mut source = &b"123"[..];
-        assert_eq!(source.take_u8(), Ok(b'1'));
-        assert_eq!(source.take_u8(), Ok(b'2'));
-        assert_eq!(source.take_u8(), Ok(b'3'));
-        assert_eq!(source.take_u8(), Err(Error::Malformed));
+        let mut source = b"123".into_source();
+        assert_eq!(source.take_u8().unwrap(), b'1');
+        assert_eq!(source.take_u8().unwrap(), b'2');
+        assert_eq!(source.take_u8().unwrap(), b'3');
+        assert!(source.take_u8().is_err())
     }
 
     #[test]
     fn take_opt_u8() {
-        let mut source = &b"123"[..];
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'1')));
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'2')));
-        assert_eq!(source.take_opt_u8(), Ok(Some(b'3')));
-        assert_eq!(source.take_opt_u8(), Ok(None));
+        let mut source = b"123".into_source();
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'1'));
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'2'));
+        assert_eq!(source.take_opt_u8().unwrap(), Some(b'3'));
+        assert_eq!(source.take_opt_u8().unwrap(), None);
     }
 
     #[test]
     fn bytes_impl() {
-        let mut bytes = Bytes::from_static(b"1234567890");
+        let mut bytes = Bytes::from_static(b"1234567890").into_source();
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&Source::slice(&bytes)[..4] == b"1234");
         assert_eq!(bytes.bytes(2, 4), Bytes::from_static(b"34"));
-        Source::advance(&mut bytes, 4).unwrap();
+        Source::advance(&mut bytes, 4);
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&Source::slice(&bytes)[..4] == b"5678");
-        Source::advance(&mut bytes, 4).unwrap();
+        Source::advance(&mut bytes, 4);
         assert_eq!(bytes.request(4).unwrap(), 2);
-        assert!(&Source::slice(&bytes)[..] == b"90");
-        assert_eq!(
-            Source::advance(&mut bytes, 4).unwrap_err(),
-            Error::Malformed
-        );
+        assert!(&Source::slice(&bytes) == b"90");
+        bytes.advance(2);
+        assert_eq!(bytes.request(4).unwrap(), 0);
     }
 
     #[test]
     fn slice_impl() {
-        let mut bytes = &b"1234567890"[..];
+        let mut bytes = b"1234567890".into_source();
         assert!(bytes.request(4).unwrap() >= 4);
-        assert!(&Source::slice(&bytes)[..4] == b"1234");
+        assert!(&bytes.slice()[..4] == b"1234");
         assert_eq!(bytes.bytes(2, 4), Bytes::from_static(b"34"));
-        Source::advance(&mut bytes, 4).unwrap();
+        bytes.advance(4);
         assert!(bytes.request(4).unwrap() >= 4);
-        assert!(&Source::slice(&bytes)[..4] == b"5678");
-        Source::advance(&mut bytes, 4).unwrap();
+        assert!(&bytes.slice()[..4] == b"5678");
+        bytes.advance(4);
         assert_eq!(bytes.request(4).unwrap(), 2);
-        assert!(&Source::slice(&bytes)[..] == b"90");
-        assert_eq!(
-            Source::advance(&mut bytes, 4).unwrap_err(),
-            Error::Malformed
-        );
+        assert!(&bytes.slice() == b"90");
+        bytes.advance(2);
+        assert_eq!(bytes.request(4).unwrap(), 0);
     }
 
     #[test]
     fn limited_source() {
-        let mut the_source = LimitedSource::new(&b"12345678"[..]);
+        let mut the_source = LimitedSource::new(
+            b"12345678".into_source()
+        );
         the_source.set_limit(Some(4));
 
         let mut source = the_source.clone();
-        assert_eq!(source.exhausted(), Err(Error::Malformed));
+        assert!(source.exhausted().is_err());
         assert_eq!(source.request(6).unwrap(), 4);
-        source.advance(2).unwrap();
-        assert_eq!(source.exhausted(), Err(Error::Malformed));
+        source.advance(2);
+        assert!(source.exhausted().is_err());
         assert_eq!(source.request(6).unwrap(), 2);
-        source.advance(2).unwrap();
+        source.advance(2);
         source.exhausted().unwrap();
         assert_eq!(source.request(6).unwrap(), 0);
-        source.advance(0).unwrap();
-        assert_eq!(source.advance(2).unwrap_err(), Error::Malformed);
-
-        let mut source = the_source.clone();
-        assert_eq!(source.advance(5).unwrap_err(), Error::Malformed);
 
         let mut source = the_source.clone();
         source.skip_all().unwrap();
@@ -526,28 +740,44 @@ mod test {
 
     #[test]
     #[should_panic]
-    fn limit_further() {
-        let mut source = LimitedSource::new(&b"12345");
+    fn limited_source_far_advance() {
+        let mut source = LimitedSource::new(
+            b"12345678".into_source()
+        );
         source.set_limit(Some(4));
-        source.limit_further(Some(5));
+        assert_eq!(source.request(6).unwrap(), 4);
+        source.advance(4);
+        assert_eq!(source.request(6).unwrap(), 0);
+        source.advance(6); // panics
+    }
+
+    #[test]
+    #[should_panic]
+    fn limit_further() {
+        let mut source = LimitedSource::new(b"12345".into_source());
+        source.set_limit(Some(4));
+        source.limit_further(Some(5)); // panics
     }
 
     #[test]
     fn capture_source() {
-        let mut source = &b"1234567890"[..];
+        let mut source = b"1234567890".into_source();
         {
             let mut capture = CaptureSource::new(&mut source);
-            capture.advance(4).unwrap();
+            assert_eq!(capture.request(4).unwrap(), 10);
+            capture.advance(4);
             assert_eq!(capture.into_bytes(), Bytes::from_static(b"1234"));
         }
-        assert_eq!(source, b"567890");
+        assert_eq!(source.data, b"567890");
 
-        let mut source = &b"1234567890"[..];
+        let mut source = b"1234567890".into_source();
         {
             let mut capture = CaptureSource::new(&mut source);
-            capture.advance(4).unwrap();
+            assert_eq!(capture.request(4).unwrap(), 10);
+            capture.advance(4);
             capture.skip();
         }
-        assert_eq!(source, b"567890");
+        assert_eq!(source.data, b"567890");
     }
 }
+

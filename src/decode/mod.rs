@@ -4,9 +4,9 @@
 //!
 //! The basic idea is that for each type a function exists that knows how
 //! to decode one value of that type. For constructed types, this function
-//! in turn relies on similar functions provided for its consituent types.
+//! in turn relies on similar functions provided for its constituent types.
 //! For a detailed introduction to how to write these functions, please
-//! refer to the [decode section of the guide].
+//! refer to the [decode section of the guide][crate::guide::decode].
 //!
 //! The two most important types of this module are [`Primitive`] and
 //! [`Constructed`], representing the content octets of a value in primitive
@@ -20,19 +20,30 @@
 //! The enum [`Content`] is used for cases where a value can be either
 //! primitive or constructed such as most string types.
 //!
-//! Decoding is jumpstarted by providing a data source to parse data from.
-//! This is any value that implements the [`Source`] trait.
+//! The data for decoding is provided by any type that implements the
+//! [`Source`] trait – or can be converted into such a type via the
+//! [`IntoSource`] trait. Implementations for both `bytes::Bytes` and
+//! `&[u8]` are available.
 //!
-//! [decode section of the guide]: ../guide/decode/index.html
-//! [`Primitive`]: struct.Primitive.html
-//! [`Constructed`]: struct.Constructed.html
-//! [`Content`]: enum.Content.html
-//! [`Source`]: trait.Source.html
+//! During decoding, errors can happen. There are two kinds of errors: for
+//! one, the source can fail to gather more data, e.g., when reading from a
+//! file fails. Such errors are called _source errors._ Their type is
+//! provided by the source.
+//!
+//! Second, data that cannot be decoded according to the syntax is said to
+//! result in a _content error._ The [`ContentError`] type is used for such
+//! errors.
+//!
+//! When decoding data from a source, both errors can happen. The type
+//! `DecodeError` provides a way to store either of them and is the error
+//! type you will likely encounter the most.
 
 pub use self::content::{Content, Constructed, Primitive};
-pub use self::error::Error;
-pub use self::error::Error::{Malformed, Unimplemented};
-pub use self::source::{CaptureSource, LimitedSource, Source};
+pub use self::error::{ContentError, DecodeError};
+pub use self::source::{
+    BytesSource, CaptureSource, IntoSource, Pos, LimitedSource, SliceSource,
+    Source
+};
 
 mod content;
 mod error;
