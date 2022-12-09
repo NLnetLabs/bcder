@@ -6,9 +6,19 @@ Breaking changes
 
 New
 
+* Added a number of missing well-defined tags as `Tag` constants,
+  specifically: `CHARACTER STRING`, `TIME`, `DATA`, `TIME_OF_DAY`,
+  `DATE_TIME`, `DURATION`, `OID-IRI`, and `RELATIVE-OID-IRI`.
+  ([#67] by [@lvkv])
+
 Bug fixes
 
+* Fix `Tag::BMP_STRING` to `UNIVERSAL 30`. ([#67] by [@lvkv])
+
 Other changes
+
+[#67]: https://github.com/NLnetLabs/bcder/pull/67
+[@lvkv]: https://github.com/lvkv
 
 
 ## 0.7.0
