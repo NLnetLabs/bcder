@@ -57,7 +57,7 @@ impl Tag {
     ///
     /// (1 bit – 0b1000_0000, it is cleared in the last octet).
     const LAST_OCTET_MASK: u8 = 0x80;
-    
+
     /// The largest tag number possible with three octets.
     const MAX_VAL_SPAN_3_OCTETS: u32 = 0x001f_ffff;
 
@@ -118,17 +118,20 @@ impl Tag {
     /// The tag for the REAL type, UNIVERSAL 9.
     pub const REAL: Self = Tag([9, 0, 0, 0]);
 
-    /// The tag for the ENUMERATED type, UNIVERAL 10.
+    /// The tag for the ENUMERATED type, UNIVERSAL 10.
     pub const ENUMERATED: Self = Tag([10, 0, 0, 0]);
 
-    /// The tag for the EMBEDDED PDV type, UNIVERAL 11.
+    /// The tag for the EMBEDDED PDV type, UNIVERSAL 11.
     pub const EMBEDDED_PDV: Self = Tag([11, 0, 0, 0]);
 
     /// The tag for the UTF8String type, UNIVERSAL 12
     pub const UTF8_STRING: Self = Tag([12, 0, 0, 0]);
 
-    /// The tag for the RELATIVE-OID type, UNIVERAL 13.
+    /// The tag for the RELATIVE-OID type, UNIVERSAL 13.
     pub const RELATIVE_OID: Self = Tag([13, 0, 0, 0]);
+
+    /// The tag for the TIME type, UNIVERSAL 14.
+    pub const TIME: Self = Tag([14, 0, 0, 0]);
 
     /// The tag for the SEQUENCE and SEQUENCE OF types, UNIVERSAL 16.
     pub const SEQUENCE: Self = Tag([16, 0, 0, 0]);
@@ -154,7 +157,7 @@ impl Tag {
     /// The tag for the UTCTime type, UNIVERSAL 23.
     pub const UTC_TIME: Self = Tag([23, 0, 0, 0]);
 
-    /// The tag for the GeneralizedType type, UNIVERAL 24.
+    /// The tag for the GeneralizedType type, UNIVERSAL 24.
     pub const GENERALIZED_TIME: Self = Tag([24, 0, 0, 0]);
 
     /// The tag for the GraphicString type, UNIVERSAL 25.
@@ -169,8 +172,29 @@ impl Tag {
     /// The tag for the UniversalString type, UNIVERSAL 28.
     pub const UNIVERSAL_STRING: Self = Tag([28, 0, 0, 0]);
 
-    /// The tag for the BMPString type, UNIVERSAL 29.
-    pub const BMP_STRING: Self = Tag([29, 0, 0, 0]);
+    /// The tag for the CHARACTER STRING type, UNIVERSAL 29.
+    pub const CHARACTER_STRING: Self = Tag([29, 0, 0, 0]);
+
+    /// The tag for the BMPString type, UNIVERSAL 30.
+    pub const BMP_STRING: Self = Tag([30, 0, 0, 0]);
+
+    /// The tag for the DATE type, UNIVERSAL 31.
+    pub const DATE: Self = Tag([31, 0, 0, 0]);
+
+    /// The tag for the TIME-OF-DAY type, UNIVERSAL 32.
+    pub const TIME_OF_DAY: Self = Tag([32, 0, 0, 0]);
+
+    /// The tag for the DATE-TIME type, UNIVERSAL 33.
+    pub const DATE_TIME: Self = Tag([33, 0, 0, 0]);
+
+    /// The tag for the DURATION type, UNIVERSAL 34.
+    pub const DURATION: Self = Tag([34, 0, 0, 0]);
+
+    /// The tag for the OID-IRI type, UNIVERSAL 35.
+    pub const OID_IRI: Self = Tag([35, 0, 0, 0]);
+
+    /// The tag for the RELATIVE-OID-IRI type, UNIVERSAL 36.
+    pub const RELATIVE_OID_IRI: Self = Tag([36, 0, 0, 0]);
 
     //--- The first few context-specific tags.
     //
@@ -473,6 +497,7 @@ impl fmt::Display for Tag {
             Tag::EMBEDDED_PDV => write!(f, "EMBEDDED PDV"),
             Tag::UTF8_STRING => write!(f, "UTF8String"),
             Tag::RELATIVE_OID => write!(f, "RELATIVE-OID"),
+            Tag::TIME => write!(f, "TIME"),
             Tag::SEQUENCE => write!(f, "SEQUENCE"),
             Tag::SET => write!(f, "SET"),
             Tag::NUMERIC_STRING => write!(f, "NumericString"),
@@ -486,7 +511,14 @@ impl fmt::Display for Tag {
             Tag::VISIBLE_STRING => write!(f, "VisibleString"),
             Tag::GENERAL_STRING => write!(f, "GeneralString"),
             Tag::UNIVERSAL_STRING => write!(f, "UniversalString"),
+            Tag::CHARACTER_STRING => write!(f, "CHARACTER STRING"),
             Tag::BMP_STRING => write!(f, "BMPString"),
+            Tag::DATE => write!(f, "DATE"),
+            Tag::TIME_OF_DAY => write!(f, "TIME-OF-DAY"),
+            Tag::DATE_TIME => write!(f, "DATE-TIME"),
+            Tag::DURATION => write!(f, "DURATION"),
+            Tag::OID_IRI => write!(f, "OID-IRI"),
+            Tag::RELATIVE_OID_IRI => write!(f, "RELATIVE-OID-IRI"),
             tag => {
                 match tag.0[0] & Tag::CLASS_MASK {
                     Tag::UNIVERSAL => write!(f, "[UNIVERSAL ")?,
