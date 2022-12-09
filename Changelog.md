@@ -1,8 +1,8 @@
 # Change Log
 
-## Unreleased future version
+## 0.7.1
 
-Breaking changes
+Released 2022-12-09.
 
 New
 
@@ -14,8 +14,6 @@ New
 Bug fixes
 
 * Fix `Tag::BMP_STRING` to `UNIVERSAL 30`. ([#67] by [@lvkv])
-
-Other changes
 
 [#67]: https://github.com/NLnetLabs/bcder/pull/67
 [@lvkv]: https://github.com/lvkv
