@@ -718,7 +718,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     {
         match op(self)? {
             Some(res) => Ok(res),
-            None => Err(self.source.content_err("missing futher values")),
+            None => Err(self.source.content_err("missing further values")),
         }
     }
 }
@@ -745,7 +745,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     {
         match self.process_next_value(None, op)? {
             Some(res) => Ok(res),
-            None => Err(self.content_err("missing futher values")),
+            None => Err(self.content_err("missing further values")),
         }
     }
 
@@ -1169,7 +1169,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                             // We need a End-of-value, so running out of
                             // data is an error.
                             return Err(self.content_err("
-                                missing futher values"
+                                missing further values"
                             ))
                         }
                         None => unreachable!(),
