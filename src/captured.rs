@@ -52,11 +52,7 @@ pub struct Captured {
 
 impl Captured {
     /// Creates a new captured value from bytes and a mode.
-    ///
-    /// Because we can’t guarantee that the bytes are properly encoded, we
-    /// keep this function crate public. The type, however, doesn’t rely on
-    /// content being properly encoded so this method isn’t unsafe.
-    pub(crate) fn new(bytes: Bytes, mode: Mode, start: Pos) -> Self {
+    pub fn new(bytes: Bytes, mode: Mode, start: Pos) -> Self {
         Captured { bytes, mode, start }
     }
 
