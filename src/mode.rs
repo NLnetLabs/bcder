@@ -22,12 +22,13 @@ use crate::decode::DecodeError;
 /// [`decode´]: #method.decode
 /// [`Primitive`]: decode/struct.Primitive.html
 /// [`Constructed`]: decode/struct.Constructed.html
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Mode {
     /// Basic Encoding Rules.
     ///
     /// These are the most flexible rules, allowing alternative encodings for
     /// some types as well as indefinite length values.
+    #[default]
     Ber,
 
     /// Canonical Encoding Rules.
@@ -76,12 +77,6 @@ impl Mode {
     /// Returns whether the mode is `Mode::Der`.
     pub fn is_der(self) -> bool {
         matches!(self, Mode::Der)
-    }
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::Ber
     }
 }
 
