@@ -5,10 +5,14 @@
 Breaking changes
 
 New
+* Added an implementation of `FromStr` for `Oid`. ([#71] by [@Outurnate])
 
 Bug fixes
 
 Other changes
+
+[#71]: https://github.com/NLnetLabs/bcder/pull/71
+[@Outurnate]: https://github.com/Outurnate
 
 
 ## 0.7.1
