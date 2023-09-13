@@ -69,7 +69,15 @@ pub struct BitString {
 
 impl BitString {
     /// Creates a new bit string.
+    ///
+    /// # Panic
+    ///
+    /// This function panics if the arguments do not make a valid bit string.
+    /// This happens if `unused` is greater than 7 and if `bits` is
+    /// empty and `unused` is not zero.
     pub fn new(unused: u8, bits: Bytes) -> Self {
+        // XXX Temporary assertion here until we can re-design the API.
+        assert!(unused <= 7 && (!bits.is_empty() || unused == 0));
         Self { unused, bits}
     }
 
@@ -151,10 +159,24 @@ impl BitString {
                         "long bit string component in CER mode"
                     ))
                 }
-                Ok(BitString {
-                    unused: inner.take_u8()?,
-                    bits: inner.take_all()?,
-                })
+                let unused = inner.take_u8()?;
+                if unused > 7 {
+                    return Err(content.content_err(
+                        "invalid bit string with large initial octet"
+                    ));
+                }
+                if inner.remaining() == 0 && unused > 0 {
+                    return Err(content.content_err(
+                        "invalid bit string \
+                         (non-zero initial with empty bits)"
+                    ));
+                }
+                let bits = inner.take_all()?;
+
+                // Strictly speaking, we should also check if the unused bits
+                // in the last octet are zero.
+
+                Ok(BitString { unused, bits })
             }
             decode::Content::Constructed(ref inner) => {
                 if inner.mode() == Mode::Der {
@@ -181,6 +203,18 @@ impl BitString {
                     return Err(content.content_err(
                         "long bit string component in CER mode"
                     ))
+                }
+                let unused = inner.take_u8()?;
+                if unused > 7 {
+                    return Err(content.content_err(
+                        "invalid bit string with large initial octet"
+                    ));
+                }
+                if inner.remaining() == 0 && unused > 0 {
+                    return Err(content.content_err(
+                        "invalid bit string \
+                         (non-zero initial with empty bits)"
+                    ));
                 }
                 inner.skip_all()
             }
@@ -296,6 +330,49 @@ impl<T: AsRef<[u8]>> encode::Values for BitSliceEncoder<T> {
         Length::Definite(self.slice.as_ref().len() + 1).write_encoded(target)?;
         target.write_all(&[self.unused])?;
         target.write_all(self.slice.as_ref())
+    }
+}
+
+
+//============ Test ==========================================================
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::decode::IntoSource;
+
+    #[test]
+    fn bitstring_from_der_content() {
+        fn check(encoded: &[u8], decoded: Option<(u8, &[u8])>) {
+            let taken = Mode::Der.decode( encoded.into_source(), |cons| {
+                BitString::take_from(cons)
+            });
+            let mut skip_source = encoded.into_source();
+            let skipped = Mode::Der.decode(&mut skip_source, |cons| {
+                BitString::skip_in(cons)
+            });
+
+            match decoded {
+                Some((unused, bits)) => {
+                    let taken = taken.unwrap();
+                    assert!(skipped.is_ok());
+                    assert!(skip_source.slice().is_empty());
+
+                    assert_eq!(taken.unused, unused);
+                    assert_eq!(taken.bits.as_ref(), bits);
+                }
+                None => {
+                    assert!(taken.is_err());
+                    assert!(skipped.is_err());
+                }
+            }
+        }
+
+        check(b"\x03\x07\x04deadb\xd0", Some((4, b"deadb\xd0")));
+        check(b"\x03\x01\x00", Some((0, b"")));
+        check(b"\x03\x07\x12deadb\xd0", None);
+        check(b"\x03\x01\x04", None);
+        check(b"\x03\x00", None);
     }
 }
 

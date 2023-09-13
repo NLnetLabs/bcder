@@ -390,6 +390,25 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
         }
     }
 
+    /// Process a slice of the remainder of the content via a closure.
+    pub fn with_slice_all<F, T, E>(
+        &mut self, op: F,
+    ) -> Result<T, DecodeError<S::Error>>
+    where
+        F: FnOnce(&[u8]) -> Result<T, E>,
+        E: Into<ContentError>,
+    {
+        let remaining = self.remaining();
+        if self.source.request(remaining)? < remaining {
+            return Err(self.source.content_err("unexpected end of data"));
+        }
+        let res = op(&self.source.slice()[..remaining]).map_err(|err| {
+            self.content_err(err)
+        })?;
+        self.source.advance(remaining);
+        Ok(res)
+    }
+
     /// Checkes whether all content has been advanced over.
     fn exhausted(self) -> Result<(), DecodeError<S::Error>> {
         self.source.exhausted()
@@ -661,6 +680,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
 
         match length {
             Length::Definite(len) => {
+                if let Some(limit) = self.source.limit() {
+                    if len > limit {
+                        return Err(self.source.content_err(
+                            "nested value with excessive length"
+                        ))
+                    }
+                }
                 let old_limit = self.source.limit_further(Some(len));
                 let res = {
                     let mut content = if constructed {
@@ -1108,6 +1134,11 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                     if let Length::Definite(len) = length {
                         if let Err(err) = op(tag, constructed, stack.len()) {
                             return Err(self.content_err(err));
+                        }
+                        if self.source.request(len)? < len {
+                            return Err(self.content_err(
+                                "short primitive value"
+                            ))
                         }
                         self.source.advance(len);
                     }

@@ -1,0 +1,40 @@
+[package]
+name = "bcder-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.bcder]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "decode_oid"
+path = "fuzz_targets/decode_oid.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decode_int"
+path = "fuzz_targets/decode_int.rs"
+test = false
+doc = false
+
+
+[[bin]]
+name = "decode_strings"
+path = "fuzz_targets/decode_strings.rs"
+test = false
+doc = false

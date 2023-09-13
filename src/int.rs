@@ -78,15 +78,12 @@ macro_rules! slice_to_builtin {
 macro_rules! decode_builtin {
     ( $flavor:ident, $prim:expr, $type:ident) => {{
         Self::check_head($prim)?;
-        let res = {
-            let slice = $prim.slice_all()?;
+        $prim.with_slice_all(|slice| {
             slice_to_builtin!(
                 $flavor, slice, $type,
-                Err($prim.content_err("invalid integer"))
-            )?
-        };
-        $prim.skip_all()?;
-        Ok(res)
+                Err("invalid integer")
+            )
+        })
     }}
 }
 

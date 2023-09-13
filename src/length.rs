@@ -1,6 +1,6 @@
 //! The Length Octets.
 //!
-//! This is a private module. Its public tiems are re-exported by the parent.
+//! This is a private module. Its public items are re-exported by the parent.
 
 use std::io;
 use crate::decode::{DecodeError, Source};
