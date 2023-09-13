@@ -1,14 +1,26 @@
 # Change Log
 
-## Unreleased next version
+## 0.7.3
 
-Breaking changes
+Release 2023-09-13.
 
-New
+This release fixes a number of decoding issues that can lead to panics on
+invalid input data. They have been assigned CVE-2023-39914.
 
 Bug fixes
 
-Other changes
+* Fixes various decoding that lead to a panic on invalid data.
+  Specifically:
+    * error out rather than panic when a nested value has a greater length
+      than allowed by the outer value,
+    * check that there is enough data available before skipping over a
+      primitive value’s content,
+    * check that enough data is available before trying to parse a tag value,
+    * check for correct encoding of bit strings: don’t allow the number of
+      unused bits to be greater than 7 and that they are zero for an empty
+      bit string,
+    * check for correct encoding of object identifiers: they cannot be empty
+      and the last byte must have bit 7 cleared.
 
 
 ## 0.7.2
