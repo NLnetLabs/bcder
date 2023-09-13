@@ -9,7 +9,7 @@
 use std::{fmt, hash, io, str::FromStr};
 use bytes::Bytes;
 use crate::encode;
-use crate::decode::{Constructed, DecodeError, Source};
+use crate::decode::{Constructed, DecodeError, Primitive, Source};
 use crate::mode::Mode;
 use crate::tag::Tag;
 
@@ -58,23 +58,24 @@ impl Oid<Bytes> {
     /// Skips over an object identifier value.
     ///
     /// If the source has reached its end, if the next value does not have
-    /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
-    /// error.
+    /// the `Tag::OID`, or if it is not a primitive value containing a
+    /// correctly encoded OID, returns a malformed error.
     pub fn skip_in<S: Source>(
         cons: &mut Constructed<S>
     ) -> Result<(), DecodeError<S::Error>> {
-        cons.take_primitive_if(Tag::OID, |prim| prim.skip_all())
+        cons.take_primitive_if(Tag::OID, Self::skip_primitive)
     }
 
     /// Skips over an optional object identifier value.
     ///
     /// If the source has reached its end of if the next value does not have
     /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
-    /// tag but is not a primitive value, returns a malformed error.
+    /// tag but is not a primitive value containing a correctly encoded OID,
+    /// returns a malformed error.
     pub fn skip_opt_in<S: Source>(
         cons: &mut Constructed<S>
     ) -> Result<Option<()>, DecodeError<S::Error>> {
-        cons.take_opt_primitive_if(Tag::OID, |prim| prim.skip_all())
+        cons.take_opt_primitive_if(Tag::OID, Self::skip_primitive)
     }
 
     /// Takes an object identifier value from the source.
@@ -85,9 +86,7 @@ impl Oid<Bytes> {
     pub fn take_from<S: Source>(
         constructed: &mut Constructed<S>
     ) -> Result<Self, DecodeError<S::Error>> {
-        constructed.take_primitive_if(Tag::OID, |content| {
-            content.take_all().map(Oid)
-        })
+        constructed.take_primitive_if(Tag::OID, Self::from_primitive)
     }
 
     /// Takes an optional object identifier value from the source.
@@ -98,9 +97,51 @@ impl Oid<Bytes> {
     pub fn take_opt_from<S: Source>(
         constructed: &mut Constructed<S>
     ) -> Result<Option<Self>, DecodeError<S::Error>> {
-        constructed.take_opt_primitive_if(Tag::OID, |content| {
-            content.take_all().map(Oid)
-        })
+        constructed.take_opt_primitive_if(Tag::OID, Self::from_primitive)
+    }
+
+    /// Skips an object identifier in the content of a primitive value.
+    pub fn skip_primitive<S: Source>(
+        prim: &mut Primitive<S>
+    ) -> Result<(), DecodeError<S::Error>> {
+        prim.with_slice_all(Self::check_content)
+    }
+
+    /// Constructs an object identifier from the content of a primitive value.
+    pub fn from_primitive<S: Source>(
+        prim: &mut Primitive<S>
+    ) -> Result<Self, DecodeError<S::Error>> {
+        let content = prim.take_all()?;
+        Self::check_content(content.as_ref()).map_err(|err| {
+            prim.content_err(err)
+        })?;
+        Ok(Oid(content))
+    }
+
+    /// Checks that the content contains a validly encoded OID.
+    ///
+    /// # Caveats
+    ///
+    /// This currently doesn’t check that the sub-identifiers are encoded in
+    /// the smallest amount of octets.
+    fn check_content(content: &[u8]) -> Result<(), &'static str> {
+        // There always has to be a first sub-identifier, i.e., content
+        // must not be empty. We grab the last byte while we are checking for
+        // empty.
+        let last = match content.last() {
+            Some(last) => *last,
+            None => {
+                return Err("empty object identifier")
+            }
+        };
+
+        // The last byte must have bit 8 cleared to indicate the end of a
+        // subidentifier.
+        if last & 0x80 != 0 {
+            return Err("illegal object identifier")
+        }
+
+        Ok(())
     }
 }
 
@@ -109,16 +150,18 @@ impl<T: AsRef<[u8]>> Oid<T> {
     pub fn skip_if<S: Source>(
         &self, constructed: &mut Constructed<S>,
     ) -> Result<(), DecodeError<S::Error>> {
-        constructed.take_primitive_if(Tag::OID, |content| {
-            let len = content.remaining();
-            content.request(len)?;
-            if &content.slice()[..len] == self.0.as_ref() {
-                content.skip_all()?;
-                Ok(())
-            }
-            else {
-                Err(content.content_err("object identifier mismatch"))
-            }
+        constructed.take_primitive_if(Tag::OID, |prim| {
+            prim.with_slice_all(|content| {
+                // We are assuming that self contains a properly encoded OID,
+                // so we don’t really need to check if prim does, too, if we
+                // compare for equality.
+                if content != self.0.as_ref() {
+                    Err("object identifier mismatch")
+                }
+                else {
+                    Ok(())
+                }
+            })
         })
     }
 }
@@ -171,22 +214,12 @@ impl<T: AsRef<[u8]>> hash::Hash for Oid<T> {
 
 impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // XXX This can’t deal correctly with overly large components.
-        //     Since this is a really rare (if not non-existant) case,
-        //     I can’t be bothered to figure out how to convert a seven
-        //     bit integer into decimal.
         let mut components = self.iter();
-        // There’s at least one and it is always a valid u32.
-        write!(f, "{}", components.next().unwrap().to_u32().unwrap())?;
-        for component in components {
-            if let Some(val) = component.to_u32() {
-                write!(f, ".{}", val)?;
-            }
-            else {
-                write!(f, ".(not implemented)")?;
-            }
+        match components.next() {
+            Some(component) => component.fmt(f)?,
+            None => { return Ok(()) }
         }
-        Ok(())
+        components.try_for_each(|item| write!(f, ".{}", item))
     }
 }
 
@@ -376,6 +409,22 @@ impl<'a> PartialEq for Component<'a> {
 impl<'a> Eq for Component<'a> { }
 
 
+//--- Display
+
+impl<'a> fmt::Display for Component<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // XXX This can’t deal correctly with overly large components.
+        //     Since this is a really rare (if not non-existant) case,
+        //     I can’t be bothered to figure out how to convert a seven
+        //     bit integer into decimal.
+        match self.to_u32() {
+            Some(val) => val.fmt(f),
+            None => f.write_str("(very large component)"),
+        }
+    }
+}
+
+
 //------------ Iter ----------------------------------------------------------
 
 /// An iterator over the sub-identifiers in an object identifier.
@@ -439,5 +488,31 @@ mod test {
             "2.5.29.19",
             format!("{}", Oid(&[85, 29, 19])).as_str()
         );
+    }
+
+    #[test]
+    fn take_and_skip_primitive() {
+        fn check(slice: &[u8], is_ok: bool) {
+            let take = Primitive::decode_slice(
+                slice, Mode::Der, |prim| Oid::from_primitive(prim)
+            );
+            assert_eq!(take.is_ok(), is_ok);
+            if let Ok(oid) = take {
+                assert_eq!(oid.0.as_ref(), slice);
+            }
+            assert_eq!(
+                Primitive::decode_slice(
+                    slice, Mode::Der, |prim| Oid::skip_primitive(prim)
+                ).is_ok(),
+                is_ok
+            );
+        }
+
+        check(b"", false);
+        check(b"\x81\x34", true);
+        check(b"\x81\x34\x03", true);
+        check(b"\x81\x34\x83\x03", true);
+        check(b"\x81\x34\x83\x83\x03\x03", true);
+        check(b"\x81\x34\x83", false);
     }
 }

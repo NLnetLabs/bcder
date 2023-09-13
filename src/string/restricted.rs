@@ -240,7 +240,7 @@ impl<L: CharSet> Eq for RestrictedString<L> { }
 
 impl<L: CharSet> PartialOrd for RestrictedString<L> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.octets.partial_cmp(&other.octets)
+        Some(self.cmp(other))
     }
 }
 

@@ -422,7 +422,7 @@ impl Tag {
         if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
             let mut i = 1;
             loop {
-                if source.request(i + 1)? == 0 {
+                if source.request(i + 1)? <= i {
                     // Not enough data for a complete tag.
                     return Err(source.content_err("short tag value"))
                 }
@@ -439,10 +439,13 @@ impl Tag {
                 i += 1;
             }
         }
-        let (tag, compressed) = (Tag(data), byte & Tag::CONSTRUCTED_MASK != 0);
+        let (tag, constructed) = (
+            Tag(data),
+            byte & Tag::CONSTRUCTED_MASK != 0
+        );
         if tag == self {
             source.advance(tag.encoded_len());
-            Ok(Some(compressed))
+            Ok(Some(constructed))
         }
         else {
             Ok(None)
@@ -599,6 +602,11 @@ mod test {
                     tag.take_from_if(&mut tag.0.into_source()).unwrap(),
                     Some(false)
                 );
+                assert!(
+                    tag.take_from_if(
+                        &mut tag.0[0..1].into_source()
+                    ).is_err(),
+                );
                 // The value is not constructed.
                 assert!(!decoded.1);
                 // The tag is the same
@@ -633,6 +641,11 @@ mod test {
                     tag.take_from_if(&mut tag.0.into_source()).unwrap(),
                     Some(false)
                 );
+                assert!(
+                    tag.take_from_if(
+                        &mut tag.0[0..2].into_source()
+                    ).is_err(),
+                );
                 // The value is not constructed.
                 assert!(!decoded.1);
                 // The tag is the same
@@ -666,6 +679,11 @@ mod test {
                 assert_eq!(
                     tag.take_from_if(&mut tag.0.into_source()).unwrap(),
                     Some(false)
+                );
+                assert!(
+                    tag.take_from_if(
+                        &mut tag.0[0..3].into_source()
+                    ).is_err(),
                 );
                 // The value is not constructed.
                 assert!(!decoded.1);
