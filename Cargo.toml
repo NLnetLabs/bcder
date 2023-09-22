@@ -2,7 +2,7 @@
 name = "bcder"
 version = "0.7.4-dev"
 edition = "2018"
-authors = ["The NLnet Labs RPKI Team <rpki-team@nlnetlabs.nl>"]
+authors = ["NLnet Labs <rust-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
 documentation = "https://docs.rs/bcder/"
 repository = "https://github.com/nlnetlabs/bcder"
