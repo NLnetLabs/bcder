@@ -16,7 +16,7 @@ use crate::tag::Tag;
 
 //------------ Oid -----------------------------------------------------------
 
-/// An object identifer.
+/// An object identifier.
 ///
 /// Object identifiers are globally unique, hierarchical values that are used
 /// to identify objects or their type. When written, they are presented as a
@@ -25,7 +25,7 @@ use crate::tag::Tag;
 /// as ‘{ 1 3 6 1 5 5 7 1 }’. Individual integers or sequences of integers
 /// can also be given names which then are used instead of the integers.
 /// 
-/// Values of this type keep a single object identifer in its BER encoding,
+/// Values of this type keep a single object identifier in its BER encoding,
 /// i.e., in some form of byte sequence. Because different representations
 /// may be useful, the type is actually generic over something that can
 /// become a reference to a bytes slice. Parsing is only defined for `Bytes`
@@ -33,7 +33,7 @@ use crate::tag::Tag;
 ///
 /// The only use for object identifiers currently is to compare them to
 /// predefined values. For this purpose, you typically define your known
-/// object identifiers in a `oid` submodule as contants of
+/// object identifiers in a `oid` submodule as constants of
 /// `Oid<&'static [u8]>` – or its type alias `ConstOid`. This is also the
 /// reason why the wrapped value is `pub` for now. This will change once
 /// `const fn` is stable.
@@ -311,10 +311,10 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
 /// component to a native integer.
 #[derive(Clone, Copy, Debug)]
 pub struct Component<'a> {
-    /// The position of the component in the object identifer.
+    /// The position of the component in the object identifier.
     position: Position,
 
-    /// The octets of the subidentifer.
+    /// The octets of the subidentifier.
     ///
     /// These octets translate to an integer value. The most significant bit
     /// of each octet indicates whether there are more octets to follow (and
@@ -328,19 +328,19 @@ pub struct Component<'a> {
 
 /// The position of the component in the object identifier.
 ///
-/// As the first two components of the object identifer are encoded in the
+/// As the first two components of the object identifier are encoded in the
 /// first subidentifier of the encoded value, we have three different cases.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum Position {
     /// This is the first component of the identifier.
     ///
-    /// This is 0 if the integer value of the subidentifer is 0..39,
+    /// This is 0 if the integer value of the subidentifier is 0..39,
     /// 1 for 40..79, and 2 for anything else.
     First,
 
     /// This is the second component of the identifier.
     ///
-    /// This is the integer value of the subidentifer module 40 if the value
+    /// This is the integer value of the subidentifier module 40 if the value
     /// is below 80 and otherwise the value minus 80.
     Second,
 
