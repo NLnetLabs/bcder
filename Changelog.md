@@ -1,16 +1,12 @@
 # Change Log
 
-## Unreleased next version
+## 0.7.4
 
-Breaking changes
-
-New
-
-Bug fixes
+Released 2024-01-10.
 
 Other changes
 
-* Update _smallvec_ dependency to 1.6.1 due to a security advisory
+* Update _smallvec_ dependency to at least 1.6.1 due to a security advisory
   [RUSTSEC-2021-0003](https://rustsec.org/advisories/RUSTSEC-2021-0003).
   ([#77])
 
