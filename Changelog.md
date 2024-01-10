@@ -10,6 +10,12 @@ Bug fixes
 
 Other changes
 
+* Update _smallvec_ dependency to 1.6.1 due to a security advisory
+  [RUSTSEC-2021-0003](https://rustsec.org/advisories/RUSTSEC-2021-0003).
+  ([#77])
+
+[#77]: https://github.com/NLnetLabs/bcder/pull/77
+
 
 ## 0.7.3
 
