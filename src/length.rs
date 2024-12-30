@@ -159,7 +159,7 @@ impl Length {
     }
 
     /// Writes the encoded value to a target.
-    #[cfg(target_pointer_len = "64")]
+    #[cfg(target_pointer_width = "64")]
     pub fn write_encoded<W: io::Write>(
         &self,
         target: &mut W
@@ -207,7 +207,7 @@ impl Length {
     }
 
     /// Writes the encoded value to a target.
-    #[cfg(not(target_pointer_len = "64"))]
+    #[cfg(not(target_pointer_width = "64"))]
     pub fn write_encoded<W: io::Write>(
         &self,
         target: &mut W
