@@ -75,7 +75,7 @@ impl Length {
             }
             0x82 => {
                 let len =
-                    (source.take_u8()? as usize) << 8 |
+                    ((source.take_u8()? as usize) << 8) |
                     (source.take_u8()? as usize);
                 if mode.is_ber() || len > 255 {
                     Ok(Length::Definite(len))
@@ -86,8 +86,8 @@ impl Length {
             }
             0x83 => {
                 let len =
-                    (source.take_u8()? as usize) << 16 |
-                    (source.take_u8()? as usize) << 8 |
+                    ((source.take_u8()? as usize) << 16) |
+                    ((source.take_u8()? as usize) << 8) |
                     (source.take_u8()? as usize);
                 if mode.is_ber() || len > 0xFFFF {
                     Ok(Length::Definite(len))
@@ -98,9 +98,9 @@ impl Length {
             }
             0x84 => {
                 let len =
-                    (source.take_u8()? as usize) << 24 |
-                    (source.take_u8()? as usize) << 16 |
-                    (source.take_u8()? as usize) << 8 |
+                    ((source.take_u8()? as usize) << 24) |
+                    ((source.take_u8()? as usize) << 16) |
+                    ((source.take_u8()? as usize) << 8) |
                     (source.take_u8()? as usize);
                 if mode.is_ber() || len > 0x00FF_FFFF {
                     Ok(Length::Definite(len))

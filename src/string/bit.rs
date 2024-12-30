@@ -275,7 +275,7 @@ impl encode::PrimitiveContent for BitString {
 #[derive(Clone, Debug)]
 pub struct BitStringIter<'a>(::std::slice::Iter<'a, u8>);
 
-impl<'a> Iterator for BitStringIter<'a> {
+impl Iterator for BitStringIter<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {

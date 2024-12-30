@@ -351,12 +351,12 @@ impl Tag {
         } else if Tag::LAST_OCTET_MASK & self.0[2] == 0 {
             // It's a multibyte that starts in the second octet and ends in
             // the third octet
-            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 7
+            (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 7)
             | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2])
         } else {
             // It's a multibyte that spans the first three octets
-            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 14
-            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2]) << 7
+            (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 14)
+            | (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2]) << 7)
             | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[3])
         }
     }

@@ -55,7 +55,7 @@ pub trait Values {
 
 //--- Blanket impls
 
-impl<'a, T: Values> Values for &'a T {
+impl<T: Values> Values for &'_ T {
     fn encoded_len(&self, mode: Mode) -> usize {
         (*self).encoded_len(mode)
     }
@@ -358,7 +358,7 @@ impl<T: IntoIterator> IntoIterator for Iter<T> {
     }
 }
 
-impl<'a, T: Clone + IntoIterator> IntoIterator for &'a Iter<T> {
+impl<T: Clone + IntoIterator> IntoIterator for &'_ Iter<T> {
     type Item = <T as IntoIterator>::Item;
     type IntoIter = <T as IntoIterator>::IntoIter;
 

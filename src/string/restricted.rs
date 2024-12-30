@@ -308,7 +308,7 @@ impl<'a, L: CharSet> RestrictedStringChars<'a, L> {
     }
 }
 
-impl<'a, L: CharSet> Iterator for RestrictedStringChars<'a, L> {
+impl<L: CharSet> Iterator for RestrictedStringChars<'_, L> {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {
@@ -361,7 +361,7 @@ impl CharSet for Utf8CharSet {
         if first < 0xE0 {
             return Ok(Some(unsafe {
                 char::from_u32_unchecked(
-                    (u32::from(first & 0x1F)) << 6 |
+                    ((u32::from(first & 0x1F)) << 6) |
                     u32::from(second & 0x3F)
                 )
             }))
@@ -376,8 +376,8 @@ impl CharSet for Utf8CharSet {
         if first < 0xF0 {
             return Ok(Some(unsafe {
                 char::from_u32_unchecked(
-                    (u32::from(first & 0x0F)) << 12 |
-                    (u32::from(second & 0x3F)) << 6 |
+                    ((u32::from(first & 0x0F)) << 12) |
+                    ((u32::from(second & 0x3F)) << 6) |
                     u32::from(third & 0x3F)
                 )
             }))
@@ -391,9 +391,9 @@ impl CharSet for Utf8CharSet {
         }
         Ok(Some(unsafe {
             char::from_u32_unchecked(
-                (u32::from(first & 0x07)) << 18 |
-                (u32::from(second & 0x3F)) << 12 |
-                (u32::from(third & 0x3F)) << 6 |
+                ((u32::from(first & 0x07)) << 18) |
+                ((u32::from(second & 0x3F)) << 12) |
+                ((u32::from(third & 0x3F)) << 6) |
                 u32::from(fourth & 0x3F)
             )
         }))

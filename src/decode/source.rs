@@ -136,7 +136,7 @@ pub trait Source {
     }
 }
 
-impl<'a, T: Source> Source for &'a mut T {
+impl<T: Source> Source for &'_ mut T {
     type Error = T::Error;
 
     fn request(&mut self, len: usize) -> Result<usize, Self::Error> {
@@ -340,7 +340,7 @@ impl<'a> SliceSource<'a> {
     }
 }
 
-impl<'a> Source for SliceSource<'a> {
+impl Source for SliceSource<'_> {
     type Error = Infallible;
 
     fn pos(&self) -> Pos {
