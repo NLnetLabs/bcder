@@ -400,18 +400,18 @@ impl<'a> Component<'a> {
 
 //--- PartialEq and Eq
 
-impl<'a> PartialEq for Component<'a> {
+impl PartialEq for Component<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.position == other.position && self.slice == other.slice
     }
 }
 
-impl<'a> Eq for Component<'a> { }
+impl Eq for Component<'_> { }
 
 
 //--- Display
 
-impl<'a> fmt::Display for Component<'a> {
+impl fmt::Display for Component<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // XXX This can’t deal correctly with overly large components.
         //     Since this is a really rare (if not non-existant) case,

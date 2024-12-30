@@ -269,7 +269,7 @@ impl From<Captured> for CapturedBuilder {
 
 struct CapturedWriter<'a>(&'a mut BytesMut);
 
-impl<'a> io::Write for CapturedWriter<'a> {
+impl io::Write for CapturedWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.0.extend_from_slice(buf);
         Ok(buf.len())

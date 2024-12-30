@@ -397,7 +397,7 @@ impl hash::Hash for Integer {
 
 //--- encode::PrimitiveContent
 
-impl<'a> PrimitiveContent for &'a Integer {
+impl PrimitiveContent for &'_ Integer {
     const TAG: Tag = Tag::INTEGER;
 
     fn encoded_len(&self, _mode: Mode) -> usize {
@@ -654,7 +654,7 @@ impl AsRef<[u8]> for Unsigned {
 
 //--- endode::PrimitiveContent
 
-impl<'a> PrimitiveContent for &'a Unsigned {
+impl PrimitiveContent for &'_ Unsigned {
     const TAG: Tag = Tag::INTEGER;
 
     fn encoded_len(&self, mode: Mode) -> usize {

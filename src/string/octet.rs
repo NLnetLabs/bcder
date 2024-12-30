@@ -678,7 +678,7 @@ impl<'a> OctetStringOctets<'a> {
     }
 }
 
-impl<'a> Iterator for OctetStringOctets<'a> {
+impl Iterator for OctetStringOctets<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {

@@ -79,7 +79,7 @@ pub trait PrimitiveContent: Sized {
 
 //--- Blanket impls
 
-impl<'a, T: PrimitiveContent> PrimitiveContent for &'a T {
+impl<T: PrimitiveContent> PrimitiveContent for &'_ T {
     const TAG: Tag = T::TAG;
 
     fn encoded_len(&self, mode: Mode) -> usize {
@@ -323,7 +323,7 @@ impl PrimitiveContent for bool {
     }
 }
 
-impl<'a> PrimitiveContent for &'a [u8] {
+impl PrimitiveContent for &'_ [u8] {
     const TAG: Tag = Tag::OCTET_STRING;
 
     fn encoded_len(&self, _: Mode) -> usize {

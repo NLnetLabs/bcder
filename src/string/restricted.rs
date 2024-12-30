@@ -308,7 +308,7 @@ impl<'a, L: CharSet> RestrictedStringChars<'a, L> {
     }
 }
 
-impl<'a, L: CharSet> Iterator for RestrictedStringChars<'a, L> {
+impl<L: CharSet> Iterator for RestrictedStringChars<'_, L> {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {
