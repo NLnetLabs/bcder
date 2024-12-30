@@ -564,6 +564,14 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode
     }
+
+    /// Returns the remaining length of the value if it is available.
+    ///
+    /// A constructed value may be of indefinite length, in which case this
+    /// method returns `None`.
+    pub fn remaining_len(&self) -> Option<usize> {
+        self.source.limit()
+    }
 }
 
 impl<'a, S: Source + 'a> Constructed<'a, S> {
