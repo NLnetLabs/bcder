@@ -370,7 +370,7 @@ impl<'a> Component<'a> {
         }
         let mut res = 0;
         for &ch in self.slice {
-            res = res << 7 | u32::from(ch & 0x7F);
+            res = (res << 7) | u32::from(ch & 0x7F);
         }
         match self.position {
             Position::First => {

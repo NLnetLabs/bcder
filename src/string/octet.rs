@@ -683,11 +683,7 @@ impl Iterator for OctetStringOctets<'_> {
 
     fn next(&mut self) -> Option<u8> {
         while self.cur.is_empty() {
-            let next = match self.iter.next() {
-                Some(some) => some,
-                None => return None,
-            };
-            self.cur = next;
+            self.cur = self.iter.next()?;
         }
         let res = self.cur[0];
         self.cur = &self.cur[1..];

@@ -528,7 +528,7 @@ impl Unsigned {
             1 => Ok(prim.take_u8()?.into()),
             2 => {
                 Ok(
-                    u16::from(prim.take_u8()?) << 8 |
+                    (u16::from(prim.take_u8()?) << 8) |
                     u16::from(prim.take_u8()?)
                 )
             }
@@ -537,7 +537,7 @@ impl Unsigned {
                     return Err(prim.content_err("invalid integer"))
                 }
                 let res = {
-                    u16::from(prim.take_u8()?) << 8 |
+                    (u16::from(prim.take_u8()?) << 8) |
                     u16::from(prim.take_u8()?)
                 };
                 if res < 0x8000 {
