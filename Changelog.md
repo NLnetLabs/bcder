@@ -1,17 +1,12 @@
 # Change Log
 
-## Unreleased next version
+## 0.7.5
 
-Breaking changes
-
-New
+Released 2025-01-22.
 
 Bug fixes
 
 * Fix compile error on 32 bit systems. ([2c8cd0b])
-
-Other changes
-
 
 [2c8cd0b]: https://github.com/NLnetLabs/bcder/commit/2c8cd0b8b30fa384a851446f5732924e43443ca2
 
