@@ -1,6 +1,6 @@
 [package]
 name = "bcder"
-version = "0.7.5"
+version = "0.7.6-dev"
 edition = "2018"
 authors = ["NLnet Labs <rust-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
