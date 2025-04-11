@@ -376,6 +376,8 @@ impl Tag {
         let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
         let constructed = byte & Tag::CONSTRUCTED_MASK != 0;
         if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
+            // We know the loop only goes to the array length.
+            #[allow(clippy::indexing_slicing)]
             for i in 1..=3 {
                 data[i] = source.take_u8()?;
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
@@ -416,17 +418,23 @@ impl Tag {
         if source.request(1)? == 0 {
             return Ok(None)
         }
-        let byte = source.slice()[0];
+        let Some(byte) = source.slice().first().copied() else {
+            return Err(source.content_err("source returned short slice"))
+        };
         // clear constructed bit
         let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
         if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
             let mut i = 1;
+            // We know the loop only goes up to the array length.
+            #[allow(clippy::indexing_slicing)]
             loop {
                 if source.request(i + 1)? <= i {
                     // Not enough data for a complete tag.
                     return Err(source.content_err("short tag value"))
                 }
-                data[i] = source.slice()[i];
+                data[i] = source.slice().get(i).copied().ok_or_else(|| {
+                    source.content_err("source returned short slice")
+                })?;
                 if data[i] & Tag::LAST_OCTET_MASK == 0 {
                     break
                 }
@@ -480,7 +488,16 @@ impl Tag {
         if constructed {
             buf[0] |= Tag::CONSTRUCTED_MASK
         }
-        target.write_all(&buf[..self.encoded_len()])
+
+        target.write_all(
+            // XXX Maybe redesign internal storage to avoid this error?
+            buf.get(..self.encoded_len()).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    "bug: encountered overly long tag"
+                )
+            })?
+        )
     }
 }
 

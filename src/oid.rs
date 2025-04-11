@@ -42,7 +42,7 @@ use crate::tag::Tag;
 /// identifier constants in the code. Instead, the crate ships with a
 /// `mkoid` binary which accepts object identifiers in ‘dot integer’ notation
 /// and produces the `u8` array for their encoded value. You can install
-/// this binary via `cargo install ber`.
+/// this binary via `cargo install bcder`.
 #[derive(Clone, Debug)]
 pub struct Oid<T: AsRef<[u8]> = Bytes>(pub T);
 
@@ -171,10 +171,8 @@ impl<T: AsRef<[u8]>> Oid<T> {
 impl<T: AsRef<[u8]>> Oid<T> {
     /// Returns an iterator to the components of this object identifiers.
     ///
-    /// # Panics
-    ///
-    /// The returned identifier will eventually panic if `self` does not
-    /// contain a correctly encoded object identifier.
+    /// If `self` does not contain a correctly encoded OID, the iterator will
+    /// stop before the first incorrectly encoded component.
     pub fn iter(&self) -> Iter {
         Iter::new(self.0.as_ref())
     }
@@ -364,7 +362,7 @@ impl<'a> Component<'a> {
         // This can be at most five octets with at most four bits in the
         // topmost octet.
         if self.slice.len() > 5
-            || (self.slice.len() == 4 && self.slice[0] & 0x70 != 0)
+            || (self.slice.len() == 4 && *self.slice.first()? & 0x70 != 0)
         {
             return None
         }
@@ -463,7 +461,7 @@ impl<'a> Iterator for Iter<'a> {
             return None
         }
         for i in 0..self.slice.len() {
-            if self.slice[i] & 0x80 == 0 {
+            if self.slice.get(i)? & 0x80 == 0 {
                 let (res, tail) = self.slice.split_at(i + 1);
                 if self.position != Position::First {
                     self.slice = tail;
@@ -471,7 +469,7 @@ impl<'a> Iterator for Iter<'a> {
                 return Some(Component::new(self.advance_position(), res));
             }
         }
-        panic!("illegal object identifier (last octet has bit 8 set)");
+        None
     }
 }
 

@@ -243,6 +243,7 @@ impl CapturedBuilder {
     ///
     /// The function encodes the given values in the captured value’s own mode
     /// and places the encoded content at the end of the captured value.
+    #[allow(clippy::unwrap_used)] // XXX Allow temporarly, fix in separate PR.
     pub fn extend<V: encode::Values>(&mut self, values: V) {
         values.write_encoded(
             self.mode,

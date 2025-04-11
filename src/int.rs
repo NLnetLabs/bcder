@@ -25,28 +25,34 @@ use crate::tag::Tag;
 
 //------------ Macros for built-in integers ----------------------------------
 //
-// These are only for decoding. Encoding via the PrimitiveContent can be found
+// These are only for decoding. Encoding via PrimitiveContent can be found
 // in the `encode::primitive` module.
 
 macro_rules! slice_to_builtin {
     // Decodes an integer contained in the slice $slice into the builtin
     // signed integer type $type. Produces an Ok(value) if this works or
-    // an Err($err) if it doesn’t.
+    // an Err($err) if it doesn’t. Needs to be used in a context where
+    // an early error return is correct.
     ( signed, $slice:expr, $type:ident, $err:expr) => {{
         const LEN: usize = mem::size_of::<$type>();
         if $slice.len() > LEN {
-            $err
+            return $err
         }
-        else {
-            // Start with all zeros if positive or all 0xFF if negative
-            // number. There’s always at least one octet.
-            let mut res = if $slice[0] & 0x80 == 0 { [0; LEN] }
-            else { [0xFF; LEN] };
 
-            // Copy over all available octets.
-            res[LEN - $slice.len()..].copy_from_slice($slice);
-            Ok($type::from_be_bytes(res))
-        }
+        // Start with all zeros if positive or all 0xFF if negative
+        // number.
+        let Some(&first) = $slice.first() else { return $err };
+        let mut res = if first & 0x80 == 0 { [0; LEN] }
+        else { [0xFF; LEN] };
+
+        // Copy over all available octets.
+        //
+        // copy_from_slice panics, anyway, so we may as well allow indexing
+        // here. I can’t think of a non-panic-y way to do this.
+        #[allow(clippy::indexing_slicing)]
+        res[LEN - $slice.len()..].copy_from_slice($slice);
+
+        Ok($type::from_be_bytes(res))
     }};
 
     // Ditto for unsigned builtin integer types.
@@ -54,23 +60,32 @@ macro_rules! slice_to_builtin {
         // This is like signed above except that we can simply error
         // out if the sign bit is set.
         const LEN: usize = mem::size_of::<$type>();
-        if $slice[0] & 0x80 != 0 {
+        let Some(&first) = $slice.first() else { return $err };
+        if first & 0x80 != 0 {
+            return $err
+        }
+
+        let val = if first == 0 {
+            match $slice.split_first() {
+                Some((_, val)) => val,
+                None => return $err
+            }
+        }
+        else {
+            $slice
+        };
+
+        if val.len() == 0 {
+            Ok(0)
+        }
+        else if val.len() > LEN {
             $err
         }
         else {
-            let val = if $slice[0] == 0 { &$slice[1..] }
-                      else { $slice };
-            if val.len() == 0 {
-                Ok(0)
-            }
-            else if val.len() > LEN {
-                $err
-            }
-            else {
-                let mut res =  [0; LEN];
-                res[LEN - val.len()..].copy_from_slice(val);
-                Ok($type::from_be_bytes(res))
-            }
+            let mut res =  [0; LEN];
+            #[allow(clippy::indexing_slicing)]
+            res[LEN - val.len()..].copy_from_slice(val);
+            Ok($type::from_be_bytes(res))
         }
     }};
 }
@@ -230,7 +245,7 @@ impl Integer {
     /// for equality comparision.
     fn check_head<S: decode::Source>(
         prim: &mut decode::Primitive<S>
-    ) -> Result<(), DecodeError<S::Error>> {
+    ) -> Result<u8, DecodeError<S::Error>> {
         if prim.request(2)? == 0 {
             return Err(prim.content_err("invalid integer"))
         }
@@ -242,7 +257,8 @@ impl Integer {
             (Some(0xFF), Some(true)) => {
                 Err(prim.content_err("invalid integer"))
             }
-            _ => Ok(())
+            (Some(val), _) => Ok(*val),
+            (None, _) => Err(prim.content_err("invalid integer"))
         }
     }
 
@@ -256,26 +272,33 @@ impl Integer {
         self.0.as_ref()
     }
 
+    /// Returns the first bytes.
+    ///
+    /// Returns 0 if the slice is empty (which should never happen).
+    fn first(&self) -> u8 {
+        self.0.first().copied().unwrap_or(0)
+    }
+
     /// Returns whether the number is zero.
     pub fn is_zero(&self) -> bool {
-        self.0[0] == 0
+        self.first() == 0
     }
 
     /// Returns whether the integer is positive.
     ///
     /// Also returns `false` if the number is zero.
     pub fn is_positive(&self) -> bool {
-        if self.0[0] == 0 && self.0.get(1).is_none() {
+        if self.first() == 0 && self.0.get(1).is_none() {
             return false
         }
-        self.0[0] & 0x80 == 0x00
+        self.first() & 0x80 == 0x00
     }
 
     /// Returns whether the integer is negative.
     ///
     /// Also returns `false` if the number is zero.
     pub fn is_negative(&self) -> bool {
-        self.0[0] & 0x80 == 0x80
+        self.first() & 0x80 == 0x80
     }
 }
 
@@ -463,26 +486,38 @@ impl Unsigned {
             return Err(InvalidInteger(()))
         }
 
-        // Skip any leading zero bytes.
+        // Count the leading zeros, get the first non-zero.
         let num_leading_zero_bytes = bytes.as_ref().iter().take_while(|&&b| {
             b == 0x00
         }).count();
-        let value = bytes.slice(num_leading_zero_bytes..);
+        let first_nonzero = bytes.get(num_leading_zero_bytes).copied();
 
-        // Create a new Unsigned integer from the given value bytes, ensuring
-        // that the most-significant bit is zero.
-        let new_bytes = if value[0] & 0x80 == 0 {
-            // Use the value bytes as-is.
-            value
-        } else if num_leading_zero_bytes > 0 {
-            // Use the value bytes and one of the preceeding zero "sign" bytes.
-            bytes.slice(num_leading_zero_bytes - 1..)
-        } else {
-            // Copy the bytes in order to prepend a zero "sign" byte.
-            let mut v: Vec<u8> = Vec::with_capacity(value.len() + 1);
-            v.push(0x00);
-            v.extend(value.iter());
-            Bytes::from(v)
+        let new_bytes = match first_nonzero {
+            None => {
+                // Only zeros: a single zero.
+                Bytes::from(b"\0".as_ref())
+            }
+            Some(value) if value & 0x80 == 0 => {
+                // Most significant bit is zero, we can simply use all the
+                // non-zero bytes.
+                // (Sadly, there is no non-panicking way to slice.)
+                bytes.slice(num_leading_zero_bytes..)
+            }
+            _ => {
+                // See if we have at least one leading zero and if so use
+                // that one as our leading zero. Otherwise we have to make
+                // a new Bytes.
+                if let Some(start) = num_leading_zero_bytes.checked_sub(1) {
+                    bytes.slice(start..)
+                }
+                else {
+                    // Copy the bytes in order to prepend a zero "sign" byte.
+                    let mut v = Vec::with_capacity(bytes.len() + 1);
+                    v.push(0x00u8);
+                    v.extend_from_slice(bytes.as_ref());
+                    Bytes::from(v)
+                }
+            }
         };
 
         unsafe { Ok(Unsigned::from_bytes_unchecked(new_bytes)) }
@@ -577,8 +612,8 @@ impl Unsigned {
     fn check_head<S: decode::Source>(
         prim: &mut decode::Primitive<S>
     ) -> Result<(), DecodeError<S::Error>> {
-        Integer::check_head(prim)?;
-        if prim.slice().first().unwrap() & 0x80 != 0 {
+        let first = Integer::check_head(prim)?;
+        if first & 0x80 != 0 {
             Err(prim.content_err("invalid integer"))
         }
         else {
@@ -1202,5 +1237,31 @@ mod test {
             )).unwrap(),
             b"\x00\xDE\xAD\xBE\xEF"
         );
+    }
+
+    #[test]
+    fn unsigned_from_bytes() {
+        fn make<const N: usize>(val: [u8; N]) -> Unsigned {
+            Unsigned::from_bytes(Bytes::copy_from_slice(&val)).unwrap()
+        }
+
+        assert_eq!(make([0]).as_slice(), b"\0");
+        assert_eq!(make([0, 0]).as_slice(), b"\0");
+
+        assert_eq!(make([0x10]).as_slice(), b"\x10");
+        assert_eq!(make([0, 0x10]).as_slice(), b"\x10");
+        assert_eq!(make([0, 0, 0x10]).as_slice(), b"\x10");
+
+        assert_eq!(make([0x10, 0xF0]).as_slice(), b"\x10\xF0");
+        assert_eq!(make([0, 0x10, 0xF0]).as_slice(), b"\x10\xF0");
+        assert_eq!(make([0, 0, 0x10, 0xF0]).as_slice(), b"\x10\xF0");
+
+        assert_eq!(make([0xF0]).as_slice(), b"\0\xF0");
+        assert_eq!(make([0, 0xF0]).as_slice(), b"\0\xF0");
+        assert_eq!(make([0, 0, 0xF0]).as_slice(), b"\0\xF0");
+
+        assert_eq!(make([0xF0, 0xF0]).as_slice(), b"\0\xF0\xF0");
+        assert_eq!(make([0, 0xF0, 0xF0]).as_slice(), b"\0\xF0\xF0");
+        assert_eq!(make([0, 0, 0xF0, 0xF0]).as_slice(), b"\0\xF0\xF0");
     }
 }

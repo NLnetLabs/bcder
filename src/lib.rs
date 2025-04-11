@@ -34,6 +34,7 @@
 // We have seemingly redundant closures (i.e., closures where just providing
 // a function would also work) that cannot be removed due to lifetime issues.
 #![allow(clippy::redundant_closure)]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 
 //--- Re-exports

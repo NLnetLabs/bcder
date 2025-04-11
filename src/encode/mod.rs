@@ -28,6 +28,9 @@
 //! [`PrimitiveContent`]: trait.PrimitiveContent.html
 //! [encode section of the guide]: ../guide/encode/index.html
 
+// XXX Allow temporarily, will be fixed in separate PR.
+#![allow(clippy::unwrap_used)]
+
 pub use self::primitive::{PrimitiveContent, Primitive};
 pub use self::values::{
     Values,

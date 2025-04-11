@@ -6,6 +6,8 @@
 //! XXX This currently panics when trying to encode an octet string in
 //!     CER mode. An implementation of that is TODO.
 
+#![allow(clippy::indexing_slicing)] // XXX To be fixed in separate PR.
+
 use std::{cmp, hash, io, mem};
 use std::convert::Infallible;
 use bytes::{BytesMut, Bytes};
@@ -540,16 +542,14 @@ impl OctetStringSource {
     ///
     /// Returns `None` if we are done.
     fn next_current(&mut self) -> Option<Bytes> {
-        // Unwrapping here is okay. The only error that can happen is that
-        // the tag is longer that we support. However, we already checked that
-        // there’s only OctetString or End of Value tags which we _do_
-        // support.
+        // Taking the tag and length shouldn’t fail since we checked already,
+        // so just returning `None` should be fine.
         while let Some((tag, cons)) = Tag::take_opt_from(
             &mut self.remainder
-        ).unwrap() {
+        ).ok()? {
             let length = Length::take_from(
                 &mut self.remainder, Mode::Ber
-            ).unwrap();
+            ).ok()?;
             match tag {
                 Tag::OCTET_STRING => {
                     if cons {
@@ -604,8 +604,13 @@ impl decode::Source for OctetStringSource {
         self.current.as_ref()
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.current.slice(start..end)
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
+        if start > self.current.len() || end > self.current.len() {
+            None
+        }
+        else {
+            Some(self.current.slice(start..end))
+        }
     }
 }
 
@@ -634,8 +639,10 @@ impl<'a> Iterator for OctetStringIter<'a> {
             }
             Inner::Constructed(ref mut inner) => {
                 while !inner.is_empty() {
-                    let (tag, cons) = Tag::take_from(inner).unwrap();
-                    let length = Length::take_from(inner, Mode::Ber).unwrap();
+                    // Tags and lengths should have been checked before, so
+                    // returning None if that fails should be fine.
+                    let (tag, cons) = Tag::take_from(inner).ok()?;
+                    let length = Length::take_from(inner, Mode::Ber).ok()?;
                     match tag {
                         Tag::OCTET_STRING => {
                             if cons {

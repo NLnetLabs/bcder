@@ -288,11 +288,14 @@ impl<L: CharSet> fmt::Display for RestrictedString<L> {
 /// You can obtain a value of this type via a restricted string’s [`chars`]
 /// method.
 ///
+/// If underlying string contains illegal characters, the iterator stops
+/// before it and fuses.
+///
 /// [`chars`]: struct.RestrictedStringChars.html#method.chars
 #[derive(Clone, Debug)]
 pub struct RestrictedStringChars<'a, L: CharSet> {
     /// The underlying octet iterator.
-    octets: OctetStringOctets<'a>,
+    octets: Option<OctetStringOctets<'a>>,
 
     /// Our character set.
     marker: PhantomData<L>,
@@ -302,7 +305,7 @@ impl<'a, L: CharSet> RestrictedStringChars<'a, L> {
     /// Creates a new character iterator from an octet iterator.
     fn new(octets: OctetStringOctets<'a>) -> Self {
         RestrictedStringChars {
-            octets,
+            octets: Some(octets),
             marker: PhantomData
         }
     }
@@ -312,7 +315,11 @@ impl<L: CharSet> Iterator for RestrictedStringChars<'_, L> {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {
-        L::next_char(&mut self.octets).unwrap()
+        if let Ok(opt_ch) = L::next_char(self.octets.as_mut()?) {
+            return opt_ch
+        }
+        self.octets = None;
+        None
     }
 }
 

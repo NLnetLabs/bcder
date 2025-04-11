@@ -58,15 +58,12 @@ pub trait Source {
     /// Produces a `Bytes` value from part of the data.
     ///
     /// The method returns a [`Bytes`] value of the range `start..end` from
-    /// the beginning of the current view of the source. Both indexes must
-    /// not be greater than the value returned by the last successful call
-    /// to [`request`][Self::request].
+    /// the beginning of the current view of the source. The size of the
+    /// current view is whatever the last call to [`request`][Self::request]
+    /// returned.
     ///
-    /// # Panics
-    ///
-    /// The method panics if `start` or `end` are larger than the result of
-    /// the last successful call to [`request`][Self::request].
-    fn bytes(&self, start: usize, end: usize) -> Bytes;
+    /// If either index is out of this range, returns `None`.
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes>;
 
     /// Advance the source by `len` bytes.
     ///
@@ -74,10 +71,11 @@ pub trait Source {
     /// `len` bytes. This value must not be greater than the value returned
     /// by the last successful call to [`request`][Self::request].
     ///
-    /// # Panics
-    ///
-    /// The method panics if `len` is larger than the result of the last
-    /// successful call to [`request`][Self::request].
+    /// If `len` is greater than allowed, the source should enter an error
+    /// state where `request` always returns 0 and the current view is an
+    /// empty slice. This way, faulty code will likely cause “unexpected end
+    /// of data” errors which should be caughty by tests or, worst case,
+    /// result in data be rejected.
     fn advance(&mut self, len: usize);
 
     /// Skip over the next `len` bytes.
@@ -110,7 +108,9 @@ pub trait Source {
         if self.request(1)? < 1 {
             return Err(self.content_err("unexpected end of data"))
         }
-        let res = self.slice()[0];
+        let res = *self.slice().first().ok_or_else(|| {
+            self.content_err("unexpected end of data")
+        })?;
         self.advance(1);
         Ok(res)
     }
@@ -119,11 +119,15 @@ pub trait Source {
     ///
     /// If there aren’t any more octets available from the source, returns
     /// `Ok(None)`.
-    fn take_opt_u8(&mut self) -> Result<Option<u8>, Self::Error> {
+    fn take_opt_u8(
+        &mut self
+    ) -> Result<Option<u8>, DecodeError<Self::Error>> {
         if self.request(1)? < 1 {
             return Ok(None)
         }
-        let res = self.slice()[0];
+        let res = *self.slice().first().ok_or_else(|| {
+            self.content_err("unexpected end of data")
+        })?;
         self.advance(1);
         Ok(Some(res))
     }
@@ -151,7 +155,7 @@ impl<T: Source> Source for &'_ mut T {
         Source::slice(*self)
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
         Source::bytes(*self, start, end)
     }
 
@@ -216,14 +220,20 @@ impl fmt::Display for Pos {
 #[derive(Clone, Debug)]
 pub struct BytesSource {
     /// The bytes.
+    ///
+    /// This value will be advanced whenever `Self::advance` is called.
     data: Bytes,
 
-    /// The current read position in the data.
+    /// The current read position in the original data.
+    ///
+    /// This is the position relative to the original bytes value and _not_
+    /// the current value in `self.data`.
     pos: usize,
 
     /// The offset for the reported position.
     ///
     /// This is the value reported by `Source::pos` when `self.pos` is zero.
+    /// This is 0, unles the value was created with `Self::with_offset`.
     offset: Pos,
 }
 
@@ -283,12 +293,17 @@ impl Source for BytesSource {
         self.data.as_ref()
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
-        self.data.slice(start..end)
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
+        if start > self.data.len() || end > self.data.len() {
+            None
+        }
+        else {
+            Some(self.data.slice(start..end))
+        }
     }
 
     fn advance(&mut self, len: usize) {
-        assert!(len <= self.data.len());
+        let len = min(len, self.data.len());
         bytes::Buf::advance(&mut self.data, len);
         self.pos += len;
     }
@@ -352,17 +367,24 @@ impl Source for SliceSource<'_> {
     }
 
     fn advance(&mut self, len: usize) {
-        assert!(len <= self.data.len());
-        self.data = &self.data[len..];
-        self.pos += len;
+        match self.data.get(len..) {
+            Some(slice) => {
+                self.data = slice;
+                self.pos += len;
+            }
+            None => {
+                self.pos += self.data.len();
+                self.data = b"";
+            }
+        }
     }
 
     fn slice(&self) -> &[u8] {
         self.data
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
-        Bytes::copy_from_slice(&self.data[start..end])
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
+        self.data.get(start..end).map(Bytes::copy_from_slice)
     }
 }
 
@@ -459,11 +481,13 @@ impl<S> LimitedSource<S> {
 impl<S: Source> LimitedSource<S> {
     /// Skip over all remaining octets until the current limit is reached.
     ///
-    /// If there currently is no limit, the method will panic. Otherwise it
+    /// If there currently is no limit, returns an error. Otherwise it
     /// will simply advance to the end of the limit which may be something
     /// the underlying source doesn’t like and thus produce an error.
     pub fn skip_all(&mut self) -> Result<(), DecodeError<S::Error>> {
-        let limit = self.limit.unwrap();
+        let Some(limit) = self.limit else {
+            return Err(self.content_err("tried skipping over unlimited data"))
+        };
         if self.request(limit)? < limit {
             return Err(self.content_err("unexpected end of data"))
         }
@@ -473,7 +497,7 @@ impl<S: Source> LimitedSource<S> {
 
     /// Returns a bytes value containing all octets until the current limit.
     ///
-    /// If there currently is no limit, the method will panic. Otherwise it
+    /// If there currently is no limit, returns an error. Otherwise it
     /// tries to acquire a bytes value for the octets from the current
     /// position to the end of the limit and advance to the end of the limit.
     ///
@@ -481,11 +505,15 @@ impl<S: Source> LimitedSource<S> {
     /// an error. It will result in a content error if the underlying source
     /// ends before the limit is reached.
     pub fn take_all(&mut self) -> Result<Bytes, DecodeError<S::Error>> {
-        let limit = self.limit.unwrap();
+        let Some(limit) = self.limit else {
+            return Err(self.content_err("tried skipping over unlimited data"))
+        };
         if self.request(limit)? < limit {
             return Err(self.content_err("unexpected end of data"))
         }
-        let res = self.bytes(0, limit);
+        let Some(res) = self.bytes(0, limit) else {
+            return Err(self.content_err("unexpected end of data"))
+        };
         self.advance(limit);
         Ok(res)
     }
@@ -534,12 +562,9 @@ impl<S: Source> Source for LimitedSource<S> {
         }
     }
 
-    fn advance(&mut self, len: usize) {
+    fn advance(&mut self, mut len: usize) {
         if let Some(limit) = self.limit {
-            assert!(
-                len <= limit,
-                "advanced past end of limit"
-            );
+            len = min(len, limit);
             self.limit = Some(limit - len);
         }
         self.source.advance(len)
@@ -547,18 +572,16 @@ impl<S: Source> Source for LimitedSource<S> {
 
     fn slice(&self) -> &[u8] {
         let res = self.source.slice();
-        if let Some(limit) = self.limit {
-            if res.len() > limit {
-                return &res[..limit]
-            }
+        match self.limit {
+            Some(limit) => res.get(..limit).unwrap_or(res),
+            None => res,
         }
-        res
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
+    fn bytes(&self, mut start: usize, mut end: usize) -> Option<Bytes> {
         if let Some(limit) = self.limit {
-            assert!(start <= limit);
-            assert!(end <= limit);
+            start = min(start, limit);
+            end = min(end, limit);
         }
         self.source.bytes(start, end)
     }
@@ -566,6 +589,9 @@ impl<S: Source> Source for LimitedSource<S> {
 
 
 //------------ CaptureSource -------------------------------------------------
+
+// XXX This type is problematic with the revised `advance` semantics. We
+//     should probably stop using it.
 
 /// A source that captures what has been advanced over.
 ///
@@ -599,7 +625,7 @@ impl<'a, S: Source> CaptureSource<'a, S> {
     }
 
     /// Converts the capture source into the captured bytes.
-    pub fn into_bytes(self) -> Bytes {
+    pub fn into_bytes(self) -> Option<Bytes> {
         let res = self.source.bytes(0, self.pos);
         self.skip();
         res
@@ -626,10 +652,10 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
     }
 
     fn slice(&self) -> &[u8] {
-        &self.source.slice()[self.pos..]
+        self.source.slice().get(self.pos..).unwrap_or(b"")
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
         let start = start + self.pos;
         let end = end + self.pos;
         assert!(
@@ -644,10 +670,6 @@ impl<'a, S: Source + 'a> Source for CaptureSource<'a, S> {
     }
 
     fn advance(&mut self, len: usize) {
-        assert!(
-            self.len >= self.pos + len,
-            "advanced past the end of data"
-        );
         self.pos += len;
     }
 }
@@ -682,7 +704,7 @@ mod test {
         let mut bytes = Bytes::from_static(b"1234567890").into_source();
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&Source::slice(&bytes)[..4] == b"1234");
-        assert_eq!(bytes.bytes(2, 4), Bytes::from_static(b"34"));
+        assert_eq!(bytes.bytes(2, 4), Some(Bytes::from_static(b"34")));
         Source::advance(&mut bytes, 4);
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&Source::slice(&bytes)[..4] == b"5678");
@@ -698,7 +720,7 @@ mod test {
         let mut bytes = b"1234567890".into_source();
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&bytes.slice()[..4] == b"1234");
-        assert_eq!(bytes.bytes(2, 4), Bytes::from_static(b"34"));
+        assert_eq!(bytes.bytes(2, 4), Some(Bytes::from_static(b"34")));
         bytes.advance(4);
         assert!(bytes.request(4).unwrap() >= 4);
         assert!(&bytes.slice()[..4] == b"5678");
@@ -738,6 +760,7 @@ mod test {
         assert_eq!(source.slice(), b"5678");
     }
 
+    /*
     #[test]
     #[should_panic]
     fn limited_source_far_advance() {
@@ -750,6 +773,7 @@ mod test {
         assert_eq!(source.request(6).unwrap(), 0);
         source.advance(6); // panics
     }
+    */
 
     #[test]
     #[should_panic]
@@ -766,7 +790,10 @@ mod test {
             let mut capture = CaptureSource::new(&mut source);
             assert_eq!(capture.request(4).unwrap(), 10);
             capture.advance(4);
-            assert_eq!(capture.into_bytes(), Bytes::from_static(b"1234"));
+            assert_eq!(
+                capture.into_bytes(),
+                Some(Bytes::from_static(b"1234"))
+            );
         }
         assert_eq!(source.data, b"567890");
 

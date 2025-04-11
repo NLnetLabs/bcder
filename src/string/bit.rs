@@ -2,6 +2,9 @@
 //!
 //! This is a private module. Its public items are re-exported by the parent.
 
+// XXX This module needs some redesigning.
+#![allow(clippy::indexing_slicing)]
+
 use std::io;
 use bytes::Bytes;
 use crate::{decode, encode};

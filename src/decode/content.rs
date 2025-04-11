@@ -363,7 +363,11 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     /// The returned value reflects what is left of the expected length of
     /// content and therefore decreases when the primitive is advanced.
     pub fn remaining(&self) -> usize {
-        self.source.limit().unwrap()
+        // The source is guaranteed to have a limit by the code creating
+        // the primitive, so we can just return 0 here if it isn’t. This
+        // isn’t ideal and we would rater guarantee things through types,
+        // but because of all the mut refs involved, this is kind of tricky.
+        self.source.limit().unwrap_or(0)
     }
 
     /// Skips the rest of the content.
@@ -383,11 +387,11 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
     pub fn slice_all(&mut self) -> Result<&[u8], DecodeError<S::Error>> {
         let remaining = self.remaining();
         if self.source.request(remaining)? < remaining {
-            Err(self.source.content_err("unexpected end of data"))
+            return Err(self.source.content_err("unexpected end of data"))
         }
-        else {
-            Ok(&self.source.slice()[..remaining])
-        }
+        self.source.slice().get(..remaining).ok_or_else(|| {
+            self.source.content_err("unexpected end of data")
+        })
     }
 
     /// Process a slice of the remainder of the content via a closure.
@@ -402,9 +406,10 @@ impl<'a, S: Source + 'a> Primitive<'a, S> {
         if self.source.request(remaining)? < remaining {
             return Err(self.source.content_err("unexpected end of data"));
         }
-        let res = op(&self.source.slice()[..remaining]).map_err(|err| {
-            self.content_err(err)
+        let slice = self.source.slice().get(..remaining).ok_or_else(|| {
+            self.source.content_err("unexpected end of data")
         })?;
+        let res = op(slice).map_err(|err| { self.content_err(err) })?;
         self.source.advance(remaining);
         Ok(res)
     }
@@ -474,7 +479,7 @@ impl<'a, S: Source + 'a> Source for Primitive<'a, S> {
         self.source.slice()
     }
 
-    fn bytes(&self, start: usize, end: usize) -> Bytes {
+    fn bytes(&self, start: usize, end: usize) -> Option<Bytes> {
         self.source.bytes(start, end)
     }
 
@@ -611,7 +616,7 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
     fn is_exhausted(&self) -> bool {
         match self.state {
             State::Definite => {
-                self.source.limit().unwrap() == 0
+                self.source.limit() == Some(0)
             }
             State::Indefinite => false,
             State::Done => true,
@@ -1045,9 +1050,10 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
             op(&mut constructed)?;
             self.state = constructed.state;
         }
-        Ok(Captured::new(
-            source.unwrap().into_bytes(), self.mode, start,
-        ))
+        match source.unwrap().into_bytes() {
+            Some(res) => Ok(Captured::new(res, self.mode, start)),
+            None => Err(DecodeError::content("unexpected end of data", start))
+        }
     }
 
     /// Captures one value for later processing
