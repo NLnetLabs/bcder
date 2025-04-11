@@ -492,10 +492,7 @@ impl Tag {
         target.write_all(
             // XXX Maybe redesign internal storage to avoid this error?
             buf.get(..self.encoded_len()).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "bug: encountered overly long tag"
-                )
+                io::Error::other("bug: encountered overly long tag")
             })?
         )
     }
