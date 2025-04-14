@@ -266,6 +266,11 @@ impl encode::PrimitiveContent for BitString {
         target.write_all(&[self.unused])?;
         target.write_all(self.bits.as_ref())
     }
+
+    fn append_encoded(&self, _mode: Mode, target: &mut Vec<u8>) {
+        target.push(self.unused);
+        target.extend_from_slice(self.bits.as_ref());
+    }
 }
 
 
@@ -330,6 +335,18 @@ impl<T: AsRef<[u8]>> encode::Values for BitSliceEncoder<T> {
         Length::Definite(self.slice.as_ref().len() + 1).write_encoded(target)?;
         target.write_all(&[self.unused])?;
         target.write_all(self.slice.as_ref())
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        self.tag.append_encoded(false, target);
+        Length::Definite(
+            self.slice.as_ref().len() + 1
+        ).append_encoded(target);
+        target.push(self.unused);
+        target.extend_from_slice(self.slice.as_ref())
     }
 }
 

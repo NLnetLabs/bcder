@@ -227,14 +227,14 @@ impl Tag {
     ///
     /// There are two forms:
     /// * low tag number (for tag numbers between 0 and 30):
-    ///     One octet. Bits 8 and 7 specify the class, bit 6 indicates whether
-    ///     the encoding is primitive (0), and bits 5-1 give the tag number.
+    ///   One octet. Bits 8 and 7 specify the class, bit 6 indicates whether
+    ///   the encoding is primitive (0), and bits 5-1 give the tag number.
     /// * high tag number (for tag numbers 31 and greater):
-    ///     Two or more octets. First octet is as in low-tag-number form,
-    ///     except that bits 5-1 all have value 1. Second and following octets
-    ///     give the tag number, base 128, most significant digit first, with
-    ///     as few digits as possible, and with the bit 8 of each octet except
-    ///     the last set to 1.
+    ///   Two or more octets. First octet is as in low-tag-number form,
+    ///   except that bits 5-1 all have value 1. Second and following octets
+    ///   give the tag number, base 128, most significant digit first, with
+    ///   as few digits as possible, and with the bit 8 of each octet except
+    ///   the last set to 1.
     //
     /// # Panics
     ///
@@ -481,6 +481,15 @@ impl Tag {
             buf[0] |= Tag::CONSTRUCTED_MASK
         }
         target.write_all(&buf[..self.encoded_len()])
+    }
+
+    /// Appends the tag to a vec.
+    pub fn append_encoded(&self, constructed: bool, target: &mut Vec<u8>) {
+        let mut buf = self.0;
+        if constructed {
+            buf[0] |= Tag::CONSTRUCTED_MASK
+        }
+        target.extend_from_slice(&buf[..self.encoded_len()]);
     }
 }
 

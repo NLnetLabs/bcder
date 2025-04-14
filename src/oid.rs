@@ -240,6 +240,10 @@ impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
     ) -> Result<(), io::Error> {
         target.write_all(self.0.as_ref())
     }
+
+    fn append_encoded(&self, _mode: Mode, target: &mut Vec<u8>) {
+        target.extend_from_slice(self.0.as_ref())
+    }
 }
 
 

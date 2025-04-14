@@ -198,6 +198,14 @@ impl encode::Values for Captured {
         );
         target.write_all(self.bytes.as_ref())
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        assert!(
+            !(self.mode != mode && mode != Mode::Ber),
+            "Trying to encode a captured value with incompatible mode"
+        );
+        target.extend_from_slice(self.bytes.as_ref())
+    }
 }
 
 

@@ -42,13 +42,8 @@ pub trait PrimitiveContent: Sized {
         target: &mut W
     ) -> Result<(), io::Error>;
 
-    /// Encodes the value to bytes (useful when you need to sign a structure)
-    fn to_encoded_bytes(&self, mode: Mode) -> Bytes {
-        let l = self.encoded_len(mode);
-        let mut w = Vec::with_capacity(l);
-        self.write_encoded(mode, &mut w).unwrap();
-        w.into()
-    }
+    /// Appends the encoded content to a vec.
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>);
 
     /// Returns a value encoder for this content using the natural tag.
     ///
@@ -75,6 +70,14 @@ pub trait PrimitiveContent: Sized {
     fn encode_ref_as(&self, tag: Tag) -> Primitive<&Self> {
         Primitive { tag, prim: self }
     }
+
+    /// Encodes the value to bytes (useful when you need to sign a structure)
+    fn to_encoded_bytes(&self, mode: Mode) -> Bytes {
+        let l = self.encoded_len(mode);
+        let mut w = Vec::with_capacity(l);
+        self.write_encoded(mode, &mut w).unwrap();
+        w.into()
+    }
 }
 
 //--- Blanket impls
@@ -92,6 +95,10 @@ impl<T: PrimitiveContent> PrimitiveContent for &'_ T {
         target: &mut W
     ) -> Result<(), io::Error> {
         (*self).write_encoded(mode, target)
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        (*self).append_encoded(mode, target)
     }
 }
 
@@ -116,6 +123,13 @@ impl PrimitiveContent for u8 {
         }
         target.write_all(&[*self])?;
         Ok(())
+    }
+
+    fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+        if *self > 0x7F {
+            target.push(0);
+        }
+        target.push(*self);
     }
 }
 
@@ -168,6 +182,31 @@ macro_rules! unsigned_content {
                 }
                 Ok(())
             }
+
+            fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+                if *self == 0 {
+                    target.push(0);
+                }
+                else {
+                    let mut val = self.swap_bytes();
+                    let mut i = 0;
+                    while i < $len {
+                        if val as u8 != 0 {
+                            break
+                        }
+                        val >>= 8;
+                        i += 1
+                    }
+                    if val & 0x80 != 0 {
+                        target.push(0);
+                    }
+                    while i < $len {
+                        target.push(val as u8);
+                        val >>= 8;
+                        i += 1
+                    }
+                }
+            }
         }
     }
 }
@@ -192,6 +231,10 @@ impl PrimitiveContent for i8 {
     ) -> Result<(), io::Error> {
         target.write_all(&[*self as u8])?;
         Ok(())
+    }
+
+    fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+        target.push(*self as u8);
     }
 }
 
@@ -276,6 +319,59 @@ macro_rules! signed_content {
                 }
                 Ok(())
             }
+
+            fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+                if *self == 0 {
+                    target.push(0);
+                }
+                else if *self == -1 {
+                    target.push(0xFF);
+                }
+                else if *self < 0 {
+                    let mut val = self.swap_bytes();
+                    let mut i = 0;
+                    // Skip over leading 0xFF.
+                    while i < $len {
+                        if val as u8 != 0xFF {
+                            break
+                        }
+                        val >>= 8;
+                        i += 1;
+                    }
+                    // If the first non-0xFF doesn’t have the left-most bit
+                    // set, we need an 0xFF for the sign.
+                    if val & 0x80 != 0x80 {
+                        target.push(0xFF);
+                    }
+                    while i < $len {
+                        target.push(val as u8);
+                        val >>= 8;
+                        i += 1
+                    }
+                }
+                else {
+                    let mut val = self.swap_bytes();
+                    let mut i = 0;
+                    // Skip over leading zero bytes.
+                    while i < $len {
+                        if val as u8 != 0x00 {
+                            break
+                        }
+                        val >>= 8;
+                        i += 1;
+                    }
+                    // If the first non-zero has the left-most bit
+                    // set, we need an 0x00 for the sign.
+                    if val & 0x80 == 0x80 {
+                        target.push(0);
+                    }
+                    while i < $len {
+                        target.push(val as u8);
+                        val >>= 8;
+                        i += 1
+                    }
+                }
+            }
         }
     }
 }
@@ -300,6 +396,9 @@ impl PrimitiveContent for () {
     ) -> Result<(), io::Error> {
         Ok(())
     }
+
+    fn append_encoded(&self, _: Mode, _target: &mut Vec<u8>) {
+    }
 }
 
 impl PrimitiveContent for bool {
@@ -321,6 +420,12 @@ impl PrimitiveContent for bool {
             target.write_all(&[0])
         }
     }
+
+    fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+        target.push(
+            if *self { 0xFF } else { 0 }
+        )
+    }
 }
 
 impl PrimitiveContent for &'_ [u8] {
@@ -336,6 +441,10 @@ impl PrimitiveContent for &'_ [u8] {
         target: &mut W
     ) -> Result<(), io::Error> {
         target.write_all(self)
+    }
+
+    fn append_encoded(&self, _: Mode, target: &mut Vec<u8>) {
+        target.extend_from_slice(self)
     }
 }
 
@@ -373,6 +482,12 @@ impl<P: PrimitiveContent> Values for Primitive<P> {
         self.tag.write_encoded(false, target)?;
         Length::Definite(self.prim.encoded_len(mode)).write_encoded(target)?;
         self.prim.write_encoded(mode, target)
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.tag.append_encoded(false, target);
+        Length::Definite(self.prim.encoded_len(mode)).append_encoded(target);
+        self.prim.append_encoded(mode, target);
     }
 }
 

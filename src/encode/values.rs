@@ -35,6 +35,8 @@ pub trait Values {
         target: &mut W
     ) -> Result<(), io::Error>;
 
+    /// Appends the encoded content to a vec.
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>);
 
     //--- Provided methods
 
@@ -66,6 +68,10 @@ impl<T: Values> Values for &'_ T {
         target: &mut W
     ) -> Result<(), io::Error> {
         (*self).write_encoded(mode, target)
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        (*self).append_encoded(mode, target)
     }
 }
 
@@ -106,6 +112,10 @@ macro_rules! tupl_impl {
                 tupl_impl!( write self, mode, target, $i $( $itail )* );
                 Ok(())
             }
+
+            fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+                tupl_impl!( append self, mode, target, $i $( $itail )* );
+            }
         }
 
         tupl_impl!(
@@ -120,7 +130,16 @@ macro_rules! tupl_impl {
     ( write $self:expr, $mode:expr, $target:expr, $i:tt $($itail:tt)*) => {
         tupl_impl!( write $self, $mode, $target, $($itail)* );
         $self.$i.write_encoded($mode, $target)?
-    }
+    };
+
+    // Termination: empty lists, do nothing.
+    ( append $self:expr, $mode:expr, $target:expr, ) => { };
+
+    // Append all elements of tuple $self in mode $mode to $target in order.
+    ( append $self:expr, $mode:expr, $target:expr, $i:tt $($itail:tt)*) => {
+        tupl_impl!( append $self, $mode, $target, $($itail)* );
+        $self.$i.append_encoded($mode, $target)
+    };
 }
 
 // The standard library implements things for tuples up to twelve elements,
@@ -154,6 +173,12 @@ impl<V: Values> Values for Option<V> {
             None => Ok(())
         }
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        if let Some(v) = self {
+            v.append_encoded(mode, target);
+        }
+    }
 }
 
 
@@ -172,6 +197,10 @@ impl<V: Values> Values for [V] {
         };
         Ok(())
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.iter().for_each(|v| v.append_encoded(mode, target))
+    }
 }
 
 impl<V: Values> Values for Vec<V> {
@@ -186,6 +215,10 @@ impl<V: Values> Values for Vec<V> {
             i.write_encoded(mode, target)?;
         };
         Ok(())
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.as_slice().append_encoded(mode, target)
     }
 }
 
@@ -245,6 +278,23 @@ impl<V: Values> Values for Constructed<V> {
             }
         }
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.tag.append_encoded(true, target);
+        match mode {
+            Mode::Ber | Mode::Der => {
+                Length::Definite(
+                    self.inner.encoded_len(mode)
+                ).append_encoded(target);
+                self.inner.append_encoded(mode, target)
+            }
+            Mode::Cer => {
+                Length::Indefinite.append_encoded(target);
+                self.inner.append_encoded(mode, target);
+                EndOfValue.append_encoded(mode, target)
+            }
+        }
+    }
 }
 
 
@@ -275,9 +325,16 @@ impl<L: Values, R: Values> Values for Choice2<L, R> {
         mode: Mode,
         target: &mut W
     ) -> Result<(), io::Error> {
-        match *self {
-            Choice2::One(ref inner) => inner.write_encoded(mode, target),
-            Choice2::Two(ref inner) => inner.write_encoded(mode, target),
+        match self {
+            Choice2::One(inner) => inner.write_encoded(mode, target),
+            Choice2::Two(inner) => inner.write_encoded(mode, target),
+        }
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        match self {
+            Choice2::One(inner) => inner.append_encoded(mode, target),
+            Choice2::Two(inner) => inner.append_encoded(mode, target),
         }
     }
 }
@@ -318,6 +375,14 @@ impl<L: Values, C: Values, R: Values> Values for Choice3<L, C, R> {
             Choice3::One(ref inner) => inner.write_encoded(mode, target),
             Choice3::Two(ref inner) => inner.write_encoded(mode, target),
             Choice3::Three(ref inner) => inner.write_encoded(mode, target),
+        }
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        match self {
+            Choice3::One(inner) => inner.append_encoded(mode, target),
+            Choice3::Two(inner) => inner.append_encoded(mode, target),
+            Choice3::Three(inner) => inner.append_encoded(mode, target),
         }
     }
 }
@@ -383,6 +448,10 @@ where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
     ) -> Result<(), io::Error> {
         self.into_iter().try_for_each(|item| item.write_encoded(mode, target))
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.into_iter().for_each(|item| item.append_encoded(mode, target))
+    }
 }
 
 
@@ -441,6 +510,12 @@ where T: AsRef<[U]>, F: Fn(&U) -> V, V: Values {
             (self.f)(v).write_encoded(mode, target)
         )
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        self.value.as_ref().iter().for_each(|v| {
+            (self.f)(v).append_encoded(mode, target)
+        })
+    }
 }
 
 
@@ -464,6 +539,9 @@ impl Values for Nothing {
         _target: &mut W
     ) -> Result<(), io::Error> {
         Ok(())
+    }
+
+    fn append_encoded(&self, _mode: Mode, _target: &mut Vec<u8>) {
     }
 }
 
@@ -519,6 +597,20 @@ pub fn write_header<W: io::Write>(
     Ok(())
 }
 
+/// Appends the header for a value.
+///
+/// The header in the sense of this function is the identifier octets and the
+/// length octets.
+pub fn append_header(
+    target: &mut Vec<u8>,
+    tag: Tag,
+    constructed: bool,
+    content_length: usize
+) {
+    tag.append_encoded(constructed, target);
+    Length::Definite(content_length).append_encoded(target);
+}
+
 
 //============ Helper Types ==================================================
 
@@ -539,6 +631,10 @@ impl Values for EndOfValue {
     ) -> Result<(), io::Error> {
         let buf = [0, 0];
         target.write_all(&buf)
+    }
+
+    fn append_encoded(&self, _mode: Mode, target: &mut Vec<u8>) {
+        target.extend_from_slice(&[0u8; 2]);
     }
 }
 

@@ -245,4 +245,77 @@ impl Length {
             }
         }
     }
+
+    /// Writes the encoded value to a target.
+    #[cfg(target_pointer_width = "64")]
+    pub fn append_encoded(&self, target: &mut Vec<u8>) {
+        match *self {
+            Length::Indefinite => {
+                target.push(0x80)
+            }
+            Length::Definite(len) => {
+                if len < 0x80 {
+                    target.push(len as u8);
+                }
+                else if len < 0x1_00 {
+                    target.push(0x81);
+                    target.push(len as u8);
+                }
+                else if len < 0x1_0000 {
+                    target.push(0x82);
+                    target.push((len >> 8) as u8);
+                    target.push(len as u8);
+                }
+                else if len < 0x100_0000 {
+                    target.push(0x83);
+                    target.push((len >> 16) as u8);
+                    target.push((len >> 8) as u8);
+                    target.push(len as u8);
+                }
+                else if len < 0x1_0000_0000 {
+                    target.push(0x84);
+                    target.push((len >> 24) as u8);
+                    target.push((len >> 16) as u8);
+                    target.push((len >> 8) as u8);
+                    target.push(len as u8);
+                }
+                else {
+                    panic!("excessive length")
+                }
+            }
+        }
+    }
+
+    /// Writes the encoded value to a target.
+    #[cfg(not(target_pointer_width = "64"))]
+    pub fn append_encoded(&self, target: &mut Vec<u8>) {
+        match *self {
+            Length::Indefinite => {
+                target.push(0x80)
+            }
+            Length::Definite(len) => {
+                if len < 0x80 {
+                    target.push(len as u8);
+                }
+                else if len < 0x1_00 {
+                    target.push(0x81);
+                    target.push(len as u8);
+                }
+                else if len < 0x1_0000 {
+                    target.push(0x82);
+                    target.push((len >> 8) as u8);
+                    target.push(len as u8);
+                }
+                else if len < 0x100_0000 {
+                    target.push(0x83);
+                    target.push((len >> 16) as u8);
+                    target.push((len >> 8) as u8);
+                    target.push(len as u8);
+                }
+                else {
+                    panic!("excessive length")
+                }
+            }
+        }
+    }
 }

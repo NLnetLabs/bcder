@@ -32,8 +32,8 @@ pub use self::primitive::{PrimitiveContent, Primitive};
 pub use self::values::{
     Values,
     Choice2, Choice3, Constructed, Iter, Nothing, Slice,
-    iter, sequence, sequence_as, set, set_as, slice, total_encoded_len,
-    write_header,
+    append_header, iter, sequence, sequence_as, set, set_as, slice,
+    total_encoded_len, write_header,
 };
 
 mod primitive;

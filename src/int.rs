@@ -411,6 +411,10 @@ impl PrimitiveContent for &'_ Integer {
     ) -> Result<(), io::Error> {
         target.write_all(self.0.as_ref())
     }
+
+    fn append_encoded(&self, _mode: Mode, target: &mut Vec<u8>) {
+        target.extend_from_slice(self.0.as_ref())
+    }
 }
 
 
@@ -667,6 +671,10 @@ impl PrimitiveContent for &'_ Unsigned {
         target: &mut W
     ) -> Result<(), io::Error> {
         (&self.0).write_encoded(mode, target)
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        (&self.0).append_encoded(mode, target)
     }
 }
 

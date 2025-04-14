@@ -779,6 +779,39 @@ impl<T: AsRef<OctetString>> encode::Values for OctetStringEncoder<T> {
             }
         }
     }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        match mode {
+            Mode::Ber => {
+                match self.value.as_ref().0 {
+                    Inner::Primitive(ref bytes) => {
+                        self.tag.append_encoded(false, target);
+                        Length::Definite(bytes.len()).append_encoded(target);
+                        target.extend_from_slice(bytes.as_ref())
+                    }
+                    Inner::Constructed(ref captured) => {
+                        self.tag.append_encoded(true, target);
+                        Length::Definite(
+                            captured.len()
+                        ).append_encoded(target);
+                        target.extend_from_slice(captured.as_slice())
+                    }
+                }
+            }
+            Mode::Cer => {
+                unimplemented!()
+            }
+            Mode::Der => {
+                self.tag.append_encoded(false, target);
+                Length::Definite(
+                    self.value.as_ref().len()
+                ).append_encoded(target);
+                for slice in self.value.as_ref().iter() {
+                    target.extend_from_slice(slice);
+                }
+            }
+        }
+    }
 }
 
 
@@ -830,6 +863,15 @@ impl<T: AsRef<[u8]>> encode::Values for OctetSliceEncoder<T> {
         self.tag.write_encoded(false, target)?;
         Length::Definite(self.slice.as_ref().len()).write_encoded(target)?;
         target.write_all(self.slice.as_ref())
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+        self.tag.append_encoded(false, target);
+        Length::Definite(self.slice.as_ref().len()).append_encoded(target);
+        target.extend_from_slice(self.slice.as_ref())
     }
 }
 
@@ -889,6 +931,20 @@ impl<V: encode::Values> encode::Values for WrappingOctetStringEncoder<V> {
             self.values.encoded_len(self.mode))?;
 
         self.values.write_encoded(self.mode, target)
+    }
+
+    fn append_encoded(&self, mode: Mode, target: &mut Vec<u8>) {
+        if mode == Mode::Cer {
+            unimplemented!()
+        }
+
+        encode::append_header(
+            target,
+            Tag::OCTET_STRING,
+            false,
+            self.values.encoded_len(self.mode)
+        );
+        self.values.append_encoded(self.mode, target)
     }
 }
 
