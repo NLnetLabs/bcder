@@ -3,7 +3,7 @@
 //! This is a private module. Its public items are re-exported by the parent.
 
 use std::{fmt, io};
-use crate::decode::{DecodeError, Source};
+use crate::decode::{DecodeError, Fragment, Pos, Source};
 
 
 //------------ Tag -----------------------------------------------------------
@@ -22,19 +22,146 @@ use crate::decode::{DecodeError, Source};
 ///
 /// # Limitations
 ///
-/// We can only decode up to four identifier octets. That is, we only support
-/// tag numbers between 0 and 1fffff.
+/// We can only decode up to six identifier octets. This is enough to encode
+/// hold tag numbers represented by a `u32`.
 ///
 /// [`Primitive`]: decode/struct.Primitive.html
 /// [`Constructed`]: decode/struct.Constructed.html
 //
 //  For the moment, the tag is stored with the constructed bit always cleared.
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct Tag([u8; 4]);
+pub struct Tag(T);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum T {
+    L1([u8; 1]),
+    L2([u8; 2]),
+    L3([u8; 3]),
+    L4([u8; 4]),
+    L5([u8; 5]),
+    L6([u8; 6]),
+}
 
 /// # Constants for Often Used Tag Values
 ///
 impl Tag {
+    /// The tag marking the end-of-value in an indefinite length value.
+    ///
+    /// This is UNIVERSAL 0.
+    pub const END_OF_VALUE: Self = Tag::universal(0);
+
+    //--- Universal Tags
+    //
+    // See clause 8.4 of X.690.
+
+    /// The tag for the BOOLEAN type, UNIVERSAL 1.
+    pub const BOOLEAN: Self = Tag::universal(1);
+
+    /// The tag for the INTEGER type, UNIVERSAL 2.
+    pub const INTEGER: Self = Tag::universal(2);
+
+    /// The tag for the BIT STRING type, UNIVERSAL 3.
+    pub const BIT_STRING: Self = Tag::universal(3);
+
+    /// The tag for the OCTET STRING type, UNIVERSAL 4.
+    pub const OCTET_STRING: Self = Tag::universal(4);
+
+    /// The tag for the NULL type, UNIVERSAL 5.
+    pub const NULL: Self = Tag::universal(5);
+
+    /// The tag for the OBJECT IDENTIFIER type, UNIVERSAL 6.
+    pub const OID: Self = Tag::universal(6);
+
+    /// The tag for the ObjectDescriptor type, UNIVERSAL 7.
+    pub const OBJECT_DESCRIPTOR: Self = Tag::universal(7);
+
+    /// The tag for the EXTERNAL and Instance-of types, UNIVERSAL 8.
+    pub const EXTERNAL: Self = Tag::universal(8);
+
+    /// The tag for the REAL type, UNIVERSAL 9.
+    pub const REAL: Self = Tag::universal(9);
+
+    /// The tag for the ENUMERATED type, UNIVERSAL 10.
+    pub const ENUMERATED: Self = Tag::universal(10);
+
+    /// The tag for the EMBEDDED PDV type, UNIVERSAL 11.
+    pub const EMBEDDED_PDV: Self = Tag::universal(11);
+
+    /// The tag for the UTF8String type, UNIVERSAL 12
+    pub const UTF8_STRING: Self = Tag::universal(12);
+
+    /// The tag for the RELATIVE-OID type, UNIVERSAL 13.
+    pub const RELATIVE_OID: Self = Tag::universal(13);
+
+    /// The tag for the TIME type, UNIVERSAL 14.
+    pub const TIME: Self = Tag::universal(14);
+
+    /// The tag for the SEQUENCE and SEQUENCE OF types, UNIVERSAL 16.
+    pub const SEQUENCE: Self = Tag::universal(16);
+
+    /// The tag for the SET and SET OF types, UNIVERSAL 17.
+    pub const SET: Self = Tag::universal(17);
+
+    /// The tag for the NumericString type, UNIVERSAL 18.
+    pub const NUMERIC_STRING: Self = Tag::universal(18);
+
+    /// The tag for the PrintableString type, UNIVERSAL 19.
+    pub const PRINTABLE_STRING: Self = Tag::universal(19);
+
+    /// The tag for the TeletexString type, UNIVERSAL 20.
+    pub const TELETEX_STRING: Self = Tag::universal(20);
+
+    /// The tag for the VideotexString type, UNIVERSAL 21.
+    pub const VIDEOTEX_STRING: Self = Tag::universal(21);
+
+    /// The tag for the IA5String type, UNIVERSAL 22.
+    pub const IA5_STRING: Self = Tag::universal(22);
+
+    /// The tag for the UTCTime type, UNIVERSAL 23.
+    pub const UTC_TIME: Self = Tag::universal(23);
+
+    /// The tag for the GeneralizedType type, UNIVERSAL 24.
+    pub const GENERALIZED_TIME: Self = Tag::universal(24);
+
+    /// The tag for the GraphicString type, UNIVERSAL 25.
+    pub const GRAPHIC_STRING: Self = Tag::universal(25);
+
+    /// The tag for the VisibleString type, UNIVERSAL 26.
+    pub const VISIBLE_STRING: Self = Tag::universal(26);
+
+    /// The tag for the GeneralString type, UNIVERSAL 27.
+    pub const GENERAL_STRING: Self = Self::universal(27);
+
+    /// The tag for the UniversalString type, UNIVERSAL 28.
+    pub const UNIVERSAL_STRING: Self = Self::universal(28);
+
+    /// The tag for the CHARACTER STRING type, UNIVERSAL 29.
+    pub const CHARACTER_STRING: Self = Self::universal(29);
+
+    /// The tag for the BMPString type, UNIVERSAL 30.
+    pub const BMP_STRING: Self = Self::universal(30);
+
+    /// The tag for the DATE type, UNIVERSAL 31.
+    pub const DATE: Self = Self::universal(31);
+
+    /// The tag for the TIME-OF-DAY type, UNIVERSAL 32.
+    pub const TIME_OF_DAY: Self = Self::universal(32);
+
+    /// The tag for the DATE-TIME type, UNIVERSAL 33.
+    pub const DATE_TIME: Self = Self::universal(33);
+
+    /// The tag for the DURATION type, UNIVERSAL 34.
+    pub const DURATION: Self = Self::universal(34);
+
+    /// The tag for the OID-IRI type, UNIVERSAL 35.
+    pub const OID_IRI: Self = Self::universal(35);
+
+    /// The tag for the RELATIVE-OID-IRI type, UNIVERSAL 36.
+    pub const RELATIVE_OID_IRI: Self = Self::universal(36);
+
+
+    //--- Internal constants.
+
     /// The mask for checking the class.
     const CLASS_MASK: u8 = 0xc0;
 
@@ -58,18 +185,6 @@ impl Tag {
     /// (1 bit – 0b1000_0000, it is cleared in the last octet).
     const LAST_OCTET_MASK: u8 = 0x80;
 
-    /// The largest tag number possible with three octets.
-    const MAX_VAL_SPAN_3_OCTETS: u32 = 0x001f_ffff;
-
-    /// The largest tag number possible with two octets.
-    const MAX_VAL_SPAN_2_OCTETS: u32 = 0x3fff;
-
-    /// The largest tag number possible with one octet.
-    const MAX_VAL_SPAN_1_OCTET: u32 = 0x7f;
-
-    /// The largest tag number possible with the fourth octet.
-    const MAX_VAL_FOURTH_OCTET: u32 = 0x1e;
-
     /// The tag value representing for the ‘universal’ class.
     const UNIVERSAL: u8 = 0x00;
 
@@ -81,145 +196,6 @@ impl Tag {
 
     /// The tag value representing the `private` class.
     const PRIVATE: u8 = 0xc0;
-
-    /// The tag marking the end-of-value in an indefinite length value.
-    ///
-    /// This is UNIVERSAL 0.
-    pub const END_OF_VALUE: Self = Tag([0, 0, 0, 0]);
-
-    //--- Universal Tags
-    //
-    // See clause 8.4 of X.690.
-
-    /// The tag for the BOOLEAN type, UNIVERSAL 1.
-    pub const BOOLEAN: Self = Tag([1, 0, 0, 0]);
-
-    /// The tag for the INTEGER type, UNIVERSAL 2.
-    pub const INTEGER: Self = Tag([2, 0, 0, 0]);
-
-    /// The tag for the BIT STRING type, UNIVERSAL 3.
-    pub const BIT_STRING: Self = Tag([3, 0, 0, 0]);
-
-    /// The tag for the OCTET STRING type, UNIVERSAL 4.
-    pub const OCTET_STRING: Self = Tag([4, 0, 0, 0]);
-
-    /// The tag for the NULL type, UNIVERSAL 5.
-    pub const NULL: Self = Tag([5, 0, 0, 0]);
-
-    /// The tag for the OBJECT IDENTIFIER type, UNIVERSAL 6.
-    pub const OID: Self = Tag([6, 0, 0, 0]);
-
-    /// The tag for the ObjectDescriptor type, UNIVERSAL 7.
-    pub const OBJECT_DESCRIPTOR: Self = Tag([7, 0, 0, 0]);
-
-    /// The tag for the EXTERNAL and Instance-of types, UNIVERSAL 8.
-    pub const EXTERNAL: Self = Tag([8, 0, 0, 0]);
-
-    /// The tag for the REAL type, UNIVERSAL 9.
-    pub const REAL: Self = Tag([9, 0, 0, 0]);
-
-    /// The tag for the ENUMERATED type, UNIVERSAL 10.
-    pub const ENUMERATED: Self = Tag([10, 0, 0, 0]);
-
-    /// The tag for the EMBEDDED PDV type, UNIVERSAL 11.
-    pub const EMBEDDED_PDV: Self = Tag([11, 0, 0, 0]);
-
-    /// The tag for the UTF8String type, UNIVERSAL 12
-    pub const UTF8_STRING: Self = Tag([12, 0, 0, 0]);
-
-    /// The tag for the RELATIVE-OID type, UNIVERSAL 13.
-    pub const RELATIVE_OID: Self = Tag([13, 0, 0, 0]);
-
-    /// The tag for the TIME type, UNIVERSAL 14.
-    pub const TIME: Self = Tag([14, 0, 0, 0]);
-
-    /// The tag for the SEQUENCE and SEQUENCE OF types, UNIVERSAL 16.
-    pub const SEQUENCE: Self = Tag([16, 0, 0, 0]);
-
-    /// The tag for the SET and SET OF types, UNIVERSAL 17.
-    pub const SET: Self = Tag([17, 0, 0, 0]);
-
-    /// The tag for the NumericString type, UNIVERSAL 18.
-    pub const NUMERIC_STRING: Self = Tag([18, 0, 0, 0]);
-
-    /// The tag for the PrintableString type, UNIVERSAL 19.
-    pub const PRINTABLE_STRING: Self = Tag([19, 0, 0, 0]);
-
-    /// The tag for the TeletexString type, UNIVERSAL 20.
-    pub const TELETEX_STRING: Self = Tag([20, 0, 0, 0]);
-
-    /// The tag for the VideotexString type, UNIVERSAL 21.
-    pub const VIDEOTEX_STRING: Self = Tag([21, 0, 0, 0]);
-
-    /// The tag for the IA5String type, UNIVERSAL 22.
-    pub const IA5_STRING: Self = Tag([22, 0, 0, 0]);
-
-    /// The tag for the UTCTime type, UNIVERSAL 23.
-    pub const UTC_TIME: Self = Tag([23, 0, 0, 0]);
-
-    /// The tag for the GeneralizedType type, UNIVERSAL 24.
-    pub const GENERALIZED_TIME: Self = Tag([24, 0, 0, 0]);
-
-    /// The tag for the GraphicString type, UNIVERSAL 25.
-    pub const GRAPHIC_STRING: Self = Tag([25, 0, 0, 0]);
-
-    /// The tag for the VisibleString type, UNIVERSAL 26.
-    pub const VISIBLE_STRING: Self = Tag([26, 0, 0, 0]);
-
-    /// The tag for the GeneralString type, UNIVERSAL 27.
-    pub const GENERAL_STRING: Self = Tag([27, 0, 0, 0]);
-
-    /// The tag for the UniversalString type, UNIVERSAL 28.
-    pub const UNIVERSAL_STRING: Self = Tag([28, 0, 0, 0]);
-
-    /// The tag for the CHARACTER STRING type, UNIVERSAL 29.
-    pub const CHARACTER_STRING: Self = Tag([29, 0, 0, 0]);
-
-    /// The tag for the BMPString type, UNIVERSAL 30.
-    pub const BMP_STRING: Self = Tag([30, 0, 0, 0]);
-
-    /// The tag for the DATE type, UNIVERSAL 31.
-    pub const DATE: Self = Tag([31, 0, 0, 0]);
-
-    /// The tag for the TIME-OF-DAY type, UNIVERSAL 32.
-    pub const TIME_OF_DAY: Self = Tag([32, 0, 0, 0]);
-
-    /// The tag for the DATE-TIME type, UNIVERSAL 33.
-    pub const DATE_TIME: Self = Tag([33, 0, 0, 0]);
-
-    /// The tag for the DURATION type, UNIVERSAL 34.
-    pub const DURATION: Self = Tag([34, 0, 0, 0]);
-
-    /// The tag for the OID-IRI type, UNIVERSAL 35.
-    pub const OID_IRI: Self = Tag([35, 0, 0, 0]);
-
-    /// The tag for the RELATIVE-OID-IRI type, UNIVERSAL 36.
-    pub const RELATIVE_OID_IRI: Self = Tag([36, 0, 0, 0]);
-
-    //--- The first few context-specific tags.
-    //
-    //    These will be removed once we can have `ctx` be a const fn.
-
-    /// The tag context specific tag `[0]`.
-    pub const CTX_0: Self = Tag([Tag::CONTEXT_SPECIFIC, 0, 0, 0]);
-
-    /// The tag context specific tag `[1]`.
-    pub const CTX_1: Self = Tag([Tag::CONTEXT_SPECIFIC | 1, 0, 0, 0]);
-
-    /// The tag context specific tag `[2]`.
-    pub const CTX_2: Self = Tag([Tag::CONTEXT_SPECIFIC | 2, 0, 0, 0]);
-
-    /// The tag context specific tag `[3]`.
-    pub const CTX_3: Self = Tag([Tag::CONTEXT_SPECIFIC | 3, 0, 0, 0]);
-
-    /// The tag context specific tag `[4]`.
-    pub const CTX_4: Self = Tag([Tag::CONTEXT_SPECIFIC | 4, 0, 0, 0]);
-
-    /// The tag context specific tag `[5]`.
-    pub const CTX_5: Self = Tag([Tag::CONTEXT_SPECIFIC | 5, 0, 0, 0]);
-
-    /// The tag context specific tag `[6]`.
-    pub const CTX_6: Self = Tag([Tag::CONTEXT_SPECIFIC | 6, 0, 0, 0]);
 }
 
 impl Tag {
@@ -235,131 +211,238 @@ impl Tag {
     ///     give the tag number, base 128, most significant digit first, with
     ///     as few digits as possible, and with the bit 8 of each octet except
     ///     the last set to 1.
-    //
-    /// # Panics
     ///
-    /// This function panics if the tag number is greater than
-    /// `Self::MAX_VAL_SPAN_3_OCTETS`.
-    #[inline]
-    fn new(class_mask: u8, number: u32) -> Self {
-        assert!(number <= Tag::MAX_VAL_SPAN_3_OCTETS);
-        if number <= Tag::MAX_VAL_FOURTH_OCTET {
-            Tag([class_mask | number as u8, 0, 0, 0])
-        } else if number <= Tag::MAX_VAL_SPAN_1_OCTET {
-            // Fit the number in the third octets
-            let number = number as u8;
-            Tag([class_mask | Tag::SINGLEBYTE_DATA_MASK, number, 0, 0])
-        } else if number <= Tag::MAX_VAL_SPAN_2_OCTETS {
-            // Fit the number in the second and the third octets
-            let first_part = {
-                Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8)
-                | Tag::LAST_OCTET_MASK
-            };
-            let second_part = Tag::MULTIBYTE_DATA_MASK & (number as u8);
-            Tag([
-                class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part,
-                second_part, 0
-            ])
-        } else {
-            // Fit the number in the first, second and the third octets
-            let first_part = {
-                Tag::MULTIBYTE_DATA_MASK & ((number >> 14) as u8)
-                | Tag::LAST_OCTET_MASK
-            };
-            let second_part = {
-                Tag::MULTIBYTE_DATA_MASK & ((number >> 7) as u8)
-                | Tag::LAST_OCTET_MASK
-            };
-            let third_part = Tag::MULTIBYTE_DATA_MASK & (number as u8);
-            Tag([
-                class_mask | Tag::SINGLEBYTE_DATA_MASK, first_part,
-                second_part, third_part
-            ])
+    /// This function assumes that `class_mask` has the lower six bits all
+    /// zero.
+    const fn new(class_mask: u8, number: u32) -> Self {
+        if number <= 0x1e {
+            // five bits but not all of them one (so not 0x1f)
+            return Tag(T::L1([class_mask | number as u8]))
         }
+
+        // Now the first octet is always the class plus bits 1 to 5 all 1.
+        let first = class_mask | 0x1f;
+
+        // The lowest seven bits are the last octet. Shift the number by
+        // seven to see what’s left. If that’s zero, we have a two octet
+        // tag.
+        let n0 = (number & 0x7F) as u8;
+        let number = number >> 7;
+        if number == 0 {
+            return Tag(T::L2([first, n0]))
+        }
+
+        // Now rince an repeat.
+        let n1 = (number | 0x80) as u8;
+        let number = number >> 7;
+        if number == 0 {
+            return Tag(T::L3([first, n1, n0]))
+        }
+
+        let n2 = (number | 0x80) as u8;
+        let number = number >> 7;
+        if number == 0 {
+            return Tag(T::L4([first, n2, n1, n0]))
+        }
+
+        let n3 = (number | 0x80) as u8;
+        let number = number >> 7;
+        if number == 0 {
+            return Tag(T::L5([first, n3, n2, n1, n0]))
+        }
+
+        let n4 = (number | 0x80) as u8;
+        let number = number >> 7;
+        debug_assert!(number == 0);
+        Tag(T::L6([first, n4, n3, n2, n1, n0]))
     }
 
     /// Creates a new tag in the universal class with the given tag number.
-    ///
-    /// # Panics
-    ///
-    /// Currently, this function panics if the tag number is greater than
-    /// `MAX_VAL_SPAN_3_OCTETS`.
-    pub fn universal(number: u32) -> Self {
+    pub const fn universal(number: u32) -> Self {
         Tag::new(Tag::UNIVERSAL, number)
     }
 
     /// Creates a new tag in the application class with the given tag number.
-    ///
-    /// # Panics
-    ///
-    /// Currently, this function panics if the tag number is greater than
-    /// `MAX_VAL_SPAN_3_OCTETS`.
-    pub fn application(number: u32) -> Self {
+    pub const fn application(number: u32) -> Self {
         Tag::new(Tag::APPLICATION, number)
     }
 
     /// Creates a new tag in the context specific class.
-    ///
-    /// # Panics
-    ///
-    /// Currently, this function panics if the provided tag number is greater
-    /// than `MAX_VAL_SPAN_3_OCTETS`.
-    pub fn ctx(number: u32) -> Self {
+    pub const fn ctx(number: u32) -> Self {
         Tag::new(Tag::CONTEXT_SPECIFIC, number)
     }
 
     /// Creates a new tag in the private class with the given tag number.
-    ///
-    /// # Panics
-    ///
-    /// Currently, this function panics if the provided tag number is greater
-    /// than `MAX_VAL_SPAN_3_OCTETS`.
-    pub fn private(number: u32) -> Self {
+    pub const fn private(number: u32) -> Self {
         Tag::new(Tag::PRIVATE, number)
     }
 
+    /// Returns a slice of the encoded octets.
+    const fn as_slice(&self) -> &[u8] {
+        match &self.0 {
+            T::L1(arr) => arr.as_slice(),
+            T::L2(arr) => arr.as_slice(),
+            T::L3(arr) => arr.as_slice(),
+            T::L4(arr) => arr.as_slice(),
+            T::L5(arr) => arr.as_slice(),
+            T::L6(arr) => arr.as_slice(),
+        }
+    }
+
+    /// Returns the first octet.
+    const fn first(self) -> u8 {
+        match self.0 {
+            T::L1([x]) => x,
+            T::L2([x, ..]) => x,
+            T::L3([x, ..]) => x,
+            T::L4([x, ..]) => x,
+            T::L5([x, ..]) => x,
+            T::L6([x, ..]) => x,
+        }
+    }
+
+    /// Returns a tag with the constructed bit set.
+    ///
+    /// This is private to avoid accidentally handing out tags with this
+    /// bit set.
+    fn into_constructed(self) -> Self {
+        match self.0 {
+            T::L1([x]) => Self(T::L1([x | Self::CONSTRUCTED_MASK])),
+            T::L2([x, y0]) => Self(T::L2([x | Self::CONSTRUCTED_MASK, y0])),
+            T::L3([x, y0, y1]) => {
+                Self(T::L3([x | Self::CONSTRUCTED_MASK, y0, y1]))
+            }
+            T::L4([x, y0, y1, y2]) => {
+                Self(T::L4([x | Self::CONSTRUCTED_MASK, y0, y1, y2]))
+            }
+            T::L5([x, y0, y1, y2, y3]) => {
+                Self(T::L5([x | Self::CONSTRUCTED_MASK, y0, y1, y2, y3]))
+            }
+            T::L6([x, y0, y1, y2, y3, y4]) => {
+                Self(T::L6([x | Self::CONSTRUCTED_MASK, y0, y1, y2, y3, y4]))
+            }
+        }
+    }
+    
+
+    /// Returs the class bits.
+    const fn class(self) -> u8 {
+        self.first() & Self::CLASS_MASK
+    }
+
     /// Returns whether the tag is of the universal class.
-    pub fn is_universal(self) -> bool {
-        self.0[0] & Self::CLASS_MASK == Self::UNIVERSAL
+    pub const fn is_universal(self) -> bool {
+        self.class() == Self::UNIVERSAL
     }
 
     /// Returns whether the tag is of the application class.
-    pub fn is_application(self) -> bool {
-        self.0[0] & Self::CLASS_MASK == Self::APPLICATION
+    pub const fn is_application(self) -> bool {
+        self.class() == Self::APPLICATION
     }
 
     /// Returns whether the tag is of the context specific class.
-    pub fn is_context_specific(self) -> bool {
-        self.0[0] & Self::CLASS_MASK == Self::CONTEXT_SPECIFIC
+    pub const fn is_context_specific(self) -> bool {
+        self.class() == Self::CONTEXT_SPECIFIC
     }
 
     /// Returns whether the tag is of the private class.
-    pub fn is_private(self) -> bool {
-        self.0[0] & Self::CLASS_MASK == Self::PRIVATE
+    pub const fn is_private(self) -> bool {
+        self.class() == Self::PRIVATE
     }
 
     /// Returns the number of the tag.
-    pub fn number(self) -> u32 {
-        if (Tag::SINGLEBYTE_DATA_MASK & self.0[0])
-            != Tag::SINGLEBYTE_DATA_MASK
-        {
-            // It's a single byte identifier
-            u32::from(Tag::SINGLEBYTE_DATA_MASK & self.0[0])
-        } else if Tag::LAST_OCTET_MASK & self.0[1] == 0 {
-            // It's a multibyte that starts and ends in the third octet
-            u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1])
-        } else if Tag::LAST_OCTET_MASK & self.0[2] == 0 {
-            // It's a multibyte that starts in the second octet and ends in
-            // the third octet
-            (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 7)
-            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2])
-        } else {
-            // It's a multibyte that spans the first three octets
-            (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[1]) << 14)
-            | (u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[2]) << 7)
-            | u32::from(Tag::MULTIBYTE_DATA_MASK & self.0[3])
+    pub const fn number(self) -> u32 {
+        match self.0 {
+            T::L1([x]) => (x & Self::SINGLEBYTE_DATA_MASK) as u32,
+            T::L2([_, x0]) => x0 as u32,
+            T::L3([_, x1, x2]) => {
+                  ((x1 & Self::MULTIBYTE_DATA_MASK) as u32) << 7
+                | (x2 as u32)
+            }
+            T::L4([_, x1, x2, x3]) => {
+                  ((x1 & Self::MULTIBYTE_DATA_MASK) as u32) << 14 
+                | ((x2 & Self::MULTIBYTE_DATA_MASK) as u32) << 7
+                | (x3 as u32)
+            }
+            T::L5([_, x1, x2, x3, x4]) => {
+                  ((x1 & Self::MULTIBYTE_DATA_MASK) as u32) << 21
+                | ((x2 & Self::MULTIBYTE_DATA_MASK) as u32) << 14 
+                | ((x3 & Self::MULTIBYTE_DATA_MASK) as u32) << 7
+                | (x4 as u32)
+            }
+            T::L6([_, x1, x2, x3, x4, x5]) => {
+                  ((x1 & Self::MULTIBYTE_DATA_MASK) as u32) << 28
+                | ((x2 & Self::MULTIBYTE_DATA_MASK) as u32) << 21
+                | ((x3 & Self::MULTIBYTE_DATA_MASK) as u32) << 14 
+                | ((x4 & Self::MULTIBYTE_DATA_MASK) as u32) << 7
+                | (x5 as u32)
+            }
         }
     }
+
+
+    fn peek_opt<S: Source>(
+        source: &mut S,
+    ) -> Result<Option<(Self, bool)>, PeekError<S::Error>> {
+        let pos = source.pos();
+        let Some(first) = source.peek_opt_nth(0)? else {
+            return Ok(None)
+        };
+
+        // Clear constructed bit but remember if for later.
+        let constructed = first & Tag::CONSTRUCTED_MASK != 0;
+        let first = first & !Tag::CONSTRUCTED_MASK;
+
+        // If we have a single octet tag, we can already return.
+        if (first & Tag::SINGLEBYTE_DATA_MASK) < Tag::SINGLEBYTE_DATA_MASK {
+            return Ok(Some((Self(T::L1([first])), constructed)))
+        }
+
+        // Work your way through the multi-octet tags.
+        let x0 = source.peek_nth(1)?;
+        if (x0 & Self::LAST_OCTET_MASK) == 0 {
+            return Ok(Some((Self(T::L2([first, x0])), constructed)))
+        }
+
+        let x1 = source.peek_nth(2)?;
+        if (x1 & Self::LAST_OCTET_MASK) == 0 {
+            return Ok(Some((Self(T::L3([first, x0, x1])), constructed)))
+        }
+
+        let x2 = source.peek_nth(3)?;
+        if (x2 & Self::LAST_OCTET_MASK) == 0 {
+            return Ok(Some((Self(T::L4([first, x0, x1, x2])), constructed)))
+        }
+
+        let x3 = source.peek_nth(4)?;
+        if (x3 & Self::LAST_OCTET_MASK) == 0 {
+            return Ok(Some((Self(T::L5([first, x0, x1, x2, x3])), constructed)))
+        }
+
+        let x4 = source.peek_nth(5)?;
+        if (x4 & Self::LAST_OCTET_MASK) == 0 {
+            // In order to fit into a u32, the upper four bits of x0 must
+            // be zero.
+            if x0 & 0xF0 != 0 {
+                return Err(PeekError::LongTag(pos))
+            }
+
+            return Ok(Some((
+                Self(T::L6([first, x0, x1, x2, x3, x4])),
+                constructed
+            )))
+        }
+
+        Err(PeekError::LongTag(pos))
+    }
+
+    fn consume<S: Source>(
+        self, source: &mut S
+    ) -> Result<(), DecodeError<S::Error>> {
+        source.request_exact(self.encoded_len())?.consume();
+        Ok(())
+    }
+
 
     /// Takes an optional tag from the beginning of a source.
     ///
@@ -368,26 +451,11 @@ impl Tag {
     pub fn take_opt_from<S: Source>(
         source: &mut S,
     ) -> Result<Option<(Self, bool)>, DecodeError<S::Error>> {
-        let byte = match source.take_opt_u8()? {
-            Some(byte) => byte,
-            None => return Ok(None)
-        };
-        // clear constructed bit
-        let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
-        let constructed = byte & Tag::CONSTRUCTED_MASK != 0;
-        if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
-            for i in 1..=3 {
-                data[i] = source.take_u8()?;
-                if data[i] & Tag::LAST_OCTET_MASK == 0 {
-                    return Ok(Some((Tag(data), constructed)));
-                }
-            }
-        } else {
-            return Ok(Some((Tag(data), constructed)));
+        let res = Self::peek_opt(source)?;
+        if let Some((tag, _)) = res {
+            tag.consume(source)?;
         }
-        Err(source.content_err(
-            "tag values longer than 4 bytes not implemented"
-        ))
+        Ok(res)
     }
 
     /// Takes a tag from the beginning of a source.
@@ -398,10 +466,11 @@ impl Tag {
     pub fn take_from<S: Source>(
         source: &mut S,
     ) -> Result<(Self, bool), DecodeError<S::Error>> {
-        match Self::take_opt_from(source)? {
-            Some(res) => Ok(res),
-            None => Err(source.content_err("additional values expected"))
-        }
+        let Some((tag, constructed)) = Self::peek_opt(source)? else {
+            return Err(source.content_err("additional values expected"))
+        };
+        tag.consume(source)?;
+        Ok((tag, constructed))
     }
 
     /// Takes a tag from the beginning of a resource if it matches this tag.
@@ -413,74 +482,59 @@ impl Tag {
         self,
         source: &mut S,
     ) -> Result<Option<bool>, DecodeError<S::Error>> {
-        if source.request(1)? == 0 {
-            return Ok(None)
-        }
-        let byte = source.slice()[0];
-        // clear constructed bit
-        let mut data = [byte & !Tag::CONSTRUCTED_MASK, 0, 0, 0];
-        if (data[0] & Tag::SINGLEBYTE_DATA_MASK) == Tag::SINGLEBYTE_DATA_MASK {
-            let mut i = 1;
-            loop {
-                if source.request(i + 1)? <= i {
-                    // Not enough data for a complete tag.
-                    return Err(source.content_err("short tag value"))
-                }
-                data[i] = source.slice()[i];
-                if data[i] & Tag::LAST_OCTET_MASK == 0 {
-                    break
-                }
-                // We don’t support tags larger than 4 bytes.
-                if i == 3 {
-                    return Err(source.content_err(
-                        "tag values longer than 4 bytes not implemented"
-                    ))
-                }
-                i += 1;
+        match Self::peek_opt(source) {
+            Ok(Some((tag, constructed))) if tag == self => {
+                Ok(Some(constructed))
             }
-        }
-        let (tag, constructed) = (
-            Tag(data),
-            byte & Tag::CONSTRUCTED_MASK != 0
-        );
-        if tag == self {
-            source.advance(tag.encoded_len());
-            Ok(Some(constructed))
-        }
-        else {
-            Ok(None)
+            Err(PeekError::Decode(err)) => Err(err),
+            _ => Ok(None)
         }
     }
 
     /// Returns the number of octets of the encoded form of the tag.
-    #[allow(clippy::trivially_copy_pass_by_ref)] // for possible multi-byte tags
-    pub fn encoded_len(&self) -> usize {
-        if (Tag::SINGLEBYTE_DATA_MASK & self.0[0]) != Tag::SINGLEBYTE_DATA_MASK {
-            1
-        } else if Tag::LAST_OCTET_MASK & self.0[1] == 0 {
-            2
-        } else if Tag::LAST_OCTET_MASK & self.0[2] == 0 {
-            3
-        } else {
-            4
+    pub fn encoded_len(self) -> usize {
+        match self.0 {
+            T::L1(_) => 1,
+            T::L2(_) => 2,
+            T::L3(_) => 3,
+            T::L4(_) => 4,
+            T::L5(_) => 5,
+            T::L6(_) => 6,
         }
     }
 
-    /// Encodes the tag into a target.
+    /// Writes the encoded tag to a target.
     ///
     /// If `constructed` is `true`, the encoded tag will signal a value in
     /// constructed encoding and primitive encoding otherwise.
-    #[allow(clippy::trivially_copy_pass_by_ref)] // for possible multi-byte tags
     pub fn write_encoded<W: io::Write>(
-        &self,
+        self,
         constructed: bool,
         target: &mut W
     ) -> Result<(), io::Error> {
-        let mut buf = self.0;
-        if constructed {
-            buf[0] |= Tag::CONSTRUCTED_MASK
+        let tag = if constructed {
+            self.into_constructed()
         }
-        target.write_all(&buf[..self.encoded_len()])
+        else {
+            self
+        };
+        target.write_all(tag.as_slice())
+    }
+
+    /// Appends the encoded tag to a vec.
+    ///
+    /// If `constructed` is `true`, the encoded tag will signal a value in
+    /// constructed encoding and primitive encoding otherwise.
+    pub fn append_encoded(
+        self, constructed: bool, target: &mut  Vec<u8>
+    ) {
+        let tag = if constructed {
+            self.into_constructed()
+        }
+        else {
+            self
+        };
+        target.extend_from_slice(tag.as_slice())
     }
 }
 
@@ -523,7 +577,7 @@ impl fmt::Display for Tag {
             Tag::OID_IRI => write!(f, "OID-IRI"),
             Tag::RELATIVE_OID_IRI => write!(f, "RELATIVE-OID-IRI"),
             tag => {
-                match tag.0[0] & Tag::CLASS_MASK {
+                match tag.first() & Tag::CLASS_MASK {
                     Tag::UNIVERSAL => write!(f, "[UNIVERSAL ")?,
                     Tag::APPLICATION => write!(f, "[APPLICATION ")?,
                     Tag::CONTEXT_SPECIFIC => write!(f, "[")?,
@@ -538,174 +592,110 @@ impl fmt::Display for Tag {
 
 impl fmt::Debug for Tag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Tag({})", self)
+        write!(f, "Tag({} - {:?})", self, self.0)
     }
 }
+
+
+//------------ PeekError -----------------------------------------------------
+
+enum PeekError<S> {
+    Decode(DecodeError<S>),
+    LongTag(Pos),
+}
+
+impl<S> From<DecodeError<S>> for PeekError<S> {
+    fn from(src: DecodeError<S>) -> Self {
+        PeekError::Decode(src)
+    }
+}
+
+impl<S> From<PeekError<S>> for DecodeError<S> {
+    fn from(src: PeekError<S>) -> Self {
+        match src {
+            PeekError::Decode(err) => err,
+            PeekError::LongTag(pos) => {
+                DecodeError::content(
+                    "tag numbers above 4 bytes not supported",
+                    pos
+                )
+            }
+        }
+    }
+}
+
 
 //============ Tests =========================================================
 
 #[cfg(test)]
 mod test {
+    use crate::decode::source::SliceSource;
     use super::*;
-    use crate::decode::IntoSource;
 
-    const TYPES: &[u8] = &[Tag::UNIVERSAL, Tag::APPLICATION, Tag::CONTEXT_SPECIFIC, Tag::PRIVATE];
+    const TYPES: &[u8] = &[
+        Tag::UNIVERSAL, Tag::APPLICATION, Tag::CONTEXT_SPECIFIC, Tag::PRIVATE
+    ];
 
     #[test]
-    fn test_single_octet_tags() {
-        // Test edge cases.
-        let range: Vec<u32> = (0..5).chain(
-            Tag::MAX_VAL_FOURTH_OCTET-5..Tag::MAX_VAL_FOURTH_OCTET
-        ).collect();
-        for &typ in TYPES {
-            for i in range.clone() {
-                let tag = Tag::new(typ, i);
-                let expected = Tag([typ | i as u8, 0, 0, 0]);
-                let decoded = Tag::take_from(
-                    &mut tag.0.into_source()
-                ).unwrap();
-                assert_eq!(
-                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
-                    Some(false)
-                );
-                // The value is not constructed.
-                assert!(!decoded.1);
-                // The tag is the same
-                assert_eq!(decoded.0, expected);
-                // We get the same number back.
-                assert_eq!(tag.number(), i);
-                // The representation is correct.
-                assert_eq!(tag, expected);
+    fn test_tags() {
+        let mut tags = Vec::new();
 
+        for &typ in TYPES {
+            for i in 0..=0x1e {
+                tags.push(( 
+                    Tag::new(typ, i),
+                    Tag(T::L1([typ | i as u8]))
+                ));
             }
         }
-    }
-
-    #[test]
-    fn test_double_octets_tags() {
-        // Test edge cases.
-        let range: Vec<u32> = (
-            Tag::MAX_VAL_FOURTH_OCTET+1..Tag::MAX_VAL_FOURTH_OCTET+5
-        ).chain(
-            Tag::MAX_VAL_SPAN_1_OCTET-5..Tag::MAX_VAL_SPAN_1_OCTET
-        ).collect();
         for &typ in TYPES {
-            for i in range.clone() {
-                let tag = Tag::new(typ, i);
-                let expected = Tag([
-                        Tag::SINGLEBYTE_DATA_MASK | typ, i as u8, 0, 0
-                ]);
-                let decoded = Tag::take_from(
-                    &mut tag.0.into_source()
-                ).unwrap();
-                assert_eq!(
-                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
-                    Some(false)
-                );
-                assert!(
-                    tag.take_from_if(
-                        &mut tag.0[0..1].into_source()
-                    ).is_err(),
-                );
-                // The value is not constructed.
-                assert!(!decoded.1);
-                // The tag is the same
-                assert_eq!(decoded.0, expected);
-                assert_eq!(tag.number(), i);
-                assert_eq!(tag, expected);
+            for i in 0x1f..=0x7f {
+                tags.push((
+                    Tag::new(typ, i),
+                    Tag(T::L2([
+                        typ | 0x1f,
+                        i as u8
+                    ]))
+                ));
             }
         }
-    }
-
-    #[test]
-    fn test_three_octets_tags() {
-        // Test edge cases.
-        let range: Vec<u32> = (
-            Tag::MAX_VAL_SPAN_1_OCTET+1..Tag::MAX_VAL_SPAN_1_OCTET + 5
-        ).chain(
-            Tag::MAX_VAL_SPAN_2_OCTETS-5..Tag::MAX_VAL_SPAN_2_OCTETS
-        ).collect();
         for &typ in TYPES {
-            for i in range.clone() {
-                let tag = Tag::new(typ, i);
-                let expected = Tag([
-                    Tag::SINGLEBYTE_DATA_MASK | typ,
-                    (i >> 7) as u8 | Tag::LAST_OCTET_MASK,
-                    i as u8 & !Tag::LAST_OCTET_MASK,
-                    0
-                ]);
-                let decoded = Tag::take_from(
-                    &mut tag.0.into_source()
-                ).unwrap();
-                assert_eq!(
-                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
-                    Some(false)
-                );
-                assert!(
-                    tag.take_from_if(
-                        &mut tag.0[0..2].into_source()
-                    ).is_err(),
-                );
-                // The value is not constructed.
-                assert!(!decoded.1);
-                // The tag is the same
-                assert_eq!(decoded.0, expected);
-                assert_eq!(tag.number(), i);
-                assert_eq!(tag, expected);
+            for i in 0x80..=0x3fff {
+                tags.push((
+                    Tag::new(typ, i),
+                    Tag(T::L3([
+                        typ | 0x1f,
+                        ((i >> 7) & 0x7f) as u8 | 0x80,
+                        (i & 0x7f) as u8,
+                    ]))
+                ));
             }
         }
-    }
 
-    #[test]
-    fn test_four_octets_tags() {
-        // Test edge cases.
-        let range: Vec<u32> = (
-            Tag::MAX_VAL_SPAN_2_OCTETS+1..Tag::MAX_VAL_SPAN_2_OCTETS + 5
-        ).chain(
-            Tag::MAX_VAL_SPAN_3_OCTETS-5..Tag::MAX_VAL_SPAN_3_OCTETS
-        ).collect();
-        for &typ in TYPES {
-            for i in range.clone() {
-                let tag = Tag::new(typ, i);
-                let expected = Tag([
-                    Tag::SINGLEBYTE_DATA_MASK | typ,
-                    (i >> 14) as u8 | Tag::LAST_OCTET_MASK,
-                    (i >> 7) as u8 | Tag::LAST_OCTET_MASK,
-                    i as u8 & !Tag::LAST_OCTET_MASK
-                ]);
-                let decoded = Tag::take_from(
-                    &mut tag.0.into_source()
-                ).unwrap();
-                assert_eq!(
-                    tag.take_from_if(&mut tag.0.into_source()).unwrap(),
-                    Some(false)
-                );
-                assert!(
-                    tag.take_from_if(
-                        &mut tag.0[0..3].into_source()
-                    ).is_err(),
-                );
-                // The value is not constructed.
-                assert!(!decoded.1);
-                // The tag is the same
-                assert_eq!(decoded.0, expected);
-                assert_eq!(tag.number(), i);
-                assert_eq!(tag, expected);
-            }
+        for (tag, expected) in tags {
+            assert_eq!(tag, expected);
+
+            let mut encoded = Vec::new();
+            tag.append_encoded(true, &mut encoded);
+            println!("{:?}", tag);
+            let mut source = SliceSource::new(encoded.as_ref());
+
+            let (decoded, constructed) = Tag::take_from(&mut source).unwrap();
+            assert!(Tag::take_opt_from(&mut source).unwrap().is_none());
+
+            assert!(constructed);
+            assert_eq!(tag, decoded);
+
+            let mut encoded = Vec::new();
+            tag.append_encoded(false, &mut encoded);
+            let mut source = SliceSource::new(encoded.as_ref());
+
+            let (decoded, constructed) = Tag::take_from(&mut source).unwrap();
+            assert!(Tag::take_opt_from(&mut source).unwrap().is_none());
+
+            assert!(!constructed);
+            assert_eq!(tag, decoded);
         }
-    }
-
-    #[test]
-    fn test_tags_failures() {
-        let large_tag = [
-            0b1111_1111, 0b1000_0000, 0b1000_0000, 0b1000_0000, 0b1000_0000
-        ];
-        assert!(
-            Tag::take_from(&mut large_tag.into_source()).is_err()
-        );
-        let short_tag = [0b1111_1111, 0b1000_0000];
-        assert!(
-            Tag::take_from(&mut short_tag.into_source()).is_err()
-        );
     }
 }
+
