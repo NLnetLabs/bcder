@@ -5,17 +5,50 @@ use std::convert::Infallible;
 use super::error::{ContentError, DecodeError};
 
 
-//------------ Source --------------------------------------------------------
+//------------ Source and Fragment -------------------------------------------
 
+/// A type encoded data can be read from.
+///
+/// Sources form that foundation of decoding. They provide the raw octets to
+/// decoders by progressing over chunks of data.
+///
+/// Reading happens by requesting a certain amount of data through the
+/// [`request`][Self::request] method. The data will returned in the form
+/// of a [`Fragment`] which allows access to the data and also to consume
+/// the data which will progress the source beyond it. If the fragment is
+/// simply dropped, the next `request` will return the same data again.
+///
+/// Some sources allow you to borrow the data for the lifetime of the
+/// source. This happens through the [`BorrowedFragment`]. If you want to
+/// use this feature, you need to require this trait as a bound on
+/// `Source::Fragment`.
 pub trait Source {
+    /// The fragment type returned.
     type Fragment<'f>: Fragment<'f> where Self: 'f;
+
+    /// The error produced when the source failed to read more data.
+    ///
+    /// If the source cannot fail, e.g., because it already has all the 
+    /// data available, it will set this error to `Infallible`.
     type Error: error::Error;
 
 
     //--- Required methods
 
+    /// Returns the current read position within the source.
+    ///
+    /// The position is increased every time a fragment is consumed.
     fn pos(&self) -> Pos;
 
+    /// Request a fragment of data of `len` bytes.
+    ///
+    /// The method returns a fragment of data if it can either make `len`
+    /// bytes available or if it ends short of the length. In other words,
+    /// the slice of the returned fragment maybe shorter than `len`.
+    ///
+    /// The methd only returns an error if the source fails to get more
+    /// data such as reading from a file failing or a connection being
+    /// reset.
     fn request<'f>(
         &'f mut self, len: usize
     ) -> Result<Self::Fragment<'f>, Self::Error>;
@@ -23,6 +56,13 @@ pub trait Source {
 
     //--- Provided methods
 
+    /// Requests a fragment of exactly `len` bytes.
+    ///
+    /// On success, the slice of the returned fragment will be exactly `len`
+    /// bytes long.
+    ///
+    /// If the source stop short of the required length or if it fails to
+    /// get more data if ncecessary, an error is returned.
     fn request_exact<'f>(
         &'f mut self, len: usize
     ) -> Result<Self::Fragment<'f>, DecodeError<Self::Error>> {
@@ -73,18 +113,25 @@ pub trait Source {
 
     /// Returns the n-th octet if that many octets are available.
     ///
-    /// Does not consume any fragments.
+    /// If there are at least `n` bytes available, returns `Ok(Some(_))`
+    /// with the nth byte’s value. If the source ends before that byte,
+    /// returns `Ok(None)`. If getting more data fails, returns an error.
+    ///
+    /// The method does not consume any data.
     fn peek_opt_nth(
         &mut self, n: usize
-    ) -> Result<Option<u8>, DecodeError<Self::Error>> {
+    ) -> Result<Option<u8>, Self::Error> {
         let frag = self.request(n.saturating_add(1))?;
         let res = frag.slice().get(n).copied();
         Ok(res)
     }
 
-    /// Returns the n-th octet if that many octets are available.
+    /// Returns the n-th octet.
     ///
-    /// Does not consume any fragments.
+    /// If there are fewer than `n` bytes available or if the source ends
+    /// before the `n`th byte, returns an error.
+    ///
+    /// The method does not consume any data.
     fn peek_nth(&mut self, n: usize) -> Result<u8, DecodeError<Self::Error>> {
         let pos = self.pos();
         self.peek_opt_nth(n)?.ok_or_else(|| {
@@ -100,13 +147,46 @@ pub trait Source {
     }
 }
 
-
-//------------ Fragment ------------------------------------------------------
-
+/// A fragment of data requested from a source.
+///
+/// A fragment lets you access the data through the [`slice`][Self::slice]
+/// method.
+///
+/// When you are done with processing the fragment, you can ask the source
+/// to consume the entire fragment through the [`consume`][Self::consume]
+/// method.
+///
+/// If a fragment allows you to extend the lifetime of the data beyond the
+/// lifetime of the fragment, it also implements [`BorrowedFragment`] for
+/// that extended lifetime.
+///
+/// Because of this possible difference in lifetimes, fragments do not deref
+/// into `[u8]` but rather you have to request the intended version of the
+/// slice explicitely.
 pub trait Fragment<'f> {
+    /// Returns a slice with the data of the fragment.
+    ///
+    /// This slice will only life for the lifetime of `&self`. If you need
+    /// a longer lifetime, require the fragment to implement
+    /// [`BorrowedFragment`] and call
+    /// [`borrow_slice`][BorrowedFragment:.borrow_slice] on it.
     fn slice(&self) -> &[u8];
 
+    /// Consumes the fragment.
+    ///
+    /// This causes the underlying source to advance beyond this fragment.
+    /// The next requested fragment will start right after it.
     fn consume(self);
+}
+
+/// A fragment of data with an eplicit lifetime.
+///
+/// This trait allows a [`Source`] to provide a [`Fragment`] with an extended
+/// lifetime of the returned slice, typically the lifetime of the source
+/// itself.
+pub trait BorrowedFragment<'a, 'f> {
+    /// Returns a slice with the data of the fragment.
+    fn borrow_slice(&self) -> &'a [u8];
 }
 
 
@@ -178,7 +258,7 @@ impl<'a> IntoSource for &'a [u8] {
 
 pub struct SliceFragment<'s, 'f> {
     slice: &'f mut SliceSource<'s>,
-    head: &'f [u8],
+    head: &'s [u8],
     tail: &'s [u8],
 }
 
@@ -193,12 +273,26 @@ impl<'s, 'f> Fragment<'f> for SliceFragment<'s, 'f> {
     }
 }
 
+impl<'s, 'f> BorrowedFragment<'s, 'f> for SliceFragment<'s, 'f> {
+    fn borrow_slice(&self) -> &'s [u8] {
+        self.head
+    }
+}
+
 
 //------------ ReaderSource --------------------------------------------------
 
 pub struct ReaderSource<R> {
+    /// The underlying reader.
     reader: R,
+
+    /// A buffer of things we have read from the reader.
     buf: Vec<u8>,
+
+    /// The index of the current position within `self.buf`.
+    start: usize,
+
+    /// The current position from the start of the source.
     pos: usize,
 }
 
@@ -213,12 +307,28 @@ impl<R: io::Read> Source for ReaderSource<R> {
     fn request<'f>(
         &'f mut self, len: usize
     ) -> Result<Self::Fragment<'f>, Self::Error> {
-        let cur_len = self.buf.len();
-        if cur_len < len {
-            self.buf.resize(len, 0);
-            self.reader.read_exact(&mut self.buf[cur_len..])?;
+        // If we don’t have enough buffer, we’ve got some read’n to do.
+        if self.start + len < self.buf.len() {
+            // Don’t bother moving data around if it is already where it
+            // needs to be or if the necessary data fits.
+            if self.start != 0 && self.start + len > self.buf.capacity() {
+                // Move what’s left to the start of the buffer.
+                let trunc = self.buf.len() - self.start;
+                self.buf.copy_within(self.start.., 0);
+                self.buf.truncate(trunc);
+                self.start = 0;
+            }
+            // Now read what we need to read.
+            let read_start = self.buf.len();
+            self.buf.resize(self.start + len, 0);
+            self.reader.read_exact(&mut self.buf[read_start..])?;
         }
-        Ok(ReaderFragment { buf: &mut self.buf, pos: &mut self.pos, len })
+
+        let slice = &mut self.buf[self.start..self.start + len];
+
+        Ok(ReaderFragment {
+            slice, start: &mut self.start, pos: &mut self.pos, len
+        })
     }
 }
 
@@ -226,20 +336,26 @@ impl<R: io::Read> Source for ReaderSource<R> {
 //------------ ReaderFragment ------------------------------------------------
 
 pub struct ReaderFragment<'f> {
-    buf: &'f mut Vec<u8>,
+    slice: &'f [u8],
+    start: &'f mut usize,
     pos: &'f mut usize,
     len: usize,
 }
 
 impl<'f> Fragment<'f> for ReaderFragment<'f> {
     fn slice(&self) -> &[u8] {
-        &self.buf[..self.len]
+        self.slice
     }
 
     fn consume(self) {
-        self.buf.copy_within(self.len.., 0);
-        self.buf.truncate(self.buf.len() - self.len);
+        *self.start += self.len;
         *self.pos += self.len;
+    }
+}
+
+impl<'f> BorrowedFragment<'f, 'f> for ReaderFragment<'f> {
+    fn borrow_slice(&self) -> &'f [u8] {
+        self.slice
     }
 }
 
@@ -384,6 +500,17 @@ impl<'f, S: Source + 'f> Fragment<'f> for LimitedFragment<'f, S> {
     }
 }
 
+impl<'s, 'f, S> BorrowedFragment<'s, 'f> for LimitedFragment<'f, S>
+where
+    S: Source + 'f,
+    <S as Source>::Fragment<'f>: BorrowedFragment<'s, 'f>
+{
+    fn borrow_slice(&self) -> &'s [u8] {
+        self.fragment.borrow_slice()
+    }
+}
+    
+
 
 //------------ Pos -----------------------------------------------------------
 
@@ -412,6 +539,48 @@ impl ops::Add for Pos {
 impl fmt::Display for Pos {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+
+//============ Tests =========================================================
+
+#[cfg(test)]
+mod test {
+    use crate::decode::content::Constructed;
+    use crate::mode::Der;
+    use crate::tag::Tag;
+    use super::*;
+
+    // This is less a test and more a demonstration for the concept of the
+    // BorrowedFragment for now.
+
+    fn take_borrowed_octet_string<'a, S>(
+        cons: &mut Constructed<Der, S>
+    ) -> Result<&'a [u8], DecodeError<S::Error>>
+    where
+        S: Source,
+        for<'f> <S as Source>::Fragment<'f>: BorrowedFragment<'a, 'f>
+    {
+        cons.take_value_if(Tag::OCTET_STRING, |content| {
+            let prim = content.as_primitive()?;
+            let frag = prim.request_all()?;
+            let res = frag.borrow_slice();
+            frag.consume();
+            Ok(res)
+        })
+    }
+
+    #[test]
+    fn borrowed_source() {
+        fn foo(_: &'static [u8]) { }
+
+        foo(
+            Constructed::<Der, _>::decode(
+                b"23123123".into_source(),
+                |cons| take_borrowed_octet_string(cons)
+            ).unwrap()
+        );
     }
 }
 
