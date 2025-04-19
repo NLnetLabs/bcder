@@ -18,10 +18,58 @@ use super::error::{ContentError, DecodeError};
 /// the data which will progress the source beyond it. If the fragment is
 /// simply dropped, the next `request` will return the same data again.
 ///
-/// Some sources allow you to borrow the data for the lifetime of the
-/// source. This happens through the [`BorrowedFragment`]. If you want to
-/// use this feature, you need to require this trait as a bound on
-/// `Source::Fragment`.
+/// The fragment’s data is available as a byte slice via its
+/// [`slice`][Fragment::slice] method. It returns the slice with the shortest
+/// possible lifetime (equal to that of the `&self` argument). This is enough
+/// for cases where the content of the slice is converted into a static type.
+///
+/// However, sources can offer the slice with a longer lifetime but how
+/// long depends on whether they have all data already available or only
+/// hold a portion in a temporary buffer. In the former case, the slice can
+/// have the same lifetime as the source itself while im the latter case, the
+/// lifetime is only that of the fragment.
+///
+/// The trait [`BorrowedFragment`] allows the source to define this lifetime
+/// and a user to connect its own lifetimes by placing an additional bound on
+/// `Source::Fragment` in a where clause. Because this is a bit unwieldy and
+/// unnecessary in many cases, we split this into a separate trait.
+///
+/// If a decode function doesn’t want to keep the slice, it can be defined
+/// simply as:
+///
+/// ```rust
+/// # struct Foo;
+/// use bcder::decode::{DecodeError, Source};
+///
+/// fn take_foo<S: Source>(
+///     source: &mut S
+/// ) -> Result<Foo, DecodeError<S::Error>> {
+///     todo!()
+/// }
+/// ```
+///
+/// If, however, you want to keep the slice, the trait bounds become a little
+/// more involved:
+///
+/// ```rust
+/// # struct Foo<'a>(&'a [u8]);
+/// use bcder::decode::{BorrowedFragment, DecodeError, Source};
+///
+/// fn take_foo<'a, S>(
+///     source: &mut S
+/// ) -> Result<Foo<'a>, DecodeError<S::Error>>
+/// where
+///     S: Source,
+///     for<'f> <S as Source>::Fragment<'f>: BorrowedFragment<'a, 'f>
+/// {
+///     todo!()
+/// }
+/// ```
+///
+/// Because of this possible difference in lifetimes, fragments do not deref
+/// into `[u8]` but rather you have to request the intended version of the
+/// slice explicitely by either calling [`slice`][Fragment::slice] or
+/// [`borrowed_slice`][BorrowedFragment::borrowed_slice].
 pub trait Source {
     /// The fragment type returned.
     type Fragment<'f>: Fragment<'f> where Self: 'f;
@@ -156,13 +204,8 @@ pub trait Source {
 /// to consume the entire fragment through the [`consume`][Self::consume]
 /// method.
 ///
-/// If a fragment allows you to extend the lifetime of the data beyond the
-/// lifetime of the fragment, it also implements [`BorrowedFragment`] for
-/// that extended lifetime.
-///
-/// Because of this possible difference in lifetimes, fragments do not deref
-/// into `[u8]` but rather you have to request the intended version of the
-/// slice explicitely.
+/// For more details on reading data, see the documentation of the [`Source`]
+/// trait.
 pub trait Fragment<'f> {
     /// Returns a slice with the data of the fragment.
     ///
@@ -184,6 +227,9 @@ pub trait Fragment<'f> {
 /// This trait allows a [`Source`] to provide a [`Fragment`] with an extended
 /// lifetime of the returned slice, typically the lifetime of the source
 /// itself.
+///
+/// For more details on reading data, see the documentation of the [`Source`]
+/// trait.
 pub trait BorrowedFragment<'a, 'f> {
     /// Returns a slice with the data of the fragment.
     fn borrow_slice(&self) -> &'a [u8];
@@ -194,8 +240,10 @@ pub trait BorrowedFragment<'a, 'f> {
 
 /// A type that can be converted into a source.
 pub trait IntoSource {
+    /// The type of source the type is converted into.
     type Source: Source;
 
+    /// Creates a source from a value.
     fn into_source(self) -> Self::Source;
 }
 
@@ -210,17 +258,33 @@ impl<T: Source> IntoSource for T {
 
 //------------ SliceSource ---------------------------------------------------
 
+/// A source atop a byte slice.
+///
+/// This is a very thin layer atop a byte slice that implements the [`Source`]
+/// trait. See there for further information.
+///
+/// The source’s fragment implements [`BorrowedFragment`] with a lifetime
+/// equal to that of the underlying byte slice and thus allows you to borrow
+/// data from it for the same lifetime while decoding data.
 #[derive(Clone, Copy, Debug)]
 pub struct SliceSource<'s> {
+    /// The remaining slice.
+    ///
+    /// When consuming a fragment, this value is replaces with the remaining
+    /// data.
     data: &'s [u8],
+
+    /// The position of the start of `self.data` in the original slice.
     pos: usize,
 }
 
 impl<'s> SliceSource<'s> {
+    /// Creates a new slice source from the given slice.
     pub fn new(data: &'s [u8]) -> Self {
         Self { data, pos: 0 }
     }
 
+    /// Returns a reference to the remaining data.
     pub fn remaining(&self) -> &[u8] {
         self.data
     }
@@ -256,9 +320,18 @@ impl<'a> IntoSource for &'a [u8] {
 
 //------------ SliceFragment -------------------------------------------------
 
+/// The fragment of a [`SliceSource`].
+///
+/// See the documentation of [`Fragment`] and [`BorrowedFragment`] for more
+/// information.
 pub struct SliceFragment<'s, 'f> {
+    /// The slice source this fragment was crated for.
     slice: &'f mut SliceSource<'s>,
+
+    /// The data of the fragment.
     head: &'s [u8],
+
+    /// The data remaining if this fragment is consumed.
     tail: &'s [u8],
 }
 
@@ -282,11 +355,29 @@ impl<'s, 'f> BorrowedFragment<'s, 'f> for SliceFragment<'s, 'f> {
 
 //------------ ReaderSource --------------------------------------------------
 
+/// A source atop something that implements `io::Read`.
+///
+/// The source reads data from the reader whenever needed.
+///
+/// > This is currently a naive implementation only buffering the smallest
+/// > amount possible. It should probably be improved to proactively buffer
+/// > more data akin of what `BufReader` is doing. With the current
+/// > implementation, you probably benefit from wrapping a raw reader in a
+/// > `BufReader` to improve performance.
 pub struct ReaderSource<R> {
     /// The underlying reader.
     reader: R,
 
     /// A buffer of things we have read from the reader.
+    ///
+    /// For lifetime reasons, `Fragment::consume` cannot manipulate the
+    /// buffer. Instead, we let it change `self.start` indicating how much
+    /// data in the buffer it has consumed and clean up the buffer whenever
+    /// `Source::request` is called the next time.
+    ///
+    /// This approach has the added benefit that all the slice indexing
+    /// necessary to manipulate the buffer happens exclusively in the
+    /// `Source::request` impl which makes it easier to vet.
     buf: Vec<u8>,
 
     /// The index of the current position within `self.buf`.
@@ -304,6 +395,7 @@ impl<R: io::Read> Source for ReaderSource<R> {
         self.pos.into()
     }
 
+    #[allow(clippy::slicing_indexing)]
     fn request<'f>(
         &'f mut self, len: usize
     ) -> Result<Self::Fragment<'f>, Self::Error> {
@@ -318,16 +410,27 @@ impl<R: io::Read> Source for ReaderSource<R> {
                 self.buf.truncate(trunc);
                 self.start = 0;
             }
-            // Now read what we need to read.
-            let read_start = self.buf.len();
+            // Now read what we need to read. This works like std’s
+            // io::Read::read_exact except that we don’t error out if we end
+            // short.
+            let mut read_start = self.buf.len();
             self.buf.resize(self.start + len, 0);
-            self.reader.read_exact(&mut self.buf[read_start..])?;
+            while read_start < self.buf.len() {
+                match self.reader.read(&mut self.buf[read_start..]) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        read_start += n;
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::Interrupted => { }
+                    Err(e) => return Err(e),
+                }
+            }
         }
 
         let slice = &mut self.buf[self.start..self.start + len];
 
         Ok(ReaderFragment {
-            slice, start: &mut self.start, pos: &mut self.pos, len
+            slice, start: &mut self.start, pos: &mut self.pos,
         })
     }
 }
@@ -335,11 +438,24 @@ impl<R: io::Read> Source for ReaderSource<R> {
 
 //------------ ReaderFragment ------------------------------------------------
 
+/// The [`Fragment`] of [`ReaderSource`].
+///
+/// The fragment provides its slice at most with the lifetime of itself.
 pub struct ReaderFragment<'f> {
+    /// The slice of data provided by the fragment.
     slice: &'f [u8],
+
+    /// The start position in the source’s buffer.
+    ///
+    /// This value is increased by the slice length if the fragment is
+    /// consumed.
     start: &'f mut usize,
+
+    /// The current position of the source.
+    ///
+    /// This value is increased by the slice length if the fragment is
+    /// consumed.
     pos: &'f mut usize,
-    len: usize,
 }
 
 impl<'f> Fragment<'f> for ReaderFragment<'f> {
@@ -348,8 +464,8 @@ impl<'f> Fragment<'f> for ReaderFragment<'f> {
     }
 
     fn consume(self) {
-        *self.start += self.len;
-        *self.pos += self.len;
+        *self.start += self.slice.len();
+        *self.pos += self.slice.len();
     }
 }
 
@@ -362,20 +478,32 @@ impl<'f> BorrowedFragment<'f, 'f> for ReaderFragment<'f> {
 
 //------------ MaybeLimitedSource --------------------------------------------
 
+/// A source that wraps another source possibly limiting the length.
+///
+/// This type wraps a mutable reference to some other source and optionally
+/// limits the amount of data that allows to read.
+///
+/// Alternatively, [`LimitedSource`] provides a version that always has a
+/// limit.
+///
+/// The type is primarly used by [`Constructed`][crate::decode::Constructed].
 pub struct MaybeLimitedSource<'a, S> {
     source: &'a mut S,
     limit: Option<usize>,
 }
 
 impl<'a, S> MaybeLimitedSource<'a, S> {
+    /// Creates a new value from a source and an optional limit.
     pub fn new(source: &'a mut S, limit: Option<usize>) -> Self {
         Self { source, limit }
     }
 
+    /// Returns the wrapped reference to the source.
     pub fn source_mut(&mut self) -> &mut S {
         self.source
     }
 
+    /// Returns the remaining limit of the source if it has one.
     pub fn limit(&self) -> Option<usize> {
         self.limit
     }
@@ -398,7 +526,6 @@ impl<'a, S: Source> Source for MaybeLimitedSource<'a, S> {
         Ok(MaybeLimitedFragment {
             fragment: self.source.request(len)?,
             limit: &mut self.limit,
-            len
         })
     }
 }
@@ -406,10 +533,13 @@ impl<'a, S: Source> Source for MaybeLimitedSource<'a, S> {
 
 //------------ MaybeLimitedFragment ------------------------------------------
 
+/// A fragment of a [`MaybeLimitedSource`].
 pub struct MaybeLimitedFragment<'f, S: Source + 'f> {
+    /// The fragment received from the underlying sourcce.
     fragment: S::Fragment<'f>,
+
+    /// The optional limit of the source.
     limit: &'f mut Option<usize>,
-    len: usize,
 }
 
 impl<'f, S: Source + 'f> Fragment<'f> for MaybeLimitedFragment<'f, S> {
@@ -418,30 +548,53 @@ impl<'f, S: Source + 'f> Fragment<'f> for MaybeLimitedFragment<'f, S> {
     }
 
     fn consume(self) {
+        let len = self.fragment.slice().len();
         self.fragment.consume();
         if let Some(limit) = self.limit {
-            *limit -= self.len
+            *limit -= len
         }
+    }
+}
+
+impl<'s, 'f, S> BorrowedFragment<'s, 'f> for MaybeLimitedFragment<'f, S>
+where
+    S: Source + 'f,
+    <S as Source>::Fragment<'f>: BorrowedFragment<'s, 'f>,
+{
+    fn borrow_slice(&self) -> &'s [u8] {
+        self.fragment.borrow_slice()
     }
 }
 
 
 //------------ LimitedSource -------------------------------------------------
 
+/// A source that wraps another source possibly limiting the length.
+///
+/// This type wraps a mutable reference to some other source and optionally
+/// limits the amount of data that allows to read.
+///
+/// Alternatively, [`LimitedSource`] provides a version that always has a
+/// limit.
+///
+/// The type is primarly used by [`Constructed`][crate::decode::Constructed].
 pub struct LimitedSource<'a, S> {
     source: &'a mut S,
     limit: usize,
 }
 
 impl<'a, S> LimitedSource<'a, S> {
+    /// Creates a new value from a source and a limit.
     pub fn new(source: &'a mut S, limit: usize) -> Self {
         Self { source, limit }
     }
 
+    /// Returns the wrapped mutable reference to the underlying source.
     pub fn source_mut(&mut self) -> &mut S {
         self.source
     }
 
+    /// Returns the remaining limit of the source.
     pub fn limit(&self) -> usize {
         self.limit
     }
@@ -510,7 +663,6 @@ where
     }
 }
     
-
 
 //------------ Pos -----------------------------------------------------------
 
