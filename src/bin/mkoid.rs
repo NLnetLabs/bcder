@@ -14,7 +14,7 @@ fn process_one(arg: &str) -> Result<(), ParseOidError> {
 
     print!("[");
     for byte in oid.as_slice() {
-        print!("{},", byte);
+        print!("{byte},");
     }
     println!("]");
 
@@ -26,7 +26,7 @@ fn main() {
     args.next().unwrap(); // Skip executable name.
     for arg in args {
         if let Err(err) = process_one(arg.as_ref()) {
-            println!("{}: {}.", arg, err)
+            println!("{arg}: {err}.")
         }
     }
 }
