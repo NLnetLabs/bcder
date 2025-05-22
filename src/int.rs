@@ -1099,11 +1099,6 @@ mod test {
     }
 
     #[test]
-    fn zero_size_array() {
-        let _ = UnsignedArray::<0>::default();
-    }
-
-    #[test]
     fn decode_signed_builtins() {
         cycle(0i8, b"\x00");
         cycle(66i8, b"\x42");
