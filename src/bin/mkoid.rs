@@ -7,13 +7,13 @@
 //! you will receive the octet array for it.
 
 use std::env;
-use bcder::Oid;
+use bcder::oid::{Oid, ParseOidError};
 
-fn process_one(arg: &str) -> Result<(), &'static str> {
-    let oid_bytes = arg.parse::<Oid<Vec<u8>>>()?.0;
+fn process_one(arg: &str) -> Result<(), ParseOidError> {
+    let oid = arg.parse::<Box<Oid>>()?;
 
     print!("[");
-    for byte in oid_bytes { // rust doesn't mind an extra trailing comma
+    for byte in oid.as_slice() {
         print!("{},", byte);
     }
     println!("]");

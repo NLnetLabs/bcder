@@ -1,7 +1,7 @@
 [package]
 name = "bcder"
 version = "0.7.6-dev"
-edition = "2018"
+edition = "2021"
 authors = ["NLnet Labs <rust-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
 documentation = "https://docs.rs/bcder/"
@@ -14,3 +14,5 @@ license = "BSD-3-Clause"
 bytes       = "^1.0"
 smallvec    = "^1.6.1"
 
+[features]
+mark-deprecated = []

@@ -22,32 +22,21 @@
 //!
 //! All of these are implemented atop a generic [`RestrictedString`] by
 //! providing an implementation for the [`CharSet`] trait.
-//!
-//! [`OctetString`]: struct.OctetString.html
-//! [`BitString`]: struct.BitString.html
-//! [`Ia5String`]: struct.Ia5String.html
-//! [`NumericString`]: struct.NumericString.html
-//! [`PrintableString`]: struct.PrintableString.html
-//! [`Utf8String`]: struct.Utf8String.html
-//! [`RestrictedString`]: struct.RestrictedString.html
-//! [`CharSet`]: trait.CharSet.html
 
 //--- Re-exports
 
-pub use self::bit::{BitString, BitStringIter};
+pub use self::bit::BitString;
 pub use self::restricted::{
-    CharSet, CharSetError,
-    RestrictedString, RestrictedStringChars,
-    Ia5String, NumericString, PrintableString, Utf8String
+    CharSetError, Ia5String, NumericString, PrintableString,
+    RestrictedString, Utf8String,
 };
-pub use self::octet::{
-    OctetString, OctetStringEncoder, OctetStringIter, OctetStringOctets,
-    OctetStringSource, WrappingOctetStringEncoder
-};
+pub use self::octet::OctetString;
+
 
 //--- Private modules
 
 mod bit;
 mod restricted;
 mod octet;
+
 

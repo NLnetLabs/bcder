@@ -1,14 +1,13 @@
 //! Everything related to the `Values` trait.
 //!
-//! This is an internal module. Its public types are re-exported by the
+//! This is an internal module. The relevant items are re-exported by the
 //! parent.
 
-use std::io;
 use std::marker::PhantomData;
-use crate::captured::Captured;
-use crate::length::Length;
-use crate::mode::Mode;
-use crate::tag::Tag;
+use crate::ident::{Ident, Tag};
+use crate::length::{Length, LengthOctets};
+use crate::mode::{BerCer, Mode};
+use super::target::{Target, infallible};
 
 
 //------------ Values --------------------------------------------------------
@@ -24,48 +23,47 @@ use crate::tag::Tag;
 /// A type implementing this trait should encodes itself into one or more
 /// BER values. That is, the type becomes the content or part of the content
 /// of a constructed value.
-pub trait Values {
+pub trait Values<M> {
     /// Returns the length of the encoded values for the given mode.
-    fn encoded_len(&self, mode: Mode) -> usize;
+    fn encoded_len(&self) -> Length;
 
     /// Encodes the values in the given mode and writes them to `target`.
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error>;
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error>;
 
 
     //--- Provided methods
 
     /// Converts the encoder into one with an explicit tag.
+    ///
+    /// For an explicite tag, the value is wrapped in a constructed value with
+    /// the given tag.
     fn explicit(self, tag: Tag) -> Constructed<Self>
     where Self: Sized {
         Constructed::new(tag, self)
     }
 
-    /// Captures the encoded values in the given mode.
-    fn to_captured(&self, mode: Mode) -> Captured {
+    fn to_vec(&self) -> Vec<u8> {
         let mut target = Vec::new();
-        self.write_encoded(mode, &mut target).unwrap();
-        Captured::new(target.into(), mode, Default::default())
+        infallible(self.write_encoded(&mut target));
+        target
     }
 }
 
 
 //--- Blanket impls
 
-impl<T: Values> Values for &'_ T {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        (*self).encoded_len(mode)
+impl<M, V: Values<M>> Values<M> for &'_ V {
+    fn encoded_len(&self) -> Length {
+        (*self).encoded_len()
     }
 
-    fn write_encoded<W: io::Write>(
+    fn write_encoded<T: Target>(
         &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        (*self).write_encoded(mode, target)
+        target: &mut T
+    ) -> Result<(), T::Error> {
+        (*self).write_encoded(target)
     }
 }
 
@@ -89,21 +87,20 @@ macro_rules! tupl_impl {
     // Impl values for the complete lists, then recurse to the lists without
     // their heads.
     ( tuple $t:ident $( $ttail:ident )* > $i:tt $( $itail:tt )* ) => {
-        impl<$t: Values, $( $ttail: Values ),*> Values
+        impl<M, $t: Values<M>, $( $ttail: Values<M> ),*> Values<M>
                 for ($t, $( $ttail ),*) {
-            fn encoded_len(&self, mode: Mode) -> usize {
-                self.$i.encoded_len(mode)
+            fn encoded_len(&self) -> Length {
+                self.$i.encoded_len()
                 $(
-                    + self.$itail.encoded_len(mode)
+                    + self.$itail.encoded_len()
                 )*
             }
 
-            fn write_encoded<W: io::Write>(
+            fn write_encoded<T: Target>(
                 &self,
-                mode: Mode,
-                target: &mut W
-            ) -> Result<(), io::Error> {
-                tupl_impl!( write self, mode, target, $i $( $itail )* );
+                target: &mut T
+            ) -> Result<(), T::Error> {
+                tupl_impl!( write self, target, $i $( $itail )* );
                 Ok(())
             }
         }
@@ -114,12 +111,12 @@ macro_rules! tupl_impl {
     };
 
     // Termination: empty lists, do nothing.
-    ( write $self:expr, $mode:expr, $target:expr, ) => { };
+    ( write $self:expr, $target:expr, ) => { };
 
     // Write all elements of tuple $self in mode $mode to $target in order.
-    ( write $self:expr, $mode:expr, $target:expr, $i:tt $($itail:tt)*) => {
-        tupl_impl!( write $self, $mode, $target, $($itail)* );
-        $self.$i.write_encoded($mode, $target)?
+    ( write $self:expr, $target:expr, $i:tt $($itail:tt)*) => {
+        tupl_impl!( write $self, $target, $($itail)* );
+        $self.$i.write_encoded($target)?
     }
 }
 
@@ -136,21 +133,20 @@ tupl_impl!(
 ///
 /// This implementation encodes `None` as nothing, i.e., as an OPTIONAL
 /// in ASN.1 parlance.
-impl<V: Values> Values for Option<V> {
-    fn encoded_len(&self, mode: Mode) -> usize {
+impl<M, V: Values<M>> Values<M> for Option<V> {
+    fn encoded_len(&self) -> Length {
         match self {
-            Some(v) => v.encoded_len(mode),
-            None => 0
+            Some(v) => v.encoded_len(),
+            None => Length::ZERO,
         }
     }
 
-    fn write_encoded<W: io::Write>(
+    fn write_encoded<T: Target>(
         &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
+        target: &mut T
+    ) -> Result<(), T::Error> {
         match self {
-            Some(v) => v.write_encoded(mode, target),
+            Some(v) => v.write_encoded(target),
             None => Ok(())
         }
     }
@@ -159,33 +155,27 @@ impl<V: Values> Values for Option<V> {
 
 //--- Impl for slice and Vec
 
-impl<V: Values> Values for [V] {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.iter().map(|v| v.encoded_len(mode)).sum()
+impl<M, V: Values<M>> Values<M> for [V] {
+    fn encoded_len(&self) -> Length {
+        self.iter().fold(Length::ZERO, |len, v| len + v.encoded_len())
     }
 
-    fn write_encoded<W: io::Write>(&self, mode: Mode, target: &mut W)
-        -> Result<(), io::Error>
-    {
-        for i in self {
-            i.write_encoded(mode, target)?;
-        };
-        Ok(())
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        self.iter().try_for_each(|v| v.write_encoded(target))
     }
 }
 
-impl<V: Values> Values for Vec<V> {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.iter().map(|v| v.encoded_len(mode)).sum()
+impl<M, V: Values<M>> Values<M> for Vec<V> {
+    fn encoded_len(&self) -> Length {
+        self.as_slice().encoded_len()
     }
 
-    fn write_encoded<W: io::Write>(&self, mode: Mode, target: &mut W)
-        -> Result<(), io::Error>
-    {
-        for i in self {
-            i.write_encoded(mode, target)?;
-        };
-        Ok(())
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        self.as_slice().write_encoded(target)
     }
 }
 
@@ -193,6 +183,9 @@ impl<V: Values> Values for Vec<V> {
 //------------ Constructed ---------------------------------------------------
 
 /// A value encoder for a single constructed value.
+///
+/// The encoder uses the definite length form for BER and DER and the
+/// indefinite length form for CER.
 pub struct Constructed<V> {
     /// The tag of the value.
     tag: Tag,
@@ -211,39 +204,67 @@ impl<V> Constructed<V> {
     }
 }
 
-impl<V: Values> Values for Constructed<V> {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        let len = self.inner.encoded_len(mode);
-        let len = len + match mode {
-            Mode::Ber | Mode::Der => {
-                Length::Definite(len).encoded_len()
-            }
-            Mode::Cer => {
-                Length::Indefinite.encoded_len()
-                + EndOfValue.encoded_len(mode)
-            }
-        };
-        self.tag.encoded_len() + len
+impl<M: Mode, V: Values<M>> Values<M> for Constructed<V> {
+    fn encoded_len(&self) -> Length {
+        if M::IS_CER {
+            total_indefinite_len(self.tag, self.inner.encoded_len())
+        }
+        else {
+            total_len(self.tag, self.inner.encoded_len())
+        }
     }
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.tag.write_encoded(true, target)?;
-        match mode {
-            Mode::Ber | Mode::Der => {
-                Length::Definite(self.inner.encoded_len(mode))
-                    .write_encoded(target)?;
-                self.inner.write_encoded(mode, target)
-            }
-            Mode::Cer => {
-                Length::Indefinite.write_encoded(target)?;
-                self.inner.write_encoded(mode, target)?;
-                EndOfValue.write_encoded(mode, target)
-            }
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        if M::IS_CER {
+            write_indefinite_header(target, self.tag)?;
+            self.inner.write_encoded(target)?;
+            write_end_of_contents(target)
         }
+        else {
+            write_header(target, self.tag, true, self.inner.encoded_len())?;
+            self.inner.write_encoded(target)
+        }
+    }
+}
+
+
+//------------ IndefiniteConstructed -----------------------------------------
+
+/// A value encoder for a indefinite length form constructed value.
+///
+/// This type can only be used when encoding in BER or CER modes.
+pub struct IndefiniteConstructed<V> {
+    /// The tag octets of the value.
+    tag: Tag,
+
+    /// A value encoder for the content of the value.
+    inner: V,
+}
+
+impl<V> IndefiniteConstructed<V> {
+    /// Creates a new value encoder from a tag and content.
+    ///
+    /// The returned value will encode as a single indefinite length form
+    /// constructed value with the given tag and whatever `inner` encodeds
+    /// to as its content.
+    pub fn new(tag: Tag, inner: V) -> Self {
+        Self { tag, inner }
+    }
+}
+
+impl<M: BerCer, V: Values<M>> Values<M> for IndefiniteConstructed<V> {
+    fn encoded_len(&self) -> Length {
+        total_indefinite_len(self.tag, self.inner.encoded_len())
+    }
+
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        write_indefinite_header(target, self.tag)?;
+        self.inner.write_encoded(target)?;
+        write_end_of_contents(target)
     }
 }
 
@@ -262,22 +283,20 @@ pub enum Choice2<L, R> {
     Two(R)
 }
 
-impl<L: Values, R: Values> Values for Choice2<L, R> {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        match *self {
-            Choice2::One(ref inner) => inner.encoded_len(mode),
-            Choice2::Two(ref inner) => inner.encoded_len(mode),
+impl<M, L: Values<M>, R: Values<M>> Values<M> for Choice2<L, R> {
+    fn encoded_len(&self) -> Length {
+        match self {
+            Choice2::One(inner) => inner.encoded_len(),
+            Choice2::Two(inner) => inner.encoded_len(),
         }
     }
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        match *self {
-            Choice2::One(ref inner) => inner.write_encoded(mode, target),
-            Choice2::Two(ref inner) => inner.write_encoded(mode, target),
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        match self {
+            Choice2::One(inner) => inner.write_encoded(target),
+            Choice2::Two(inner) => inner.write_encoded(target),
         }
     }
 }
@@ -300,24 +319,23 @@ pub enum Choice3<L, C, R> {
     Three(R)
 }
 
-impl<L: Values, C: Values, R: Values> Values for Choice3<L, C, R> {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        match *self {
-            Choice3::One(ref inner) => inner.encoded_len(mode),
-            Choice3::Two(ref inner) => inner.encoded_len(mode),
-            Choice3::Three(ref inner) => inner.encoded_len(mode),
+impl<M, L, C, R> Values<M> for Choice3<L, C, R>
+where L: Values<M>, C: Values<M>, R: Values<M> {
+    fn encoded_len(&self) -> Length {
+        match self {
+            Choice3::One(inner) => inner.encoded_len(),
+            Choice3::Two(inner) => inner.encoded_len(),
+            Choice3::Three(inner) => inner.encoded_len(),
         }
     }
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        match *self {
-            Choice3::One(ref inner) => inner.write_encoded(mode, target),
-            Choice3::Two(ref inner) => inner.write_encoded(mode, target),
-            Choice3::Three(ref inner) => inner.write_encoded(mode, target),
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        match self {
+            Choice3::One(inner) => inner.write_encoded(target),
+            Choice3::Two(inner) => inner.write_encoded(target),
+            Choice3::Three(inner) => inner.write_encoded(target),
         }
     }
 }
@@ -327,40 +345,40 @@ impl<L: Values, C: Values, R: Values> Values for Choice3<L, C, R> {
 
 /// A wrapper for an iterator of values.
 ///
+/// The type wraps something that impl `IntoIterator`. It needs to be
+/// `Clone`, because we need to be able to restart iterating at the beginning.
+///
 /// The wrapper is needed because a blanket impl on any iterator type is
 /// currently not possible.
-///
-/// Note that `T` needs to be clone because we need to be able to restart
-/// iterating at the beginning.
-pub struct Iter<T>(pub T);
+pub struct Iter<I>(pub I);
 
-impl<T> Iter<T> {
+impl<I> Iter<I> {
     /// Creates a new iterator encoder atop `iter`.
-    pub fn new(iter: T) -> Self {
+    pub fn new(iter: I) -> Self {
         Iter(iter)
     }
 }
 
 /// Wraps an iterator over value encoders into a value encoder.
-pub fn iter<T>(iter: T) -> Iter<T> {
+pub fn iter<I>(iter: I) -> Iter<I> {
     Iter::new(iter)
 }
 
 
 //--- IntoIterator
 
-impl<T: IntoIterator> IntoIterator for Iter<T> {
-    type Item = <T as IntoIterator>::Item;
-    type IntoIter = <T as IntoIterator>::IntoIter;
+impl<I: IntoIterator> IntoIterator for Iter<I> {
+    type Item = <I as IntoIterator>::Item;
+    type IntoIter = <I as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<T: Clone + IntoIterator> IntoIterator for &'_ Iter<T> {
-    type Item = <T as IntoIterator>::Item;
-    type IntoIter = <T as IntoIterator>::IntoIter;
+impl<I: Clone + IntoIterator> IntoIterator for &'_ Iter<I> {
+    type Item = <I as IntoIterator>::Item;
+    type IntoIter = <I as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.clone().into_iter()
@@ -370,46 +388,59 @@ impl<T: Clone + IntoIterator> IntoIterator for &'_ Iter<T> {
 
 //--- Values
 
-impl<T> Values for Iter<T>
-where T: Clone + IntoIterator, <T as IntoIterator>::Item: Values {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.into_iter().map(|item| item.encoded_len(mode)).sum()
+impl<M, I> Values<M> for Iter<I>
+where
+    I: Clone + IntoIterator,
+    <I as IntoIterator>::Item: Values<M>
+{
+    fn encoded_len(&self) -> Length {
+        self.into_iter().fold(
+            Length::ZERO,
+            |len, item| len + item.encoded_len()
+        )
     }
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.into_iter().try_for_each(|item| item.write_encoded(mode, target))
+    fn write_encoded<T: Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        self.into_iter().try_for_each(|item| item.write_encoded(target))
     }
 }
 
 
-//------------ Slice ---------------------------------------------------------
+//------------ EncodeSlice ---------------------------------------------------
 
 /// A wrapper for a slice of encodable values.
 ///
 /// A value of this type will take something that can provide a reference to
 /// a slice of some value and a closure that converts the values of the slice
 /// into something encodable.
-pub struct Slice<T, F, U, V>
-where T: AsRef<[U]>, F: Fn(&U) -> V {
+//
+//  We need the extra type arguments here already or else they are
+//  unconstrained in the Values impl.
+pub struct EncodeSlice<S, F, U, V>
+where
+    S: AsRef<[U]>,
+    F: Fn(&U) -> V
+{
     /// The slice value.
-    value: T,
+    slice: S,
 
     /// The converter function.
-    f: F,
+    op: F,
 
     /// A markers for extra type arguments.
     marker: PhantomData<(U, V)>,
 }
 
-impl<T, F, U, V> Slice<T, F, U, V>
-where T: AsRef<[U]>, F: Fn(&U) -> V {
+impl<S, F, U, V> EncodeSlice<S, F, U, V>
+where
+    S: AsRef<[U]>,
+    F: Fn(&U) -> V
+{
     /// Creates a new wrapper for a given value and closure.
-    pub fn new(value: T, f: F) -> Self {
-        Slice { value, f, marker: PhantomData }
+    pub fn new(slice: S, op: F) -> Self {
+        Self { slice, op, marker: PhantomData, }
     }
 }
 
@@ -418,27 +449,35 @@ where T: AsRef<[U]>, F: Fn(&U) -> V {
 /// The function takes a value of a type that can be converted into a slice of
 /// some type and a function that converts references to slice elements into
 /// some encoder.
-pub fn slice<T, F, U, V>(value: T, f: F) -> Slice<T, F, U, V>
-where T: AsRef<[U]>, F: Fn(&U) -> V {
-    Slice::new(value, f)
+pub fn encode_slice<S, F, U, V>(slice: S, op: F) -> EncodeSlice<S, F, U, V>
+where
+    S: AsRef<[U]>,
+    F: Fn(&U) -> V
+{
+    EncodeSlice::new(slice, op)
 }
 
 
 //--- Values
 
-impl<T, F, U, V> Values for Slice<T, F, U, V>
-where T: AsRef<[U]>, F: Fn(&U) -> V, V: Values {
-    fn encoded_len(&self, mode: Mode) -> usize {
-        self.value.as_ref().iter().map(|v| (self.f)(v).encoded_len(mode)).sum()
+impl<M, S, F, U, V> Values<M> for EncodeSlice<S, F, U, V>
+where
+    S: AsRef<[U]>,
+    F: Fn(&U) -> V,
+    V: Values<M>
+{
+    fn encoded_len(&self) -> Length {
+        self.slice.as_ref().iter().fold(Length::ZERO, |len, v| {
+            len + (self.op)(v).encoded_len()
+        })
     }
 
-    fn write_encoded<W: io::Write>(
+    fn write_encoded<T: Target>(
         &self,
-        mode: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        self.value.as_ref().iter().try_for_each(|v|
-            (self.f)(v).write_encoded(mode, target)
+        target: &mut T
+    ) -> Result<(), T::Error> {
+        self.slice.as_ref().iter().try_for_each(|v|
+            (self.op)(v).write_encoded(target)
         )
     }
 }
@@ -446,23 +485,21 @@ where T: AsRef<[U]>, F: Fn(&U) -> V, V: Values {
 
 //------------ Nothing -------------------------------------------------------
 
-/// A encoder for nothing.
+/// An encoder for nothing.
 ///
 /// Unsurprisingly, this encodes as zero octets of content. It can be useful
 /// for writing an encoder for an enum where some of the variants shouldn’t
 /// result in content at all.
 pub struct Nothing;
 
-impl Values for Nothing {
-    fn encoded_len(&self, _mode: Mode) -> usize {
-        0
+impl<M> Values<M> for Nothing {
+    fn encoded_len(&self) -> Length {
+        Length::ZERO
     }
 
-    fn write_encoded<W: io::Write>(
-        &self,
-        _mode: Mode,
-        _target: &mut W
-    ) -> Result<(), io::Error> {
+    fn write_encoded<T: Target>(
+        &self, _target: &mut T
+    ) -> Result<(), T::Error> {
         Ok(())
     }
 }
@@ -471,28 +508,30 @@ impl Values for Nothing {
 //============ Standard Functions ============================================
 
 /// Returns a value encoder for a SEQUENCE containing `inner`.
-pub fn sequence<V: Values>(inner: V) -> impl Values {
+pub fn sequence<M: Mode, V: Values<M>>(inner: V) -> impl Values<M> {
     Constructed::new(Tag::SEQUENCE, inner)
 }
 
 /// Returns a value encoder for a SEQUENCE with the given tag.
 ///
 /// This is identical to `Constructed::new(tag, inner)`. It merely provides a
-/// more memorial name.
-pub fn sequence_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+/// more memorable name.
+pub fn sequence_as<M: Mode, V: Values<M>>(
+    tag: Tag, inner: V
+) -> impl Values<M> {
     Constructed::new(tag, inner)
 }
 
 /// Returns a value encoder for a SET containing `inner`.
-pub fn set<V: Values>(inner: V) -> impl Values {
+pub fn set<M: Mode, V: Values<M>>(inner: V) -> impl Values<M> {
     Constructed::new(Tag::SET, inner)
 }
 
 /// Returns a value encoder for a SET with the given tag.
 ///
 /// This is identical to `Constructed::new(tag, inner)`. It merely provides a
-/// more memorial name.
-pub fn set_as<V: Values>(tag: Tag, inner: V) -> impl Values {
+/// more memorable name.
+pub fn set_as<M: Mode, V: Values<M>>(tag: Tag, inner: V) -> impl Values<M> {
     Constructed::new(tag, inner)
 }
 
@@ -500,68 +539,51 @@ pub fn set_as<V: Values>(tag: Tag, inner: V) -> impl Values {
 ///
 /// This is necessary because the length octets have a different length
 /// depending on the content length.
-pub fn total_encoded_len(tag: Tag, content_l: usize) -> usize {
-    tag.encoded_len() + Length::Definite(content_l).encoded_len() + content_l
+pub fn total_len(tag: Tag, content_l: Length) -> Length {
+    Ident::from_tag(tag, false).encoded_len()
+        + LengthOctets::new(Some(content_l)).encoded_len()
+        + content_l
+}
+
+/// Returns the length of a indefinite-form constructed.
+///
+/// This includes the end-of-contents octets.
+pub fn total_indefinite_len(tag: Tag, content_l: Length) -> Length {
+    Ident::from_tag(tag, false).encoded_len()
+        + LengthOctets::new(None).encoded_len()
+        + content_l
+        + 2 // End-of-contents is two bytes.
 }
 
 /// Writes the header for a value.
 ///
 /// The header in the sense of this function is the identifier octets and the
 /// length octets.
-pub fn write_header<W: io::Write>(
-    target: &mut W,
+pub fn write_header<T: Target>(
+    target: &mut T,
     tag: Tag,
     constructed: bool,
-    content_length: usize
-) -> Result<(), io::Error> {
-    tag.write_encoded(constructed, target)?;
-    Length::Definite(content_length).write_encoded(target)?;
+    content_length: Length, 
+) -> Result<(), T::Error> {
+    Ident::from_tag(tag, constructed).write_encoded(target)?;
+    LengthOctets::new(Some(content_length)).write_encoded(target)?;
     Ok(())
 }
 
-
-//============ Helper Types ==================================================
-
-//------------ EndOfValue ----------------------------------------------------
-
-/// A value encoder for the end of value marker.
-struct EndOfValue;
-
-impl Values for EndOfValue {
-    fn encoded_len(&self, _: Mode) -> usize {
-        2
-    }
-
-    fn write_encoded<W: io::Write>(
-        &self,
-        _: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        let buf = [0, 0];
-        target.write_all(&buf)
-    }
+/// Writes the header for an indefinite-length constructed.
+pub fn write_indefinite_header<T: Target>(
+    target: &mut T,
+    tag: Tag,
+) -> Result<(), T::Error> {
+    Ident::from_tag(tag, true).write_encoded(target)?;
+    LengthOctets::new(None).write_encoded(target)?;
+    Ok(())
 }
 
-
-//============ Tests =========================================================
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::encode::PrimitiveContent;
-
-    #[test]
-    fn encode_2_tuple() {
-        let mut res = Vec::new();
-        (0.encode(), 1.encode()).write_encoded(Mode::Der, &mut res).unwrap();
-        assert_eq!(res, b"\x02\x01\0\x02\x01\x01");
-    }
-
-    #[test]
-    fn encode_4_tuple() {
-        let mut res = Vec::new();
-        (0.encode(), 1.encode(), 2.encode(), 3.encode())
-            .write_encoded(Mode::Der, &mut res).unwrap();
-        assert_eq!(res, b"\x02\x01\0\x02\x01\x01\x02\x01\x02\x02\x01\x03");
-    }
+/// Writes the end-of-contents octets.
+pub fn write_end_of_contents<T: Target>(
+    target: &mut T,
+) -> Result<(), T::Error> {
+    target.write_all(b"\0\0")
 }
+

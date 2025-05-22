@@ -1,82 +1,84 @@
 //! The BER mode.
-//!
-//! This is a private module. It’s public items are re-exported by the parent.
-
-use crate::decode;
-use crate::decode::DecodeError;
 
 
-//------------ Mode ----------------------------------------------------------
-
-/// The BER Mode.
+/// Basic Encoding Rules.
 ///
-/// X.680 defines not one but three sets of related encoding rules. All three
-/// follow the same basic ideas but implement them in slightly different
-/// ways.
-///
-/// This type represents these rules. The [`decode`] method provides a way to
-/// decode a source using the specific decoding mode. You can also change
-/// the decoding mode later on through the `set_mode` methods of [`Primitive`]
-/// and [`Constructed`].
-///
-/// [`decode´]: #method.decode
-/// [`Primitive`]: decode/struct.Primitive.html
-/// [`Constructed`]: decode/struct.Constructed.html
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum Mode {
-    /// Basic Encoding Rules.
-    ///
-    /// These are the most flexible rules, allowing alternative encodings for
-    /// some types as well as indefinite length values.
-    #[default]
-    Ber,
+/// These are the most flexible rules, allowing alternative encodings for
+/// some types as well as indefinite length values.
+//
+//  XXX We derive all the things for now so we can derive them on types that
+//      are generic over the mode but will replace the derives later.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Ber;
 
-    /// Canonical Encoding Rules.
-    ///
-    /// These rules always employ indefinite length encoding for constructed
-    /// values and the shortest possible form for primitive values.  There
-    /// are additional restrictions for certain types.
-    Cer,
+/// Canonical Encoding Rules.
+///
+/// These rules always employ indefinite length encoding for constructed
+/// values and the shortest possible form for primitive values.  There
+/// are additional restrictions for certain types.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Cer;
 
-    /// Distinguished Encoding Rules.
-    ///
-    /// These rules always employ definite length values and require the
-    /// shortest possible encoding. Additional rules apply to some types.
-    Der,
+/// Distinguished Encoding Rules.
+///
+/// These rules always employ definite length values and require the
+/// shortest possible encoding. Additional rules apply to some types.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Der;
+
+/// One of the modes.
+///
+/// The trait defines a number of constants that allow implementations that
+/// are generic over the particular mode to branch on them which in turn
+/// allows the compiler to remove the unused branches during monomorphization
+/// when a concrete mode is used.
+pub trait Mode {
+    /// Is this mode CER?
+    const IS_CER: bool;
+
+    /// Is this mode DER?
+    const IS_DER: bool;
+
+    /// Is this mode CER or DER?
+    const IS_RESTRICTED: bool;
+
+    /// Does this mode allow definite-length constructed values?
+    const ALLOW_DEFINITE_CONSTRUCTED: bool;
+
+    /// Does this mode allow indefinite length constructed values?
+    const ALLOW_INDEFINITE_CONSTRUCTED: bool;
 }
 
-impl Mode {
-    /// Decode a source using a specific mode.
-    ///
-    /// The method will attempt to decode `source` using the rules represented
-    /// by this value. The closure `op` will be given the content of the
-    /// source as a sequence of values. The closure does not need to process
-    /// all values in the source.
-    pub fn decode<S, F, T>(
-        self, source: S, op: F,
-    ) -> Result<T, DecodeError<<S::Source as decode::Source>::Error>>
-    where
-        S: decode::IntoSource,
-        F: FnOnce(
-            &mut decode::Constructed<S::Source>
-        ) -> Result<T, DecodeError<<S::Source as decode::Source>::Error>>,
-    {
-        decode::Constructed::decode(source, self, op)
-    }
-
-    /// Returns whether the mode is `Mode::Ber`.
-    pub fn is_ber(self) -> bool {
-        matches!(self, Mode::Ber)
-    }
-
-    /// Returns whether the mode is `Mode::Cer`.
-    pub fn is_cer(self) -> bool {
-        matches!(self, Mode::Cer)
-    }
-
-    /// Returns whether the mode is `Mode::Der`.
-    pub fn is_der(self) -> bool {
-        matches!(self, Mode::Der)
-    }
+impl Mode for Ber {
+    const IS_CER: bool = false;
+    const IS_DER: bool = false;
+    const IS_RESTRICTED: bool = false;
+    const ALLOW_DEFINITE_CONSTRUCTED: bool = true;
+    const ALLOW_INDEFINITE_CONSTRUCTED: bool = true;
 }
 
+impl Mode for Cer {
+    const IS_CER: bool = true;
+    const IS_DER: bool = false;
+    const IS_RESTRICTED: bool = true;
+    const ALLOW_DEFINITE_CONSTRUCTED: bool = false;
+    const ALLOW_INDEFINITE_CONSTRUCTED: bool = true;
+}
+
+impl Mode for Der {
+    const IS_CER: bool = false;
+    const IS_DER: bool = true;
+    const IS_RESTRICTED: bool = true;
+    const ALLOW_DEFINITE_CONSTRUCTED: bool = true;
+    const ALLOW_INDEFINITE_CONSTRUCTED: bool = false;
+}
+
+
+/// Either BER or CER mode.
+///
+/// Those are the modes that allow indefinite length form constructed
+/// values.
+pub trait BerCer { }
+
+impl BerCer for Ber { }
+impl BerCer for Cer { }
