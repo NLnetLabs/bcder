@@ -7,7 +7,7 @@
 use std::{error, fmt, io, ops};
 use std::cmp::Ordering;
 use crate::mode::Mode;
-use crate::decode::ReadExt;
+use crate::decode::read_u8;
 use crate::encode::Target;
 
 
@@ -616,7 +616,7 @@ impl LengthOctets {
         // If we have more octets than fit into a u64, the excess octets need
         // to be zero or the length is too big.
         while len > Length::LEN {
-            if reader.read_u8()? != 0 {
+            if read_u8(reader)? != 0 {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "excessive length"
@@ -686,7 +686,7 @@ impl LengthOctets {
     pub fn read_end_of_contents(
         reader: &mut impl io::Read
     ) -> Result<(), io::Error> {
-        match reader.read_u8()? {
+        match read_u8(reader)? {
             0 => Ok(()),
             0x80 => {
                 Err(io::Error::new(
@@ -753,7 +753,7 @@ enum FirstOctet {
 impl FirstOctet {
     /// Look at the first octet and check what it means.
     fn read(reader: &mut impl io::Read) -> Result<Self, io::Error> {
-        match reader.read_u8()? {
+        match read_u8(reader)? {
             // Bit 7 clear: single.
             n if (n & 0x80) == 0 => {
                 Ok(Self::Single(LengthOctets::new(Some(n.into()))))

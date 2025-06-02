@@ -122,23 +122,12 @@ impl<R: io::BufRead> io::BufRead for Source<R> {
 }
 
 
-//------------ ReadExt -------------------------------------------------------
+//------------ read_u8 -------------------------------------------------------
 
-pub trait ReadExt {
-    fn read_u8(&mut self) -> Result<u8, io::Error>;
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], io::Error>;
-}
-
-impl<T: io::Read> ReadExt for T {
-    fn read_u8(&mut self) -> Result<u8, io::Error> {
-        Ok(self.read_array::<1>()?[0])
-    }
-
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], io::Error> {
-        let mut res = [0u8; N];
-        self.read_exact(&mut res)?;
-        Ok(res)
-    }
+pub fn read_u8(reader: &mut impl io::Read) -> Result<u8, io::Error> {
+    let mut res = [0u8];
+    reader.read_exact(&mut res)?;
+    Ok(res[0])
 }
 
 

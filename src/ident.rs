@@ -4,7 +4,7 @@
 //! parent.
 
 use std::{fmt, io};
-use crate::decode::ReadExt;
+use crate::decode::read_u8;
 use crate::encode::Target;
 use crate::length::Length;
 
@@ -406,7 +406,7 @@ impl Ident {
     pub fn read_opt(
         reader: &mut impl io::Read
     ) -> Result<Option<Self>, io::Error> {
-        let first = match reader.read_u8() {
+        let first = match read_u8(reader) {
             Ok(res) => res,
             Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
                 return Ok(None)
@@ -420,27 +420,27 @@ impl Ident {
         }
 
         // Work your way through the multi-octet tags.
-        let x0 = reader.read_u8()?;
+        let x0 = read_u8(reader)?;
         if (x0 & 0x80) == 0 {
             return Ok(Some(Self(I::L2([first, x0]))))
         }
 
-        let x1 = reader.read_u8()?;
+        let x1 = read_u8(reader)?;
         if (x1 & 0x80) == 0 {
             return Ok(Some(Self(I::L3([first, x0, x1]))))
         }
 
-        let x2 = reader.read_u8()?;
+        let x2 = read_u8(reader)?;
         if (x2 & 0x80) == 0 {
             return Ok(Some(Self(I::L4([first, x0, x1, x2]))))
         }
 
-        let x3 = reader.read_u8()?;
+        let x3 = read_u8(reader)?;
         if (x3 & 0x80) == 0 {
             return Ok(Some(Self(I::L5([first, x0, x1, x2, x3]))))
         }
 
-        let x4 = reader.read_u8()?;
+        let x4 = read_u8(reader)?;
         if (x4 & 0x80) == 0 {
             // In order to fit into a u32, the upper four bits of x0 must
             // be zero.

@@ -43,8 +43,8 @@
 pub use self::constructed::{Constructed, Data};
 pub use self::error::Error;
 pub use self::primitive::{FromPrimitive, Primitive};
-pub use self::source::ReadExt;
 pub use self::value::Value;
+pub(crate) use self::source::read_u8;
 
 mod constructed;
 mod error;
