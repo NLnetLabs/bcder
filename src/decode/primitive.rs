@@ -237,6 +237,22 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     }
 }
 
+impl<'a, 's, M> Primitive<'a, M, &'s [u8]> {
+    pub fn read_exact_borrowed(
+        &mut self, len: usize
+    ) -> Result<&'s [u8], Error> {
+        self.source.read_exact_borrowed(len).map_err(|err| {
+            Error::from_io(err, self.source.pos())
+        })
+    }
+
+    pub fn read_all_borrowed(&mut self) -> Result<&'s [u8], Error> {
+        self.source.read_all_borrowed().map_err(|err| {
+            Error::from_io(err, self.source.pos())
+        })
+    }
+}
+
 impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
     pub(crate) fn fill_buf(&mut self) -> Result<&[u8], Error> {
         let pos = self.source.pos();
@@ -392,6 +408,46 @@ impl<'a, R: 'a> PrimitiveSource<'a, R> {
     /// The primitive has been completely read when this value reaches zero.
     fn remaining(&self) -> Length {
         self.limit - self.source.pos()
+    }
+}
+
+impl<'a, 's> PrimitiveSource<'a, &'s [u8]> {
+    /// Reads and returns the remainder of the data.
+    ///
+    /// Returns an error if there are less bytes available than the length of
+    /// the primitive.
+    fn read_all_borrowed(&mut self) -> Result<&'s [u8], io::Error> {
+        self.source.read_exact_borrowed(
+            self.remaining().try_to_usize().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "unexpected end of data"
+                )
+            })?
+        )
+    }
+
+    /// Reads and returns the exact number of bytes requested.
+    ///
+    /// If at least `len` bytes are remaining in the reader, returns a slice
+    /// of length `len` and progresses the reader by `len` bytes.
+    ///
+    /// Returns an error if less than `len` bytes are left.
+    fn read_exact_borrowed(
+        &mut self, len: usize
+    ) -> Result<&'s [u8], io::Error> {
+        let len = self.limit.checked_sub(len.into()).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected end of data"
+            )
+        })?.try_to_usize().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected end of data"
+            )
+        })?;
+        self.source.read_exact_borrowed(len)
     }
 }
 

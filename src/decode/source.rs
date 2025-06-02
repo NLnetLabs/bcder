@@ -63,11 +63,6 @@ impl<R> Source<R> {
         }
     }
 
-    /// Converts the source into the underlying reader.
-    pub fn into_reader(self) -> R {
-        self.wrapped_reader
-    }
-
     /// Checks the status of the source.
     ///
     /// Returns an error if the status was set to an error.
@@ -100,6 +95,29 @@ impl<R> Source<R> {
     }
 }
 
+impl<'a> Source<&'a [u8]> {
+    /// Reads and returns the exact number of bytes requested.
+    ///
+    /// If at least `len` bytes are remaining in the reader, returns a slice
+    /// of length `len` and progresses the reader by `len` bytes.
+    ///
+    /// Returns an error if less than `len` bytes are left.
+    pub fn read_exact_borrowed(
+        &mut self, len: usize
+    ) -> Result<&'a [u8], io::Error> {
+        let (head, tail) = self.wrapped_reader.split_at_checked(
+            len
+        ).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof, "unexpected end-of data"
+            )
+        })?;
+        self.wrapped_reader = tail;
+        self.pos += head.len();
+        Ok(head)
+    }
+}
+
 impl<R: io::Read> io::Read for Source<R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let read = self.reader()?.read(buf)?;
@@ -120,6 +138,9 @@ impl<R: io::BufRead> io::BufRead for Source<R> {
         }
     }
 }
+
+
+//============ Helper Functions ==============================================
 
 
 //------------ read_u8 -------------------------------------------------------

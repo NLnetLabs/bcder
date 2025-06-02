@@ -1694,15 +1694,6 @@ impl<'a, R: 'a> DefiniteConstructed<'a, R> {
 }
 
 impl<'a, R: io::Read + 'a> DefiniteConstructed<'a, R> {
-    fn check_exhausted(&mut self) -> Result<(), Error> {
-        if self.source.pos() == self.limit {
-            Ok(())
-        }
-        else {
-            Err(Error::content("trailing values", self.source.pos()))
-        }
-    }
-
     fn read_ident(&mut self) -> Result<Option<Ident>, io::Error> {
          Ident::read_opt(self)
     }
@@ -1822,18 +1813,6 @@ impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
 }
 
 impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
-    fn check_exhausted(&mut self) -> Result<(), Error> {
-        if self.done {
-            return Ok(())
-        }
-
-        // The next value needs to be end-of-contents.
-        let pos = self.source.pos();
-        self.read_end_of_contents().map_err(|err| {
-            Error::content(err, pos)
-        })
-    }
-
     fn read_ident<M: Mode>(&mut self) -> Result<Option<Ident>, io::Error> {
         let ident = Ident::read(&mut self.source)?;
         if ident == Ident::END_OF_CONTENTS {

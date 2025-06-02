@@ -353,27 +353,6 @@ enum StackItem {
     Indefinite(Option<Length>),
 }
 
-impl StackItem {
-    fn limit(self) -> Option<Length> {
-        match self {
-            Self::Definite(limit) => Some(limit),
-            Self::Indefinite(limit) => limit,
-        }
-    }
-
-    fn check_limit(self, limit: Length, pos: Length) -> Result<(), Error> {
-        match self {
-            Self::Definite(len) if limit > len => {
-                Err(Error::content("long nested value", pos))
-            }
-            Self::Indefinite(Some(len)) if limit > len => {
-                Err(Error::content("long nested value", pos))
-            }
-            _ => Ok(())
-        }
-    }
-}
-
 
 //------------ LimitedSource -------------------------------------------------
 
