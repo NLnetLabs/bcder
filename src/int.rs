@@ -123,6 +123,30 @@ impl Integer {
         })
     }
 
+    /// Decodes a single signed integer value borrowing from the source.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
+    pub fn decode_value_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_primitive_borrowed(
+            cons.decode_primitive_if(Tag::INTEGER)?
+        )
+    }
+
+    /// Creates an borrowed integer from the content of a primitive value.
+    pub fn from_primitive_borrowed<'s, M>(
+        mut prim: Primitive<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        let len = usize::try_from(prim.remaining()).map_err(|_| {
+            prim.content_err_at_start(OverflowError(()))
+        })?;
+        Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
+            prim.content_err_at_start(err)
+        })
+    }
+
     /// Returns a bytes slice with the raw content.
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_ref()
@@ -623,6 +647,18 @@ impl Unsigned {
         )
     }
 
+    /// Decodes a single unsigned integer value.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded unsigned integer.
+    pub fn decode_value_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_primitive_borrowed(
+            cons.decode_primitive_if(Tag::INTEGER)?
+        )
+    }
+
     /// Takes a single unsigned integer from a source.
     ///
     /// This requires the next value in `cons` to be a primitive value with
@@ -646,6 +682,18 @@ impl Unsigned {
             prim.content_err_at_start(OverflowError(()))
         })?;
         Self::from_box(prim.read_exact_into_box(len)?).map_err(|err| {
+            prim.content_err_at_start(err)
+        })
+    }
+
+    /// Creates an integer from the content of a primitive value.
+    pub fn from_primitive_borrowed<'s, M>(
+        mut prim: Primitive<M, &'s [u8]>,
+    ) -> Result<&'s Self, decode::Error> {
+        let len = usize::try_from(prim.remaining()).map_err(|_| {
+            prim.content_err_at_start(OverflowError(()))
+        })?;
+        Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
             prim.content_err_at_start(err)
         })
     }

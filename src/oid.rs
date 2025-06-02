@@ -167,6 +167,17 @@ impl Oid {
         Self::from_primitive(cons.decode_primitive_if(Tag::OID)?)
     }
 
+    /// Decodes an object identifier value.
+    ///
+    /// Returns an error if the source has reached its end, if the next value
+    /// is not a primitive value with `Tag::OID`, or if it does not contain
+    /// a correctly encoded object identifer.
+    pub fn decode_value_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_primitive_borrowed(cons.decode_primitive_if(Tag::OID)?)
+    }
+
     /// Decodes an optional object identifier value.
     ///
     /// Returns `Ok(None)` if the source has reached its end.
@@ -195,6 +206,23 @@ impl Oid {
         self.expect_primitive(cons.decode_primitive_if(Tag::OID)?)
     }
 
+    /// Decodes an optional object identifier value.
+    ///
+    /// Returns `Ok(None)` if the source has reached its end.
+    ///
+    /// Returns an error if the next value is not a primitive value with
+    /// `Tag::OID`, or if it does not contain a correctly encoded object
+    /// identifer.
+    pub fn decode_opt_value_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<Option<&'s Self>, decode::Error> {
+        let Some(prim) = cons.decode_opt_primitive_if(Tag::OID)? else {
+            return Ok(None)
+        };
+        Ok(Some(Self::from_primitive_borrowed(prim)?))
+    }
+
+
     /// Skips over an optional object identifier if it is equal to `self`.
     ///
     /// Returns `Ok(None)` if the source has reached its end.
@@ -210,12 +238,21 @@ impl Oid {
         };
         Ok(Some(self.expect_primitive(prim)?))
     }
-    
+
     /// Constructs an object identifier from the content of a primitive value.
     pub fn from_primitive<M, R: io::Read>(
         mut prim: Primitive<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_box(prim.read_all_into_box()?).map_err(|err| {
+            prim.content_err_at_start(err)
+        })
+    }
+
+    /// Constructs an object identifier from the content of a primitive value.
+    pub fn from_primitive_borrowed<'s, M>(
+        mut prim: Primitive<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_slice(prim.read_all_borrowed()?).map_err(|err| {
             prim.content_err_at_start(err)
         })
     }
