@@ -52,7 +52,7 @@ impl Oid {
     /// The called must ensure that `slice` contains a correctly encoded
     /// OID.
     pub unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
-        mem::transmute(slice)
+        unsafe { mem::transmute(slice) }
     }
     ///
     /// Creates a boxed identifier from a boxed slice without checking.
@@ -62,7 +62,7 @@ impl Oid {
     /// The called must ensure that `src` contains a correctly encoded
     /// object identifier.
     pub unsafe fn from_box_unchecked(src: Box<[u8]>) -> Box<Self> {
-        mem::transmute(src)
+        unsafe { mem::transmute(src) }
     }
 
     /// Creates an object identifier from a byte slice.

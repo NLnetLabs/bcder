@@ -98,14 +98,16 @@ impl<'a, M, R: 'a> Primitive<'a, M, R> {
         &self, len: impl Into<Length>
     ) -> Result<(), Error> {
         let len = len.into();
-        if self.remaining() > len {
-            Err(self.content_err_at_current("trailing data"))
-        }
-        else if self.remaining() < len {
-            Err(self.content_err_at_current("unexpected end of value"))
-        }
-        else {
-            Ok(())
+        match self.remaining().cmp(&len) {
+            cmp::Ordering::Greater => {
+                Err(self.content_err_at_current("trailing data"))
+            }
+            cmp::Ordering::Less => {
+                Err(self.content_err_at_current("unexpected end of value"))
+            }
+            cmp::Ordering::Equal => {
+                Ok(())
+            }
         }
     }
 

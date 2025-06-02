@@ -1,3 +1,3 @@
-allow-indexing-slicing-in-tests = true
+# not in 1.83 yet: allow-indexing-slicing-in-tests = true
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true

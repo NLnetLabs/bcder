@@ -392,7 +392,7 @@ impl<'a, R> LimitedSource<'a, R> {
     }
 }
 
-impl<'a, R: io::Read> io::Read for LimitedSource<'a, R> {
+impl<R: io::Read> io::Read for LimitedSource<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         if let Some(limit) = self.limit {
             let remaining = match limit.checked_sub(

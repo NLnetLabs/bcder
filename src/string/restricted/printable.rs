@@ -73,7 +73,7 @@ impl CharSetDecoder for PrintableCharSet {
 
 impl CharSetDirectDecoder for PrintableCharSet {
     unsafe fn decode_slice_direct(slice: &[u8]) -> &str {
-        str::from_utf8_unchecked(slice)
+        unsafe { str::from_utf8_unchecked(slice) }
     }
 }
 

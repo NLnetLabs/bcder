@@ -338,7 +338,7 @@ impl<'a, M> OctetStringEncoder<'a, M> {
 }
 
 
-impl<'a, M: Mode> encode::Values<M> for OctetStringEncoder<'a, M> {
+impl<M: Mode> encode::Values<M> for OctetStringEncoder<'_, M> {
     fn encoded_len(&self) -> Length {
         if M::IS_CER {
             self.encoded_len_cer()

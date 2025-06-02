@@ -1,7 +1,8 @@
 [package]
 name = "bcder"
-version = "0.7.6-dev"
+version = "0.8.0-dev"
 edition = "2021"
+rust-version = "1.83"
 authors = ["NLnet Labs <rust-team@nlnetlabs.nl>"]
 description = "Handling of data encoded in BER, CER, and DER."
 documentation = "https://docs.rs/bcder/"

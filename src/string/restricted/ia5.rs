@@ -67,7 +67,7 @@ impl CharSetDecoder for Ia5CharSet {
 
 impl CharSetDirectDecoder for Ia5CharSet {
     unsafe fn decode_slice_direct(slice: &[u8]) -> &str {
-        str::from_utf8_unchecked(slice)
+        unsafe { str::from_utf8_unchecked(slice) }
     }
 }
 

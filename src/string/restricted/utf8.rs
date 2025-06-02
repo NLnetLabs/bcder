@@ -100,7 +100,7 @@ impl CharSetDecoder for Utf8Decoder {
 
 impl CharSetDirectDecoder for Utf8Decoder {
     unsafe fn decode_slice_direct(slice: &[u8]) -> &str {
-        str::from_utf8_unchecked(slice)
+        unsafe { str::from_utf8_unchecked(slice) }
     }
 }
 

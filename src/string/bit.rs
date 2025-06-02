@@ -504,7 +504,7 @@ impl<'a, M> BitStringEncoder<'a, M> {
     }
 }
 
-impl<'a, M: Mode> encode::Values<M> for BitStringEncoder<'a, M> {
+impl<M: Mode> encode::Values<M> for BitStringEncoder<'_, M> {
     fn encoded_len(&self) -> Length {
         if M::IS_CER {
             self.encoded_len_cer()

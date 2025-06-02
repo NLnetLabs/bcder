@@ -59,7 +59,7 @@ impl Integer {
     /// The caller needs to ensure that the byte slice contains a correctly
     /// encoded integer.
     pub unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
-        mem::transmute(slice)
+        unsafe { mem::transmute(slice) }
     }
 
     /// Creates an integer from a boxed slice without checking the encoding.
@@ -69,7 +69,7 @@ impl Integer {
     /// The caller needs to ensure that the byte slice contains a correctly
     /// encoded integer.
     pub unsafe fn from_box_unchecked(src: Box<[u8]>) -> Box<Self> {
-        mem::transmute(src)
+        unsafe { mem::transmute(src) }
     }
 
     /// Creates an integer from a byte slice.
@@ -586,7 +586,7 @@ impl Unsigned {
     /// The caller needs to ensure that the byte slice contains a correctly
     /// encoded unsigned integer.
     pub unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
-        mem::transmute(slice)
+        unsafe { mem::transmute(slice) }
     }
 
     /// Creates an unsigned from a boxed slice without checking the encoding.
@@ -596,7 +596,7 @@ impl Unsigned {
     /// The caller needs to ensure that the byte slice contains a correctly
     /// encoded integer.
     pub unsafe fn from_box_unchecked(src: Box<[u8]>) -> Box<Self> {
-        mem::transmute(src)
+        unsafe { mem::transmute(src) }
     }
 
     /// Creates an unsigned integer from a byte slice.
