@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::{decode, encode};
 use crate::ident::Tag;
 use crate::length::Length;
-use crate::mode::Mode;
+use crate::mode::{Der, Mode};
 
 
 //------------ BitString -----------------------------------------------------
@@ -179,6 +179,17 @@ impl BitString {
         Self::decode_content(cons.decode_value_if(Tag::BIT_STRING)?)
     }
 
+    /// Decodes the next value as an bit string.
+    ///
+    /// If there is no next value, if the next value does not have the tag
+    /// `Tag::BIT_STRING`, or if it doesn’t contain a correctly encoded
+    /// bit string, an error is returned.
+    pub fn decode_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::decode_content_borrowed(cons.decode_value_if(Tag::BIT_STRING)?)
+    }
+
     /// Takes a single bit string value from constructed value content.
     ///
     /// If there is no next value, if the next value does not have the tag
@@ -213,6 +224,24 @@ impl BitString {
             return Ok(None)
         };
         Self::decode_content(content).map(Some)
+    }
+
+    /// Decodes an optional next value as an bit string.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag `Tag::BIT_STRING`, returns `Ok(None)`.
+    ///
+    /// If there is an bit string, but it is not correctly encoded, returns
+    /// an error.
+    pub fn decode_opt_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<Option<&'s Self>, decode::Error> {
+        let Some(content) = cons.decode_opt_value_if(
+            Tag::OCTET_STRING
+        )? else {
+            return Ok(None)
+        };
+        Self::decode_content_borrowed(content).map(Some)
     }
 
     /// Takes an optional bit string value from constructed value content.
@@ -379,6 +408,16 @@ impl BitString {
         let start = value.start();
         Self::from_box(
             value.into_primitive()?.read_all_into_box()?
+        ).map_err(|err| decode::Error::content(err, start))
+    }
+
+    /// Decodes bit string content into a boxed bit string.
+    pub fn decode_content_borrowed<'s>(
+        value: decode::Value<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        let start = value.start();
+        Self::from_slice(
+            value.into_primitive()?.read_all_borrowed()?
         ).map_err(|err| decode::Error::content(err, start))
     }
 

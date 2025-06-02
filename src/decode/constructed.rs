@@ -4,7 +4,7 @@
 //! parent.
 //
 //  XXX TODO: Change reading of end-of-contents to (a) error out in
-//            `next_ident` already in deinite length values and (b) read
+//            `next_ident` already in definite length values and (b) read
 //            the length as a single zero (i.e., as the short form).
 
 use std::{cmp, error, io};

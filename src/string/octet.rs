@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::{decode, encode};
 use crate::ident::Tag;
 use crate::length::Length;
-use crate::mode::Mode;
+use crate::mode::{Der, Mode};
 
 
 //------------ OctetString ---------------------------------------------------
@@ -71,6 +71,19 @@ impl OctetString {
         Self::decode_content(cons.decode_value_if(Tag::OCTET_STRING)?)
     }
 
+    /// Decodes the next value as an octet string.
+    ///
+    /// If there is no next value, if the next value does not have the tag
+    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
+    /// octet string, an error is returned.
+    pub fn decode_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::decode_content_borrowed(
+            cons.decode_value_if(Tag::OCTET_STRING)?
+        )
+    }
+
     /// Takes a single octet string value from constructed value content.
     ///
     /// If there is no next value, if the next value does not have the tag
@@ -105,6 +118,24 @@ impl OctetString {
             return Ok(None)
         };
         Self::decode_content(content).map(Some)
+    }
+
+    /// Decodes an optional next value as an octet string.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag `Tag::OCTET_STRING`, returns `Ok(None)`.
+    ///
+    /// If there is an octet string, but it is not correctly encoded, returns
+    /// an error.
+    pub fn decode_opt_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<Option<&'s Self>, decode::Error> {
+        let Some(content) = cons.decode_opt_value_if(
+            Tag::OCTET_STRING
+        )? else {
+            return Ok(None)
+        };
+        Self::decode_content_borrowed(content).map(Some)
     }
 
     /// Takes an optional octet string value from constructed value content.
@@ -222,6 +253,13 @@ impl OctetString {
         content: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         content.into_primitive()?.read_all_into_box().map(Self::from_box)
+    }
+
+    /// Decodes octet string content into a boxed slice.
+    pub fn decode_content_borrowed<'s>(
+        value: decode::Value<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        value.into_primitive()?.read_all_borrowed().map(Self::from_slice)
     }
 
     /// Returns a value encoder for the octet string using the natural tag.

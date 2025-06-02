@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use crate::{decode, encode};
 use crate::ident::Tag;
-use crate::mode::Mode;
+use crate::mode::{Der, Mode};
 use super::super::octet::OctetStringEncoder;
 use super::charset::{
     CharSet, CharSetDecoder, CharSetDirectDecoder, CharSetDirectEncoder,
@@ -134,6 +134,18 @@ impl<L: CharSet> RestrictedString<L> {
         Self::decode_content(cons.decode_value_if(L::TAG)?)
     }
 
+    /// Decodes the next value as a restricted string.
+    ///
+    /// If there is no next value, if the next value does not have the
+    /// correct tag for this particular variant of a restricted string,
+    /// or if it doesn’t contain a correctly encoded string, an error
+    /// is returned.
+    pub fn decode_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::decode_content_borrowed(cons.decode_value_if(L::TAG)?)
+    }
+
     /// Takes a single restricted string value from constructed value content.
     ///
     /// If there is no next value, if the next value does not have the
@@ -169,6 +181,24 @@ impl<L: CharSet> RestrictedString<L> {
             return Ok(None)
         };
         Self::decode_content(content).map(Some)
+    }
+
+    /// Decodes an optional next value as a restricted string.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag for this variant of restricted string, returns `Ok(None)`.
+    ///
+    /// If there is restricted string, but it is not correctly encoded,
+    /// returns an error.
+    pub fn decode_opt_value_borrowed<'s>(
+        cons: &mut decode::Constructed<Der, &'s [u8]>
+    ) -> Result<Option<&'s Self>, decode::Error> {
+        let Some(content) = cons.decode_opt_value_if(
+            L::TAG
+        )? else {
+            return Ok(None)
+        };
+        Self::decode_content_borrowed(content).map(Some)
     }
 
     /// Takes an optional restricted string from constructed value content.
@@ -317,6 +347,16 @@ impl<L: CharSet> RestrictedString<L> {
         let start = value.start();
         Self::from_box(
             value.into_primitive()?.read_all_into_box()?
+        ).map_err(|err| decode::Error::content(err, start))
+    }
+
+    /// Decodes restricted string content into a boxed restricted string.
+    pub fn decode_content_borrowed<'s>(
+        value: decode::Value<Der, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        let start = value.start();
+        Self::from_slice(
+            value.into_primitive()?.read_all_borrowed()?
         ).map_err(|err| decode::Error::content(err, start))
     }
 
