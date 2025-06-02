@@ -237,7 +237,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     }
 }
 
-impl<'a, 's, M> Primitive<'a, M, &'s [u8]> {
+impl<'s, M> Primitive<'_, M, &'s [u8]> {
     pub fn read_exact_borrowed(
         &mut self, len: usize
     ) -> Result<&'s [u8], Error> {
@@ -411,7 +411,7 @@ impl<'a, R: 'a> PrimitiveSource<'a, R> {
     }
 }
 
-impl<'a, 's> PrimitiveSource<'a, &'s [u8]> {
+impl<'s> PrimitiveSource<'_, &'s [u8]> {
     /// Reads and returns the remainder of the data.
     ///
     /// Returns an error if there are less bytes available than the length of
