@@ -229,7 +229,7 @@ impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
     }
 
     fn cons_next(&mut self) -> Result<PreItem, Error> {
-        let Some((ident, start)) = self.cons.next_opt_ident()? else {
+        let Some((ident, start)) = self.cons.read_opt_ident()? else {
             return Ok(PreItem::EndOfCons)
         };
         let length = LengthOctets::read::<M>(&mut self.cons).map_err(|err| {

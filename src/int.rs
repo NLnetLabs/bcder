@@ -84,69 +84,6 @@ impl Integer {
         Ok(unsafe { Self::from_box_unchecked(src) })
     }
 
-    /// Decodes a single signed integer value.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_value<M: Mode, R: io::Read>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
-    }
-
-    /// Takes a single signed integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    pub fn take_from<M: Mode, R: io::Read>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
-    }
-
-    /// Creates an integer from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
-        mut prim: Primitive<M, R>,
-    ) -> Result<Box<Self>, decode::Error> {
-        let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
-        })?;
-        Self::from_box(prim.read_exact_into_box(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
-        })
-    }
-
-    /// Decodes a single signed integer value borrowing from the source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_value_borrowed<'s, M: Mode>(
-        cons: &mut Constructed<M, &'s [u8]>
-    ) -> Result<&'s Self, decode::Error> {
-        Self::from_primitive_borrowed(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
-    }
-
-    /// Creates an borrowed integer from the content of a primitive value.
-    pub fn from_primitive_borrowed<'s, M>(
-        mut prim: Primitive<M, &'s [u8]>
-    ) -> Result<&'s Self, decode::Error> {
-        let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
-        })?;
-        Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
-        })
-    }
-
     /// Returns a bytes slice with the raw content.
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_ref()
@@ -178,6 +115,87 @@ impl Integer {
     /// Also returns `false` if the number is zero.
     pub fn is_negative(&self) -> bool {
         self.0.first().copied().unwrap_or(0) & 0x80 == 0x80
+    }
+}
+
+/// # Decoding
+impl Integer {
+    /// Decodes the next value as a signed integer value.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
+    pub fn decode_next<M: Mode, R: io::Read>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::from_primitive(
+            cons.next_primitive_with(Tag::INTEGER)?
+        )
+    }
+
+    /// Decodes the next value as a signed integer, borrowing the content.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
+    pub fn decode_value_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_primitive_borrowed(
+            cons.next_primitive_with(Tag::INTEGER)?
+        )
+    }
+
+    /// Creates an integer from the content of a primitive value.
+    pub fn from_primitive<M, R: io::Read>(
+        mut prim: Primitive<M, R>,
+    ) -> Result<Box<Self>, decode::Error> {
+        let len = usize::try_from(prim.remaining()).map_err(|_| {
+            prim.content_err_at_start(OverflowError(()))
+        })?;
+        Self::from_box(prim.read_exact_into_box(len)?).map_err(|err| {
+            prim.content_err_at_start(err)
+        })
+    }
+
+    /// Creates an borrowed integer from the content of a primitive value.
+    pub fn from_primitive_borrowed<'s, M>(
+        mut prim: Primitive<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        let len = usize::try_from(prim.remaining()).map_err(|_| {
+            prim.content_err_at_start(OverflowError(()))
+        })?;
+        Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
+            prim.content_err_at_start(err)
+        })
+    }
+}
+
+
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl Integer {
+    /// Takes a single signed integer from a source.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
+    ///
+    /// This method is the legacy name of [`decode_value`][Self::decode_value]
+    /// and will be deprecated soon.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_next`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::from_primitive(
+            cons.next_primitive_with(Tag::INTEGER)?
+        )
     }
 }
 
@@ -367,30 +385,58 @@ impl<const N: usize> IntegerArray<N> {
         Self(array)
     }
 
-    /// Decodes a single signed integer value.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_value<M: Mode, R: io::Read>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Self, decode::Error> {
-        Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
+    /// Returns the underlying byte array.
+    pub fn to_array(self) -> [u8; N] {
+        self.0
     }
 
-    /// Takes a single signed integer from a source.
+    /// Returns a bytes slice with the raw octets.
+    ///
+    /// The slice will contain the full content, i.e., it will be of length
+    /// `N`.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
+    /// Returns a bytes slice with the encoded value.
+    ///
+    /// This value skips leading “filler” octets and thus may return a slice
+    /// shorter than `N`.
+    pub fn as_encoded_slice(&self) -> &[u8] {
+        let mut slice = self.as_slice();
+        if self.0[0] & 0x80 != 0 {
+            while let Some((&first, tail)) = slice.split_first() {
+                if first != 0xFF {
+                    return slice
+                }
+                slice = tail; 
+            }
+            b"\xFF"
+        }
+        else {
+            while let Some((&first, tail)) = slice.split_first() {
+                if first != 0x00 {
+                    return slice
+                }
+                slice = tail; 
+            }
+            b"\x00"
+        }
+    }
+}
+
+/// # Decoding
+impl<const N: usize> IntegerArray<N> {
+    /// Decodes the next value as a integer.
     ///
     /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    pub fn take_from<M: Mode, R: io::Read>(
+    /// tag `INTEGER` that contains a correctly encoded integer fitting into
+    /// `N` bytes.
+    pub fn decode_next<M: Mode, R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
+            cons.next_primitive_with(Tag::INTEGER)?
         )
     }
 
@@ -434,44 +480,35 @@ impl<const N: usize> IntegerArray<N> {
         }
         Ok(Self(res))
     }
+}
 
-    /// Returns the underlying byte array.
-    pub fn to_array(self) -> [u8; N] {
-        self.0
-    }
 
-    /// Returns a bytes slice with the raw octets.
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl<const N: usize> IntegerArray<N> {
+    /// Takes a single signed integer from a source.
     ///
-    /// The slice will contain the full content, i.e., it will be of length
-    /// `N`.
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-
-    /// Returns a bytes slice with the encoded value.
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
     ///
-    /// This value skips leading “filler” octets and thus may return a slice
-    /// shorter than `N`.
-    pub fn as_encoded_slice(&self) -> &[u8] {
-        let mut slice = self.as_slice();
-        if self.0[0] & 0x80 != 0 {
-            while let Some((&first, tail)) = slice.split_first() {
-                if first != 0xFF {
-                    return slice
-                }
-                slice = tail; 
-            }
-            b"\xFF"
-        }
-        else {
-            while let Some((&first, tail)) = slice.split_first() {
-                if first != 0x00 {
-                    return slice
-                }
-                slice = tail; 
-            }
-            b"\x00"
-        }
+    /// This method is the legacy name of [`decode_value`][Self::decode_value]
+    /// and will be deprecated soon.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_next`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Self, decode::Error> {
+        Self::from_primitive(
+            cons.next_primitive_with(Tag::INTEGER)?
+        )
     }
 }
 
@@ -635,42 +672,49 @@ impl Unsigned {
         Ok(unsafe { Self::from_box_unchecked(src) })
     }
 
-    /// Decodes a single unsigned integer value.
+    /// Returns a bytes slice with the raw content.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
+    /// Converts the unsigned to a signed integer.
+    pub fn as_integer(&self) -> &Integer {
+        unsafe { Integer::from_slice_unchecked(self.as_slice()) }
+    }
+
+    /// Returns whether the number is zero.
+    pub fn is_zero(&self) -> bool {
+        matches!(
+            (self.0.first().copied(), self.0.get(1).copied()),
+            (Some(0), None)
+        )
+    }
+}
+
+
+/// # Decoding
+impl Unsigned {
+    /// Decodes the next value as an unsigned integer.
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
+            cons.next_primitive_with(Tag::INTEGER)?
         )
     }
 
-    /// Decodes a single unsigned integer value.
+    /// Decodes the next value as an unsigned integer, borrowing the content.
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer.
-    pub fn decode_value_borrowed<'s, M: Mode>(
+    pub fn decode_next_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_primitive_borrowed(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
-    }
-
-    /// Takes a single unsigned integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    pub fn take_from<M: Mode, R: io::Read>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
+            cons.next_primitive_with(Tag::INTEGER)?
         )
     }
 
@@ -697,22 +741,33 @@ impl Unsigned {
             prim.content_err_at_start(err)
         })
     }
+}
 
-    /// Returns a bytes slice with the raw content.
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-
-    /// Converts the unsigned to a signed integer.
-    pub fn as_integer(&self) -> &Integer {
-        unsafe { Integer::from_slice_unchecked(self.as_slice()) }
-    }
-
-    /// Returns whether the number is zero.
-    pub fn is_zero(&self) -> bool {
-        matches!(
-            (self.0.first().copied(), self.0.get(1).copied()),
-            (Some(0), None)
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl Unsigned {
+    /// Takes a single unsigned integer from a source.
+    ///
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
+    ///
+    /// This method is the legacy name of [`decode_value`][Self::decode_value]
+    /// and will be deprecated soon.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_next`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::from_primitive(
+            cons.next_primitive_with(Tag::INTEGER)?
         )
     }
 }
@@ -849,30 +904,47 @@ impl<const N: usize> UnsignedArray<N> {
         Self(array)
     }
 
-    /// Decodes a single signed integer value.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_value<M: Mode, R: io::Read>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Self, decode::Error> {
-        Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
-        )
+    /// Returns the underlying byte array.
+    pub fn to_array(self) -> [u8; N] {
+        self.0
     }
 
-    /// Takes a single signed integer from a source.
+    /// Returns a bytes slice with the raw octets.
+    ///
+    /// The slice will contain the full content, i.e., it will be of length
+    /// `N`.
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
+    /// Returns a bytes slice with the encoded value.
+    ///
+    /// The first component of the returned value is whether a zero value
+    /// needs to be added before the second component.
+    pub fn as_encoded_slice(&self) -> (bool, &[u8]) {
+        let mut slice = self.as_slice();
+        while let Some((&first, tail)) = slice.split_first() {
+            if first != 0x00 {
+                return (first & 0x80 != 0, slice)
+            }
+            slice = tail; 
+        }
+        (false, b"\x00")
+    }
+}
+
+/// # Decoding
+impl<const N: usize> UnsignedArray<N> {
+    /// Decodes the next value as an unsigned integer.
     ///
     /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    pub fn take_from<M: Mode, R: io::Read>(
+    /// tag `INTEGER` that contains a correctly encoded unsigned integer that
+    /// fits into `N` bytes.
+    pub fn decode_next<M: Mode, R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
-            cons.decode_primitive_if(Tag::INTEGER)?
+            cons.next_primitive_with(Tag::INTEGER)?
         )
     }
 
@@ -946,33 +1018,35 @@ impl<const N: usize> UnsignedArray<N> {
 
         Ok(Self::from_array(res))
     }
+}
 
-    /// Returns the underlying byte array.
-    pub fn to_array(self) -> [u8; N] {
-        self.0
-    }
 
-    /// Returns a bytes slice with the raw octets.
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl<const N: usize> UnsignedArray<N> {
+    /// Takes a single signed integer from a source.
     ///
-    /// The slice will contain the full content, i.e., it will be of length
-    /// `N`.
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-
-    /// Returns a bytes slice with the encoded value.
+    /// This requires the next value in `cons` to be a primitive value with
+    /// tag `INTEGER` that contains a correctly encoded integer.
     ///
-    /// The first component of the returned value is whether a zero value
-    /// needs to be added before the second component.
-    pub fn as_encoded_slice(&self) -> (bool, &[u8]) {
-        let mut slice = self.as_slice();
-        while let Some((&first, tail)) = slice.split_first() {
-            if first != 0x00 {
-                return (first & 0x80 != 0, slice)
-            }
-            slice = tail; 
-        }
-        (false, b"\x00")
+    /// This method is the legacy name of [`decode_value`][Self::decode_value]
+    /// and will be deprecated soon.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_next`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Self, decode::Error> {
+        Self::from_primitive(
+            cons.next_primitive_with(Tag::INTEGER)?
+        )
     }
 }
 

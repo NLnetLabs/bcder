@@ -4,7 +4,7 @@
 //! parent.
 //
 //  XXX TODO: Change reading of end-of-contents to (a) error out in
-//            `next_ident` already in definite length values and (b) read
+//            `read_ident` already in definite length values and (b) read
 //            the length as a single zero (i.e., as the short form).
 
 use std::{cmp, error, io};
@@ -47,49 +47,45 @@ impl<M, R> Data<M, R> {
 }
 
 impl<M: Mode, R: io::Read> Data<M, R> {
-    /// Process one value of content.
+    /// Starts decoding the next mandatory value.
     ///
-    /// Returns the content of the value. Returns an error if there are no
-    /// more values available.
-    pub fn decode_value(&mut self) -> Result<Value<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        self.next_value(ident, start)
+    /// Returns an error if there are no more values available.
+    pub fn next_value(&mut self) -> Result<Value<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        self.read_value(ident, start)
     }
 
-    /// Processes a value with the given tag.
-    ///
-    /// Returns the content of the next value if it has the tag `expected`.
+    /// Starts decoding an optional next value.
     ///
     /// Returns an error if error if it encounters any other
     /// tag or the end of the content.
-    pub fn decode_value_if(
+    pub fn next_value_with(
         &mut self, expected: Tag,
     ) -> Result<Value<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
                 start
             ))
         }
-        self.next_value(ident, start)
+        self.read_value(ident, start)
     }
 
-    /// Processes a constructed value.
+    /// Starts decoding the next mandatory constructed value.
     ///
-    /// Returns the constructed content if the next value is a constructed
-    /// value. If the next value is not a constructed value or if there is no
-    /// next value, returns an error.
-    pub fn decode_constructed(
+    /// Returns an error if the next value is not a constructed value or if
+    /// there is no next value.
+    pub fn next_constructed(
         &mut self
     ) -> Result<Constructed<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
             return Err(Error::content(
                 "expected constructed value", start
             ))
         }
-        self.next_value(ident, start)?.into_constructed()
+        self.read_value(ident, start)?.into_constructed()
     }
 
     /// Processes a constructed value with a required tag.
@@ -99,11 +95,11 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     ///
     /// If the next value is not constructed or has a different tag, or if
     /// the end of the value has been reached, an error is returned.
-    pub fn decode_constructed_if(
+    pub fn next_constructed_with(
         &mut self,
         expected: Tag,
     ) -> Result<Constructed<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
@@ -115,7 +111,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
                 "expected constructed value", start
             ))
         }
-        self.next_value(ident, start)?.into_constructed()
+        self.read_value(ident, start)?.into_constructed()
     }
 
     /// Decodes a reader as a single constructed value.
@@ -130,7 +126,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
         F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>
     {
         let mut data = Self::new(reader);
-        let res = op(&mut data.decode_constructed()?)?;
+        let res = op(&mut data.next_constructed()?)?;
         data.check_exhausted()?;
         Ok(res)
     }
@@ -158,7 +154,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// Reads the next identifier octets from the source.
     ///
     /// Returns an error if the source has reached its end.
-    fn next_ident(&mut self) -> Result<(Ident, Length), Error> {
+    fn read_ident(&mut self) -> Result<(Ident, Length), Error> {
         let start = self.pos();
         match Ident::read_opt(&mut self.source) {
             Ok(Some(ident)) => Ok((ident, start)),
@@ -175,19 +171,19 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     ///
     /// Reads the length octets and then uses that and `ident` to prepare and
     /// return the next value.
-    fn next_value(
+    fn read_value(
         &mut self, ident: Ident, start: Length
     ) -> Result<Value<M, R>, Error> {
-        self.next_value_io(ident, start).map_err(|err| {
+        self.read_value_io(ident, start).map_err(|err| {
             Error::content(err, start)
         })
     }
 
     /// Prepares the next value.
     ///
-    /// This is the same as `next_value` but produces a raw `io::Error`, so
+    /// This is the same as `read_value` but produces a raw `io::Error`, so
     /// we can use the question mark operator.
-    fn next_value_io(
+    fn read_value_io(
         &mut self, ident: Ident, start: Length
     ) -> Result<Value<M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {
@@ -344,20 +340,20 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 /// public methods.
 ///
 /// Reading is broken up into two steps: First you get the identifier octets
-/// of the next value via [`next_ident`][Self::next_ident] or
-/// [`next_opt_ident`][Self::next_opt_ident] so you can check if you want to
+/// of the next value via [`read_ident`][Self::read_ident] or
+/// [`read_opt_ident`][Self::read_opt_ident] so you can check if you want to
 /// process that value.
 ///
 /// If you like do not want to process the value, you retain the identifer
 /// octets for later via [`keep_ident`][Self::keep_ident].
 ///
-/// If you do want to process the value, [`next_value`][Self::next_value]
+/// If you do want to process the value, [`read_value`][Self::read_value]
 /// produces a [`Value`] for it.
 impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Returns the identifier octets and start position of the next value.
     ///
     /// Returns `Ok(None)` if the end of the value was reached.
-    fn next_opt_ident(
+    fn read_opt_ident(
         &mut self
     ) -> Result<Option<(Ident, Length)>, Error> {
         if let Some(ident) = self.stored_ident.take() {
@@ -378,8 +374,8 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Returns the identifier octets and start position of the next value.
     ///
     /// Returns an error if the end of the value was reached.
-    fn next_ident(&mut self) -> Result<(Ident, Length), Error> {
-        match self.next_opt_ident() {
+    fn read_ident(&mut self) -> Result<(Ident, Length), Error> {
+        match self.read_opt_ident() {
             Ok(Some(some)) => Ok(some),
             Ok(None) => {
                 Err(Error::content(
@@ -392,22 +388,22 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 
     /// Stores the identifier octets and start position.
     ///
-    /// This method must be called when the values retrieved via `next_ident`
+    /// This method must be called when the values retrieved via `read_ident`
     /// aren’t actually used.
     fn keep_ident(&mut self, ident: Ident, start: Length) {
         self.stored_ident = Some((ident, start))
     }
 
     /// Creates the content of the next value.
-    fn next_value(
+    fn read_value(
         &mut self, ident: Ident, start: Length
     ) -> Result<Value<M, R>, Error> {
         match &mut self.inner {
             ConstructedEnum::Definite(inner) => {
-                inner.next_value(ident, start)
+                inner.read_value(ident, start)
             }
             ConstructedEnum::Indefinite(inner) => {
-                inner.next_value(ident, start)
+                inner.read_value(ident, start)
             }
         }.map_err(|err| Error::content(err, start))
     }
@@ -421,253 +417,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     }
 }
 
-
-/// # Processing values
-///
-/// The following methods, all prefixed by `decode_` process values by
-/// returning owned objects to the caller. These objects need to be dropped
-/// before progressing to the next value. Because of this, the `process_`
-/// methods using closures may be more convenient for processing sequences
-/// of values.
+/// # Decoding the complete constructed value
 impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
-    /// Process one value of content.
+    /// Decodes the constructed value as a single nested value.
     ///
-    /// Returns the content of the value. Returns an error if there are no
-    /// more values available.
-    pub fn decode_value(&mut self) -> Result<Value<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        self.next_value(ident, start)
-    }
-
-    /// Process an optional value of content.
-    ///
-    /// If there are no more values, returns `Ok(None)`. Otherwise returns
-    /// the content of the value.
-    pub fn decode_opt_value(
-        &mut self
-    ) -> Result<Option<Value<M, R>>, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        self.next_value(ident, start).map(Some)
-    }
-
-    /// Processes a value with the given tag.
-    ///
-    /// Returns the content of the next value if it has the tag `expected`.
-    ///
-    /// Returns an error if error if it encounters any other tag or the end
-    /// of the content.
-    pub fn decode_value_if(
-        &mut self, expected: Tag,
-    ) -> Result<Value<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        self.next_value(ident, start)
-    }
-
-    /// Processes an optional value with the given tag.
-    ///
-    /// Returns the content of the next value if it has the tag `expected`.
-    /// Returns `Ok(None)` if the next value has a different tag or if the
-    /// end of the content has been reached.
-    pub fn decode_opt_value_if(
-        &mut self, expected: Tag,
-    ) -> Result<Option<Value<M, R>>, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        self.next_value(ident, start).map(Some)
-    }
-
-    /// Processes a constructed value.
-    ///
-    /// Returns the constructed content if the next value is a constructed
-    /// value. If the next value is not a constructed value or if there is no
-    /// next value, returns an error.
-    pub fn decode_constructed(
-        &mut self
-    ) -> Result<Constructed<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        self.next_value(ident, start)?.into_constructed()
-    }
-
-    /// Processes an optional constructed value.
-    ///
-    /// Returns the constructed content if the next value is a constructed
-    /// value. Returns an error if the next value is not constructed.
-    /// Returns `Ok(None)` if the end of the content has been reached.
-    pub fn decode_opt_constructed(
-        &mut self,
-    ) -> Result<Option<Constructed<M, R>>, Error>
-    {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        Ok(Some(self.next_value(ident, start)?.into_constructed()?))
-    }
-
-    /// Processes a constructed value with a required tag.
-    ///
-    /// If the next value is a constructed value with a tag equal to
-    /// `expected`, returns this value’s content.
-    ///
-    /// If the next value is not constructed or has a different tag, or if
-    /// the end of the value has been reached, an error is returned.
-    pub fn decode_constructed_if(
-        &mut self,
-        expected: Tag,
-    ) -> Result<Constructed<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        self.next_value(ident, start)?.into_constructed()
-    }
-
-    /// Processes an optional constructed value if it has a given tag.
-    ///
-    /// If the next value is a constructed value with a tag equal to
-    /// `expected`, its content is returned.
-    ///
-    /// If the next value does not have the expected tag or the end of this
-    /// value has been reached, the method returns `Ok(None)`. If the next
-    /// value is not constructed it returns an error.
-    pub fn decode_opt_constructed_if(
-        &mut self,
-        expected: Tag,
-    ) -> Result<Option<Constructed<M, R>>, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        Ok(Some(self.next_value(ident, start)?.into_constructed()?))
-    }
-
-    /// Processes a primitive value.
-    ///
-    /// If the next value is primitive, its content is returned.
-    ///
-    /// If the next value is not primitive or if the end of value has been
-    /// reached a error is returned.
-    pub fn decode_primitive(
-        &mut self
-    ) -> Result<Primitive<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        self.next_value(ident, start)?.into_primitive()
-    }
-
-    /// Processes an optional primitive value.
-    ///
-    /// If the next value is primitive it content is returned.
-    ///
-    /// If the end of value has been reached, `Ok(None)` is returned.
-    /// If the next value is not primitive, an error is returned.
-    pub fn decode_opt_primitive(
-        &mut self
-    ) -> Result<Option<Primitive<M, R>>, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        Ok(Some(self.next_value(ident, start)?.into_primitive()?))
-    }
-
-    /// Processes a primitive value if it has the right tag.
-    ///
-    /// If the next value is a primitive and its tag matches `expected`,
-    /// returns the content of the next value.
-    ///
-    /// The method returns a malformed error if there is no next value, if the
-    /// next value is not a primitive, if it doesn’t have the right tag.
-    pub fn decode_primitive_if(
-        &mut self, expected: Tag
-    ) -> Result<Primitive<M, R>, Error> {
-        let (ident, start) = self.next_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        self.next_value(ident, start)?.into_primitive()
-    }
-
-    /// Processes an optional primitive value of a given tag.
-    ///
-    /// If the next value is a primitive and its tag matches `expected`, its
-    /// content isreturned.
-    ///
-    /// If the end of this value has been reached or if the value’s tag
-    /// doesn’t match, the method returns `Ok(None)`. If the value is not
-    /// primitive, the method returns an error.
-    pub fn decode_opt_primitive_if(
-        &mut self, expected: Tag
-    ) -> Result<Option<Primitive<M, R>>, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        Ok(Some(self.next_value(ident, start)?.into_primitive()?))
-    }
-
+    /// TODO: explain!
     pub fn decode_nested<C, P>(
         self,
         mut cons_op: C,
@@ -687,6 +441,236 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             }
         }
         Ok(())
+    }
+}
+
+/// # Decoding contained values
+///
+/// The following methods, all prefixed by `decode_` process values by
+/// returning owned objects to the caller. These objects need to be dropped
+/// before progressing to the next value. Because of this, the `process_`
+/// methods using closures may be more convenient for processing sequences
+/// of values.
+impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+    /// Starts decoding the next mandatory value.
+    ///
+    /// Returns an error if there are no more values available.
+    pub fn next_value(&mut self) -> Result<Value<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        self.read_value(ident, start)
+    }
+
+    /// Starts decoding an optional next value.
+    ///
+    /// If there are no more values, returns `Ok(None)`. Otherwise returns
+    /// the content of the value.
+    pub fn next_opt(
+        &mut self
+    ) -> Result<Option<Value<M, R>>, Error> {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        self.read_value(ident, start).map(Some)
+    }
+
+    /// Starts decoding a mandatory next value with a given tag.
+    ///
+    /// Returns an error if there is no next value or if there is a next value
+    /// with a tag other than `expected`.
+    pub fn next_with(
+        &mut self, expected: Tag,
+    ) -> Result<Value<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        if ident.tag() != expected {
+            return Err(Error::content(
+                format!("expected value with tag {expected}"),
+                start
+            ))
+        }
+        self.read_value(ident, start)
+    }
+
+    /// Starts decoding an optional next value with a given tag.
+    ///
+    /// Returns the value if it has the tag `expected`.
+    ///
+    /// Returns `Ok(None)` if the next value has a different tag or if the
+    /// end of the content has been reached.
+    pub fn next_opt_with(
+        &mut self, expected: Tag,
+    ) -> Result<Option<Value<M, R>>, Error> {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        if ident.tag() != expected {
+            self.keep_ident(ident, start);
+            return Ok(None)
+        }
+        self.read_value(ident, start).map(Some)
+    }
+
+    /// Starts decoding a mandatory next constructed value.
+    ///
+    /// If the next value is not a constructed value or if there is no
+    /// next value, returns an error.
+    pub fn next_constructed(
+        &mut self
+    ) -> Result<Constructed<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        if !ident.is_constructed() {
+            return Err(Error::content(
+                "expected constructed value", start
+            ))
+        }
+        self.read_value(ident, start)?.into_constructed()
+    }
+
+    /// Starts decoding an optional next constructed value.
+    ///
+    /// Returns an error if the next value is not constructed.
+    ///
+    /// Returns `Ok(None)` if the end of the content has been reached.
+    pub fn next_opt_constructed(
+        &mut self,
+    ) -> Result<Option<Constructed<M, R>>, Error>
+    {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        if !ident.is_constructed() {
+            return Err(Error::content(
+                "expected constructed value", start
+            ))
+        }
+        Ok(Some(self.read_value(ident, start)?.into_constructed()?))
+    }
+
+    /// Starts decoding a mandatory next constructed value with a given tag.
+    ///
+    /// Returns an error if the next value is not constructed, if it has a
+    /// different tag, or if the end of the content has been reached.
+    pub fn next_constructed_with(
+        &mut self,
+        expected: Tag,
+    ) -> Result<Constructed<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        if ident.tag() != expected {
+            return Err(Error::content(
+                format!("expected value with tag {expected}"),
+                start
+            ))
+        }
+        if !ident.is_constructed() {
+            return Err(Error::content(
+                "expected constructed value", start
+            ))
+        }
+        self.read_value(ident, start)?.into_constructed()
+    }
+
+    /// Starts decoding an optional next constructed value with a given tag.
+    ///
+    /// Returns `Ok(None)` if the next value has a different tag or if the
+    /// end of the contents has been reached.
+    ///
+    /// Returns an error if next value has the right tag but is not
+    /// constructed.
+    pub fn next_opt_constructed_with(
+        &mut self,
+        expected: Tag,
+    ) -> Result<Option<Constructed<M, R>>, Error> {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        if ident.tag() != expected {
+            self.keep_ident(ident, start);
+            return Ok(None)
+        }
+        if !ident.is_constructed() {
+            return Err(Error::content(
+                "expected constructed value", start
+            ))
+        }
+        Ok(Some(self.read_value(ident, start)?.into_constructed()?))
+    }
+
+    /// Starts decoding the next mandatory primitive value.
+    ///
+    /// If the next value is not primitive or if the end of value has been
+    /// reached a error is returned.
+    pub fn next_primitive(
+        &mut self
+    ) -> Result<Primitive<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        if ident.is_constructed() {
+            return Err(Error::content(
+                "expected primitive value", start
+            ))
+        }
+        self.read_value(ident, start)?.into_primitive()
+    }
+
+    /// Starts decoding an optional primitive value.
+    ///
+    /// If the end of value has been reached, `Ok(None)` is returned.
+    /// If the next value is not primitive, an error is returned.
+    pub fn next_opt_primitive(
+        &mut self
+    ) -> Result<Option<Primitive<M, R>>, Error> {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        if ident.is_constructed() {
+            return Err(Error::content(
+                "expected primitive value", start
+            ))
+        }
+        Ok(Some(self.read_value(ident, start)?.into_primitive()?))
+    }
+
+    /// Start decoding a mandatory next primitive value with the given tag.
+    ///
+    /// Returns an error if there is no next value, if the next value is not
+    /// a primitive, if it doesn’t have the expected tag.
+    pub fn next_primitive_with(
+        &mut self, expected: Tag
+    ) -> Result<Primitive<M, R>, Error> {
+        let (ident, start) = self.read_ident()?;
+        if ident.tag() != expected {
+            return Err(Error::content(
+                format!("expected value with tag {expected}"),
+                start
+            ))
+        }
+        if ident.is_constructed() {
+            return Err(Error::content(
+                "expected primitive value", start
+            ))
+        }
+        self.read_value(ident, start)?.into_primitive()
+    }
+
+    /// Starts decoding an optional next primitive value with the given tag.
+    ///
+    /// If the end of this value has been reached or if the value’s tag
+    /// doesn’t match, the method returns `Ok(None)`. If the value is not
+    /// primitive, the method returns an error.
+    pub fn next_opt_primitive_with(
+        &mut self, expected: Tag
+    ) -> Result<Option<Primitive<M, R>>, Error> {
+        let Some((ident, start)) = self.read_opt_ident()? else {
+            return Ok(None)
+        };
+        if ident.tag() != expected {
+            self.keep_ident(ident, start);
+            return Ok(None)
+        }
+        if ident.is_constructed() {
+            return Err(Error::content(
+                "expected primitive value", start
+            ))
+        }
+        Ok(Some(self.read_value(ident, start)?.into_primitive()?))
     }
 }
 
@@ -710,8 +694,8 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// or if reading from the source fails.
     pub fn process_value<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
-        let res = op(self.next_value(ident, start)?)?;
+        let (ident, start) = self.read_ident()?;
+        let res = op(self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -725,14 +709,14 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// If there are no more values available, the method returns `Ok(None)`.
     /// It returns an error if the closure returns one or if reading from
     /// the source fails.
-    pub fn process_opt_value<F, T>(
+    pub fn process_opt<F, T>(
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
-        let res = op(self.next_value(ident, start)?)?;
+        let res = op(self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -748,18 +732,18 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// tag or the end of the value. It will also return an error if the
     /// closure returns an error or doesn’t process the complete values, or
     /// if accessing the underlying source fails.
-    pub fn process_value_if<F, T>(
+    pub fn process_value_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
                 start
             ))
         }
-        let res = op(self.next_value(ident, start)?)?;
+        let res = op(self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -775,18 +759,18 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     ///
     /// It will return an error if the closure fails or doesn’t process the
     /// complete value, or if accessing the underlying source fails.
-    pub fn process_opt_value_if<F, T>(
+    pub fn process_opt_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
             self.keep_ident(ident, start);
             return Ok(None)
         }
-        let res = op(self.next_value(ident, start)?)?;
+        let res = op(self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -804,13 +788,13 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// returns one or if accessing the underlying source fails.
     pub fn process_constructed<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
             return Err(Error::content(
                 "expected constructed value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_constructed()?)?;
+        let res = op(self.read_value(ident, start)?.into_constructed()?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -833,7 +817,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if !ident.is_constructed() {
@@ -841,7 +825,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected constructed value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_constructed()?)?;
+        let res = op(self.read_value(ident, start)?.into_constructed()?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -858,11 +842,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// process the contained value’s content completely, a malformed error
     /// is returned. An error is also returned if the closure returns one or
     /// if accessing the underlying source fails.
-    pub fn process_constructed_if<F, T>(
+    pub fn process_constructed_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
@@ -874,7 +858,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected constructed value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_constructed()?)?;
+        let res = op(self.read_value(ident, start)?.into_constructed()?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -893,11 +877,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// An error is also returned if the closure does not process the
     /// value fully, returns en error or if accessing the underlying source
     /// fails.
-    pub fn process_opt_constructed_if<F, T>(
+    pub fn process_opt_constructed_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
@@ -909,7 +893,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected constructed value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_constructed()?)?;
+        let res = op(self.read_value(ident, start)?.into_constructed()?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -926,13 +910,13 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// the closure returns one or if accessing the underlying source fails.
     pub fn process_primitive<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.is_constructed() {
             return Err(Error::content(
                 "expected primitive value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_primitive()?)?;
+        let res = op(self.read_value(ident, start)?.into_primitive()?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -953,7 +937,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.is_constructed() {
@@ -961,7 +945,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected primitive value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_primitive()?)?;
+        let res = op(self.read_value(ident, start)?.into_primitive()?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -978,11 +962,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// process the contained value’s content completely, a malformed error
     /// is returned. An error is also returned if the closure returns one or
     /// if accessing the underlying source fails.
-    pub fn process_primitive_if<F, T>(
+    pub fn process_primitive_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
@@ -994,7 +978,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected primitive value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_primitive()?)?;
+        let res = op(self.read_value(ident, start)?.into_primitive()?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -1013,11 +997,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// An error is also returned if the closure does not process the
     /// value fully, returns en error or if accessing the underlying source
     /// fails.
-    pub fn process_opt_primitive_if<F, T>(
+    pub fn process_opt_primitive_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
@@ -1029,7 +1013,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 "expected primitive value", start
             ))
         }
-        let res = op(self.next_value(ident, start)?.into_primitive()?)?;
+        let res = op(self.read_value(ident, start)?.into_primitive()?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -1047,7 +1031,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// If the next value is an integer but of a different value, returns
     /// a malformed error.
     pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), Error> {
-        self.process_primitive_if(Tag::INTEGER, |prim| {
+        self.process_primitive_with(Tag::INTEGER, |prim| {
             let start = prim.start();
             let got = u8::from_primitive(prim)?;
             if got != expected {
@@ -1092,8 +1076,8 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Value<M, R>) -> Result<T, Error>,
     {
-        let (ident, start) = self.next_ident()?;
-        let res = op(ident.tag(), &mut self.next_value(ident, start)?)?;
+        let (ident, start) = self.read_ident()?;
+        let res = op(ident.tag(), &mut self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -1112,7 +1096,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_opt_value`"
+            note = "replaced by `process_opt`"
         )
     )]
     pub fn take_opt_value<F, T>(
@@ -1121,10 +1105,10 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Value<M, R>) -> Result<T, Error>,
     {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
-        let res = op(ident.tag(), &mut self.next_value(ident, start)?)?;
+        let res = op(ident.tag(), &mut self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -1143,7 +1127,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_value_if`"
+            note = "replaced by `process_value_with`"
         )
     )]
     pub fn take_value_if<F, T>(
@@ -1152,14 +1136,14 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         op: F
     ) -> Result<T, Error>
     where F: FnOnce(&mut Value<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
                 start
             ))
         }
-        let res = op(&mut self.next_value(ident, start)?)?;
+        let res = op(&mut self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(res)
     }
@@ -1178,7 +1162,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_opt_value_if`"
+            note = "replaced by `process_opt_with`"
         )
     )]
     pub fn take_opt_value_if<F, T>(
@@ -1187,14 +1171,14 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(&mut Value<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
             self.keep_ident(ident, start);
             return Ok(None)
         }
-        let res = op(&mut self.next_value(ident, start)?)?;
+        let res = op(&mut self.read_value(ident, start)?)?;
         self.check_source_status()?;
         Ok(Some(res))
     }
@@ -1220,7 +1204,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Constructed<M, R>) -> Result<T, Error>,
     {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
             return Err(Error::content(
                 "expected constructed value", start
@@ -1228,7 +1212,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         }
         let res = op(
             ident.tag(),
-            &mut self.next_value(ident, start)?.into_constructed()?
+            &mut self.read_value(ident, start)?.into_constructed()?
         )?;
         self.check_source_status()?;
         Ok(res)
@@ -1260,7 +1244,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Constructed<M, R>) -> Result<T, Error>
     {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if !ident.is_constructed() {
@@ -1270,7 +1254,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         }
         let res = op(
             ident.tag(),
-            &mut self.next_value(ident, start)?.into_constructed()?
+            &mut self.read_value(ident, start)?.into_constructed()?
         )?;
         self.check_source_status()?;
         Ok(Some(res))
@@ -1292,7 +1276,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_constructed_if`"
+            note = "replaced by `process_constructed_with`"
         )
     )]
     pub fn take_constructed_if<F, T>(
@@ -1301,7 +1285,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>,
     {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
@@ -1314,7 +1298,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             ))
         }
         let res = op(
-            &mut self.next_value(ident, start)?.into_constructed()?
+            &mut self.read_value(ident, start)?.into_constructed()?
         )?;
         self.check_source_status()?;
         Ok(res)
@@ -1338,7 +1322,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_opt_constructed_if`"
+            note = "replaced by `process_opt_constructed_with`"
         )
     )]
     pub fn take_opt_constructed_if<F, T>(
@@ -1349,7 +1333,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>,
     {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
@@ -1362,7 +1346,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             ))
         }
         let res = op(
-            &mut self.next_value(ident, start)?.into_constructed()?
+            &mut self.read_value(ident, start)?.into_constructed()?
         )?;
         self.check_source_status()?;
         Ok(Some(res))
@@ -1389,7 +1373,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Primitive<M, R>) -> Result<T, Error>,
     {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.is_constructed() {
             return Err(Error::content(
                 "expected primitive value", start
@@ -1397,7 +1381,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         }
         let res = op(
             ident.tag(),
-            &mut self.next_value(ident, start)?.into_primitive()?
+            &mut self.read_value(ident, start)?.into_primitive()?
         )?;
         self.check_source_status()?;
         Ok(res)
@@ -1426,7 +1410,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     where
         F: FnOnce(Tag, &mut Primitive<M, R>) -> Result<T, Error>,
     {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.is_constructed() {
@@ -1436,7 +1420,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         }
         let res = op(
             ident.tag(),
-            &mut self.next_value(ident, start)?.into_primitive()?
+            &mut self.read_value(ident, start)?.into_primitive()?
         )?;
         self.check_source_status()?;
         Ok(Some(res))
@@ -1456,14 +1440,14 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_primitive_if`"
+            note = "replaced by `process_primitive_with`"
         )
     )]
     pub fn take_primitive_if<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(&mut Primitive<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.next_ident()?;
+        let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
                 format!("expected value with tag {expected}"),
@@ -1476,7 +1460,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             ))
         }
         let res = op(
-            &mut self.next_value(ident, start)?.into_primitive()?
+            &mut self.read_value(ident, start)?.into_primitive()?
         )?;
         self.check_source_status()?;
         Ok(res)
@@ -1497,14 +1481,14 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "replaced by `process_opt_primitive_if`"
+            note = "replaced by `process_opt_primitive_with`"
         )
     )]
     pub fn take_opt_primitive_if<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(&mut Primitive<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.next_opt_ident()? else {
+        let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
         if ident.tag() != expected {
@@ -1517,7 +1501,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             ))
         }
         let res = op(
-            &mut self.next_value(ident, start)?.into_primitive()?
+            &mut self.read_value(ident, start)?.into_primitive()?
         )?;
         self.check_source_status()?;
         Ok(Some(res))
@@ -1533,6 +1517,18 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     // skip_all
     // skip_one
 
+    /*
+    /// Skips over an optional next value.
+    pub fn skip_opt<F, E>(
+        &mut self, mut op: F
+    ) -> Result<Option<()>, Error>
+    where
+        F: FnMut(Tag, bool, usize) -> Result<(), E>,
+        E: error::Error
+    {
+    }
+    */
+
     /// Processes and returns a mandatory boolean value.
     #[cfg_attr(
         feature = "mark-deprecated",
@@ -1542,7 +1538,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         )
     )]
     pub fn take_bool(&mut self) -> Result<bool, Error> {
-        self.process_primitive_if(Tag::BOOLEAN, |mut prim| prim.to_bool())
+        self.process_primitive_with(Tag::BOOLEAN, |mut prim| prim.to_bool())
     }
 
     /// Processes and returns an optional boolean value.
@@ -1622,10 +1618,10 @@ pub(super) struct ReadableConstructed<'a, M: Mode, R: io::Read + 'a> {
 }
 
 impl<'a, M: Mode, R: io::Read + 'a> ReadableConstructed<'a, M, R> {
-    pub(super) fn next_opt_ident(
+    pub(super) fn read_opt_ident(
         &mut self
     ) -> Result<Option<(Ident, Length)>, Error> {
-        self.cons.next_opt_ident()
+        self.cons.read_opt_ident()
     }
 
     pub(super) fn pos(&self) -> Length {
@@ -1698,7 +1694,7 @@ impl<'a, R: io::Read + 'a> DefiniteConstructed<'a, R> {
          Ident::read_opt(self)
     }
 
-    fn next_value<M: Mode>(
+    fn read_value<M: Mode>(
         &mut self, ident: Ident, start: Length
     ) -> Result<Value<M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {
@@ -1834,7 +1830,7 @@ impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
         }
     }
 
-    fn next_value<M: Mode>(
+    fn read_value<M: Mode>(
         &mut self, ident: Ident, start: Length
     ) -> Result<Value<M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {

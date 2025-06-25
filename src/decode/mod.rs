@@ -38,6 +38,7 @@
 //! `DecodeError` provides a way to store either of them and is the error
 //! type you will likely encounter the most.
 
+
 pub use self::constructed::{Constructed, Data};
 pub use self::error::Error;
 pub use self::primitive::{FromPrimitive, Primitive};

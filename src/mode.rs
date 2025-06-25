@@ -32,7 +32,7 @@ pub struct Der;
 /// are generic over the particular mode to branch on them which in turn
 /// allows the compiler to remove the unused branches during monomorphization
 /// when a concrete mode is used.
-pub trait Mode {
+pub trait Mode: 'static {
     /// Is this mode CER?
     const IS_CER: bool;
 

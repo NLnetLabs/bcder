@@ -74,9 +74,7 @@ mod ident;
 mod length;
 
 
-/*
 //--- Elaborate documentation
 //
 pub mod guide;
-*/
 

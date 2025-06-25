@@ -128,10 +128,10 @@ impl<L: CharSet> RestrictedString<L> {
     /// correct tag for this particular variant of a restricted string,
     /// or if it doesn’t contain a correctly encoded string, an error
     /// is returned.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::Read>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_content(cons.decode_value_if(L::TAG)?)
+        Self::decode_value(cons.next_with(L::TAG)?)
     }
 
     /// Decodes the next value as a restricted string.
@@ -140,29 +140,10 @@ impl<L: CharSet> RestrictedString<L> {
     /// correct tag for this particular variant of a restricted string,
     /// or if it doesn’t contain a correctly encoded string, an error
     /// is returned.
-    pub fn decode_value_borrowed<'s>(
+    pub fn decode_next_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
-        Self::decode_content_borrowed(cons.decode_value_if(L::TAG)?)
-    }
-
-    /// Takes a single restricted string value from constructed value content.
-    ///
-    /// If there is no next value, if the next value does not have the
-    /// correct tag for this particular variant of a restricted string,
-    /// or if it doesn’t contain a correctly encoded string, an error
-    /// is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_value`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::Read>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_value(cons)
+        Self::decode_value_borrowed(cons.next_with(L::TAG)?)
     }
 
     /// Decodes an optional next value as a restricted string.
@@ -172,15 +153,15 @@ impl<L: CharSet> RestrictedString<L> {
     ///
     /// If there is restricted string, but it is not correctly encoded,
     /// returns an error.
-    pub fn decode_opt_value<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::Read>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
-        let Some(content) = cons.decode_opt_value_if(
+        let Some(content) = cons.next_opt_with(
             L::TAG
         )? else {
             return Ok(None)
         };
-        Self::decode_content(content).map(Some)
+        Self::decode_value(content).map(Some)
     }
 
     /// Decodes an optional next value as a restricted string.
@@ -190,54 +171,34 @@ impl<L: CharSet> RestrictedString<L> {
     ///
     /// If there is restricted string, but it is not correctly encoded,
     /// returns an error.
-    pub fn decode_opt_value_borrowed<'s>(
+    pub fn decode_opt_next_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<Option<&'s Self>, decode::Error> {
-        let Some(content) = cons.decode_opt_value_if(
+        let Some(content) = cons.next_opt_with(
             L::TAG
         )? else {
             return Ok(None)
         };
-        Self::decode_content_borrowed(content).map(Some)
-    }
-
-    /// Takes an optional restricted string from constructed value content.
-    ///
-    /// If there is no next value, or if the next value does not have the
-    /// tag for this variant of restricted string, returns `Ok(None)`.
-    ///
-    /// If there is a restricted string, but it is not correctly encoded, an
-    /// error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_opt_value`"
-        )
-    )]
-    pub fn take_opt_value<M: Mode, R: io::Read>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Option<Box<Self>>, decode::Error> {
-        Self::decode_opt_value(cons)
+        Self::decode_value_borrowed(content).map(Some)
     }
 
     /// Decodes restricted string content into a boxed restricted string.
-    pub fn decode_content<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::Read>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         if M::IS_DER {
-            Self::decode_content_der(value)
+            Self::decode_value_der(value)
         }
         else if M::IS_CER {
-            Self::decode_content_cer(value)
+            Self::decode_value_cer(value)
         }
         else {
-            Self::decode_content_ber(value)
+            Self::decode_value_ber(value)
         }
     }
 
     /// Decodes content in BER mode.
-    fn decode_content_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::Read>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let start = value.start();
@@ -289,14 +250,14 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes content in CER mode.
-    fn decode_content_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::Read>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut cons = value.into_constructed()?;
         let mut res = Vec::new();
         let mut decoder = L::Decoder::default();
         let mut start = cons.pos();
-        while let Some(mut prim) = cons.decode_opt_primitive_if(
+        while let Some(mut prim) = cons.next_opt_primitive_with(
             Tag::OCTET_STRING
         )? {
             // The collected data must be a multiple of 1000.
@@ -341,7 +302,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes content in DER mode.
-    fn decode_content_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::Read>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let start = value.start();
@@ -351,7 +312,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes restricted string content into a boxed restricted string.
-    pub fn decode_content_borrowed<'s>(
+    pub fn decode_value_borrowed<'s>(
         value: decode::Value<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         let start = value.start();
@@ -371,6 +332,52 @@ impl<L: CharSet> RestrictedString<L> {
         &'a self, tag: Tag,
     ) -> impl encode::Values<M> + 'a {
         OctetStringEncoder::new(tag, self.as_slice())
+    }
+}
+
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl<L: CharSet> RestrictedString<L> {
+    /// Takes a single restricted string value from constructed value content.
+    ///
+    /// If there is no next value, if the next value does not have the
+    /// correct tag for this particular variant of a restricted string,
+    /// or if it doesn’t contain a correctly encoded string, an error
+    /// is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_value`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::decode_next(cons)
+    }
+
+    /// Takes an optional restricted string from constructed value content.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag for this variant of restricted string, returns `Ok(None)`.
+    ///
+    /// If there is a restricted string, but it is not correctly encoded, an
+    /// error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_opt_value`"
+        )
+    )]
+    pub fn take_opt_value<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Option<Box<Self>>, decode::Error> {
+        Self::decode_opt_next(cons)
     }
 }
 

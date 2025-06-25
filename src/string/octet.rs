@@ -65,10 +65,10 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::Read>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_content(cons.decode_value_if(Tag::OCTET_STRING)?)
+        Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
     }
 
     /// Decodes the next value as an octet string.
@@ -76,30 +76,12 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_value_borrowed<'s>(
+    pub fn decode_next_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
-        Self::decode_content_borrowed(
-            cons.decode_value_if(Tag::OCTET_STRING)?
+        Self::decode_value_borrowed(
+            cons.next_with(Tag::OCTET_STRING)?
         )
-    }
-
-    /// Takes a single octet string value from constructed value content.
-    ///
-    /// If there is no next value, if the next value does not have the tag
-    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
-    /// octet string, a malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_value`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::Read>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_value(cons)
     }
 
     /// Decodes an optional next value as an octet string.
@@ -109,15 +91,15 @@ impl OctetString {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_value<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::Read>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
-        let Some(content) = cons.decode_opt_value_if(
+        let Some(content) = cons.next_opt_with(
             Tag::OCTET_STRING
         )? else {
             return Ok(None)
         };
-        Self::decode_content(content).map(Some)
+        Self::decode_value(content).map(Some)
     }
 
     /// Decodes an optional next value as an octet string.
@@ -127,54 +109,34 @@ impl OctetString {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_value_borrowed<'s>(
+    pub fn decode_opt_next_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<Option<&'s Self>, decode::Error> {
-        let Some(content) = cons.decode_opt_value_if(
+        let Some(content) = cons.next_opt_with(
             Tag::OCTET_STRING
         )? else {
             return Ok(None)
         };
-        Self::decode_content_borrowed(content).map(Some)
-    }
-
-    /// Takes an optional octet string value from constructed value content.
-    ///
-    /// If there is no next value, or if the next value does not have the
-    /// tag `Tag::OCTET_STRING`, then `Ok(None)` is returned.
-    ///
-    /// If there is an octet string, but it is not correctly encoded, a
-    /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_opt_value`"
-        )
-    )]
-    pub fn take_opt_value<M: Mode, R: io::Read>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Option<Box<Self>>, decode::Error> {
-        Self::decode_opt_value(cons)
+        Self::decode_value_borrowed(content).map(Some)
     }
 
     /// Decodes octet string content into a boxed slice.
-    pub fn decode_content<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::Read>(
         cons: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         if M::IS_DER {
-            Self::decode_content_der(cons)
+            Self::decode_value_der(cons)
         }
         else if M::IS_CER {
-            Self::decode_content_cer(cons)
+            Self::decode_value_cer(cons)
         }
         else {
-            Self::decode_content_ber(cons)
+            Self::decode_value_ber(cons)
         }
     }
 
     /// Decodes octet string content in BER mode.
-    fn decode_content_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::Read>(
         cont: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut target = Vec::new();
@@ -208,13 +170,13 @@ impl OctetString {
         Ok(Self::from_box(target.into_boxed_slice()))
     }
 
-    fn decode_content_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::Read>(
         content: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut cons = content.into_constructed()?;
         let mut res = Vec::new();
         let mut start = cons.pos();
-        while let Some(mut prim) = cons.decode_opt_primitive_if(
+        while let Some(mut prim) = cons.next_opt_primitive_with(
             Tag::OCTET_STRING
         )? {
             // The collected data must be a multiple of 1000.
@@ -249,14 +211,14 @@ impl OctetString {
         Ok(Self::from_box(res.into_boxed_slice()))
     }
 
-    fn decode_content_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::Read>(
         content: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         content.into_primitive()?.read_all_into_box().map(Self::from_box)
     }
 
     /// Decodes octet string content into a boxed slice.
-    pub fn decode_content_borrowed<'s>(
+    pub fn decode_value_borrowed<'s>(
         value: decode::Value<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         value.into_primitive()?.read_all_borrowed().map(Self::from_slice)
@@ -273,6 +235,51 @@ impl OctetString {
         &'a self, tag: Tag,
     ) -> impl encode::Values<M> + 'a {
         OctetStringEncoder::new(tag, self.as_slice())
+    }
+}
+
+/// # Decoding (Legacy version)
+///
+/// The following contains the decoding functions with the names used in
+/// previous versions of the crate. They are provied here for easier
+/// transition and should be considered as deprecated.
+impl OctetString {
+    /// Takes a single octet string value from constructed value content.
+    ///
+    /// If there is no next value, if the next value does not have the tag
+    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
+    /// octet string, a malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_value`"
+        )
+    )]
+    pub fn take_from<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::decode_next(cons)
+    }
+
+    /// Takes an optional octet string value from constructed value content.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag `Tag::OCTET_STRING`, then `Ok(None)` is returned.
+    ///
+    /// If there is an octet string, but it is not correctly encoded, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `decode_opt_value`"
+        )
+    )]
+    pub fn take_opt_value<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Option<Box<Self>>, decode::Error> {
+        Self::decode_opt_next(cons)
     }
 }
 

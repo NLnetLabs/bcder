@@ -26,29 +26,29 @@ fn short_reads() {
 
     // Check short read on a primitive.
     let mut data = decode_ber(&ber);
-    let mut cons = data.decode_value().unwrap()
+    let mut cons = data.next_value().unwrap()
         .into_constructed().unwrap();
     {
-        let mut prim = cons.decode_value().unwrap()
+        let mut prim = cons.next_value().unwrap()
             .into_primitive().unwrap();
         assert_eq!(
             prim.read_exact_into_box(2).unwrap().as_ref(), b"fo".as_ref()
         );
     }
-    assert!(cons.decode_value().is_err());
+    assert!(cons.next_value().is_err());
 
     // Check short read on a definite constructed.
     let mut data = decode_ber(&ber);
     {
-        let mut cons = data.decode_value().unwrap()
+        let mut cons = data.next_value().unwrap()
             .into_constructed().unwrap();
         assert_eq!(
-            cons.decode_value().unwrap().into_primitive().unwrap()
+            cons.next_value().unwrap().into_primitive().unwrap()
                 .read_all_into_box().unwrap().as_ref(),
             b"foo"
         );
     }
-    assert!(data.decode_value().is_err());
+    assert!(data.next_value().is_err());
 
     // Check short read on an indefinite constructed.
     let ber = prepare_ber((
@@ -60,14 +60,14 @@ fn short_reads() {
     ));
     let mut data = decode_ber(&ber);
     {
-        let mut cons = data.decode_value().unwrap()
+        let mut cons = data.next_value().unwrap()
             .into_constructed().unwrap();
         assert_eq!(
-            cons.decode_value().unwrap().into_primitive().unwrap()
+            cons.next_value().unwrap().into_primitive().unwrap()
                 .read_all_into_box().unwrap().as_ref(),
             b"foo"
         );
     }
-    assert!(data.decode_value().is_err());
+    assert!(data.next_value().is_err());
 }
 

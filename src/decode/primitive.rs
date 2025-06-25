@@ -512,14 +512,14 @@ pub trait FromPrimitive<M>: Sized {
         cons: &mut Constructed<M, R>
     ) -> Result<Self, Error>
     where M: Mode {
-        cons.process_primitive_if(Self::TAG, Self::from_primitive)
+        cons.process_primitive_with(Self::TAG, Self::from_primitive)
     }
 
     fn decode_opt_value<R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Self>, Error>
     where M: Mode {
-        cons.process_opt_primitive_if(Self::TAG, Self::from_primitive)
+        cons.process_opt_primitive_with(Self::TAG, Self::from_primitive)
     }
 }
 
