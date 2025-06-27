@@ -508,14 +508,14 @@ pub trait FromPrimitive<M>: Sized {
         primitive: Primitive<M, R>
     ) -> Result<Self, Error>;
 
-    fn decode_value<R: io::Read>(
+    fn decode_next<R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, Error>
     where M: Mode {
         cons.process_primitive_with(Self::TAG, Self::from_primitive)
     }
 
-    fn decode_opt_value<R: io::Read>(
+    fn decode_opt_next<R: io::Read>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Self>, Error>
     where M: Mode {

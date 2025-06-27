@@ -3,6 +3,7 @@
 use std::{io, mem};
 use std::marker::PhantomData;
 use crate::{decode, encode};
+use crate::decode::NestedItem;
 use crate::ident::Tag;
 use crate::length::Length;
 use crate::mode::{Der, Mode};
@@ -142,18 +143,18 @@ impl OctetString {
         let mut target = Vec::new();
         match cont {
             decode::Value::Constructed(cons) => {
-                cons.decode_nested(
-                    |tag, pos, _| {
-                        if tag != Tag::OCTET_STRING {
+                cons.process_nested(|item| match item {
+                    NestedItem::Constructed(cons) =>  {
+                        if cons.tag != Tag::OCTET_STRING {
                             Err(decode::Error::content(
-                                "expected OCTET STRING", pos
+                                "expected OCTET STRING", cons.start
                             ))
                         }
                         else {
                             Ok(())
                         }
-                    },
-                    |mut prim| {
+                    }
+                    NestedItem::Primitive(mut prim) => {
                         if prim.tag() != Tag::OCTET_STRING {
                             return Err(decode::Error::content(
                                 "expected OCTET STRING", prim.pos()
@@ -161,7 +162,7 @@ impl OctetString {
                         }
                         prim.read_all_to_vec(&mut target)
                     }
-                )?;
+                })?;
             }
             decode::Value::Primitive(mut prim) => {
                 prim.read_all_to_vec(&mut target)?

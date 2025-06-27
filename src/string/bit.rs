@@ -3,6 +3,7 @@
 use std::{error, fmt, io, mem};
 use std::marker::PhantomData;
 use crate::{decode, encode};
+use crate::decode::NestedItem;
 use crate::ident::Tag;
 use crate::length::Length;
 use crate::mode::{Der, Mode};
@@ -248,51 +249,53 @@ impl BitString {
         match value {
             decode::Value::Constructed(cons) => {
                 let mut res = vec![0u8];
-                cons.decode_nested(
-                    |tag, pos, _| {
-                        if tag != Tag::BIT_STRING {
-                            Err(decode::Error::content(
-                                "expected BIT STRING", pos
-                            ))
-                        }
-                        else {
-                            Ok(())
-                        }
-                    },
-                    |mut prim| {
-                        if prim.tag() != Tag::BIT_STRING {
-                            return Err(decode::Error::content(
-                                "expected BIT STRING", prim.start()
-                            ))
-                        }
+                cons.process_nested(|item| {
+                    match item {
+                        NestedItem::Constructed(cons) => {
+                            if cons.tag != Tag::BIT_STRING {
+                                Err(decode::Error::content(
+                                    "expected BIT STRING", cons.start
+                                ))
+                            }
+                            else {
+                                Ok(())
+                            }
+                        },
+                        NestedItem::Primitive(mut prim) => {
+                            if prim.tag() != Tag::BIT_STRING {
+                                return Err(decode::Error::content(
+                                    "expected BIT STRING", prim.start()
+                                ))
+                            }
 
-                        // The unused bits of the collected data must be
-                        // zero -- only the last one is allowed to not be.
-                        //
-                        // Safety: there is always at least one byte.
-                        #[allow(clippy::indexing_slicing)]
-                        if res[0] != 0 {
-                            return Err(decode::Error::content(
-                                "intermediary with unused bits in BER \
-                                 bit string",
-                                 prim.start()
-                            ))
+                            // The unused bits of the collected data must be
+                            // zero -- only the last one is allowed to not be.
+                            //
+                            // Safety: there is always at least one byte.
+                            #[allow(clippy::indexing_slicing)]
+                            if res[0] != 0 {
+                                return Err(decode::Error::content(
+                                    "intermediary with unused bits in BER \
+                                     bit string",
+                                     prim.start()
+                                ))
+                            }
+
+                            // Read the first byte into the unused bits field.
+                            //
+                            // Safety: there is always at least one byte.
+                            #[allow(clippy::indexing_slicing)]
+                            prim.read_exact(&mut res[..1])?;
+
+                            // Append the rest to the vec.
+                            prim.read_all_to_vec(&mut res)?;
+
+                            Self::check_slice(&res).map_err(|err| {
+                                decode::Error::content(err, prim.start())
+                            })
                         }
-
-                        // Read the first byte into the unused bits field.
-                        //
-                        // Safety: there is always at least one byte.
-                        #[allow(clippy::indexing_slicing)]
-                        prim.read_exact(&mut res[..1])?;
-
-                        // Append the rest to the vec.
-                        prim.read_all_to_vec(&mut res)?;
-
-                        Self::check_slice(&res).map_err(|err| {
-                            decode::Error::content(err, prim.start())
-                        })
                     }
-                )?;
+                })?;
                 Ok(unsafe {
                     Self::from_box_unchecked(res.into_boxed_slice())
                 })

@@ -27,16 +27,17 @@ impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
     }
 
     pub fn next_item(&mut self) -> Result<Option<NestedItem<M, R>>, Error> {
-        // Take the top off the stack. We’ll put it back if haven’t reached
+        // Take the top off the stack. We’ll put it back if we haven’t reached
         // the end of that value yet.
         while let Some(item) = self.stack.pop() {
             match self.stack_next(item)? {
                 PreItem::Cons { tag, start, length, stack } => {
                     self.stack.push(item);
                     self.stack.push(stack);
-                    return Ok(Some(NestedItem::Constructed {
-                        tag, start, length
-                    }))
+                    return Ok(Some(NestedItem::Constructed(ConstructedInfo {
+                        tag, start, length,
+                        depth: self.stack.len() + 1,
+                    })))
                 }
                 PreItem::Prim { tag, start, limit } => {
                     self.stack.push(item);
@@ -55,9 +56,10 @@ impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
         match self.cons_next()? {
             PreItem::Cons { tag, start, length, stack } => {
                 self.stack.push(stack);
-                Ok(Some(NestedItem::Constructed {
-                    tag, start, length
-                }))
+                Ok(Some(NestedItem::Constructed(ConstructedInfo {
+                    tag, start, length,
+                    depth: 0
+                })))
             }
             PreItem::Prim { tag, start, limit } => {
                 Ok(Some(NestedItem::Primitive(Primitive::new(
@@ -290,7 +292,7 @@ impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
 }
 
 
-//------------ NestedItem ----------------------------------------------------
+//------------ PreItem -------------------------------------------------------
 
 enum PreItem {
     Cons {
@@ -311,12 +313,21 @@ enum PreItem {
 //------------ NestedItem ----------------------------------------------------
 
 pub enum NestedItem<'a, M, R> {
-    Constructed {
-        tag: Tag,
-        start: Length,
-        length: Option<Length>,
-    },
+    Constructed(ConstructedInfo),
     Primitive(Primitive<'a, M, R>),
+}
+
+// XXX Provide convenience functions for tag etc.
+
+
+//------------ ConstructedInfo -----------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+pub struct ConstructedInfo {
+    pub tag: Tag,
+    pub start: Length,
+    pub length: Option<Length>,
+    pub depth: usize,
 }
 
 
@@ -334,6 +345,10 @@ impl Stack {
 
     fn pop(&mut self) -> Option<StackItem> {
         self.items.pop()
+    }
+
+    fn len(&self) -> usize {
+        self.items.len()
     }
 }
 

@@ -9,6 +9,7 @@ use crate::length::Length;
 use crate::mode::Mode;
 use super::constructed::Constructed;
 use super::error::Error;
+use super::nested::NestedItem;
 use super::primitive::Primitive;
 
 
@@ -104,6 +105,38 @@ impl<'a, M: Mode, R: io::Read + 'a> Value<'a, M, R> {
         match self {
             Value::Primitive(inner) => inner.tag(),
             Value::Constructed(inner) => inner.tag(),
+        }
+    }
+
+    pub fn skip<F>(
+        self, mut op: F
+    ) -> Result<(), Error> 
+    where
+        R: io::BufRead,
+        F: FnMut(Tag, bool, usize) -> Result<(), Error>,
+    {
+        match self {
+            Value::Primitive(prim) => {
+                op(prim.tag(), false, 0)?;
+                prim.skip_all()?;
+                Ok(())
+            }
+            Value::Constructed(cons) => {
+                let mut depth = 0;
+                cons.process_nested(|item| {
+                    match item {
+                        NestedItem::Constructed(cons) => {
+                            depth = cons.depth;
+                            op(cons.tag, true, cons.depth)
+                        },
+                        NestedItem::Primitive(prim) => {
+                            op(prim.tag(), false, depth + 1)?;
+                            prim.skip_all()
+                        }
+                    }
+                })?;
+                Ok(())
+            }
         }
     }
 }

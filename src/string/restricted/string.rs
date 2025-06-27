@@ -3,6 +3,7 @@ use std::{io, mem};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use crate::{decode, encode};
+use crate::decode::NestedItem;
 use crate::ident::Tag;
 use crate::mode::{Der, Mode};
 use super::super::octet::OctetStringEncoder;
@@ -206,18 +207,18 @@ impl<L: CharSet> RestrictedString<L> {
             decode::Value::Constructed(cons) => {
                 let mut res = Vec::new();
                 let mut decoder = L::Decoder::default();
-                cons.decode_nested(
-                    |tag, pos, _| {
-                        if tag != Tag::OCTET_STRING {
+                cons.process_nested(|item| match item {
+                    NestedItem::Constructed(cons) => {
+                        if cons.tag != Tag::OCTET_STRING {
                             Err(decode::Error::content(
-                                "expected OCTET STRING", pos
+                                "expected OCTET STRING", cons.start
                             ))
                         }
                         else {
                             Ok(())
                         }
-                    },
-                    |mut prim| {
+                    }
+                    NestedItem::Primitive(mut prim) => {
                         if prim.tag() != Tag::OCTET_STRING {
                             return Err(decode::Error::content(
                                 "expected OCTET STRING", prim.start()
@@ -233,7 +234,7 @@ impl<L: CharSet> RestrictedString<L> {
                             decode::Error::content(err, prim.start())
                         })
                     }
-                )?;
+                })?;
                 decoder.check_final().map_err(|err| {
                     decode::Error::content(err, start)
                 })?;

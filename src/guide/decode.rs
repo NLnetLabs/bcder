@@ -41,8 +41,9 @@
 //! }
 //! ```
 //!
-//! By convention, the decoder function is called `take_from`. It looks like
-//! this:
+//! Typically, decoding happens by taking the next value from a constructed
+//! value which, by convention, is done through an associated function called
+//! `decode_next`. It looks like this:
 //!
 //! ```
 //! use std::io;

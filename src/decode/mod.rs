@@ -41,6 +41,7 @@
 
 pub use self::constructed::{Constructed, Data};
 pub use self::error::Error;
+pub use self::nested::{ConstructedInfo, NestedItem};
 pub use self::primitive::{FromPrimitive, Primitive};
 pub use self::value::Value;
 pub(crate) use self::source::read_u8;

@@ -422,23 +422,16 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Decodes the constructed value as a single nested value.
     ///
     /// TODO: explain!
-    pub fn decode_nested<C, P>(
+    pub fn process_nested<F>(
         self,
-        mut cons_op: C,
-        mut prim_op: P,
+        mut op: F,
     ) -> Result<(), Error>
     where
-        C: FnMut(Tag, Length, Option<Length>) -> Result<(), Error>,
-        P: FnMut(Primitive<M, R>) -> Result<(), Error>,
+        F: FnMut(NestedItem<M, R>) -> Result<(), Error>,
     {
         let mut iter = NestedIter::new(self);
         while let Some(item) = iter.next_item()? {
-            match item {
-                NestedItem::Constructed { tag, start, length } => {
-                    cons_op(tag, start, length)?;
-                }
-                NestedItem::Primitive(prim) => prim_op(prim)?,
-            }
+            op(item)?;
         }
         Ok(())
     }
@@ -671,6 +664,65 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
             ))
         }
         Ok(Some(self.read_value(ident, start)?.into_primitive()?))
+    }
+}
+
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
+    /// Skips the next value.
+    ///
+    /// The closure `op` determines whether the next value is valid. It will
+    /// be called for every encountered value, which for nested constructed
+    /// values can be multiple times. Each time it gets passed the tag,
+    /// whether the value is constructed, and the depth starting at zero for
+    /// the outermost value. It should return an error if the value cannot
+    /// be accepted.
+    ///
+    /// The method will return `Ok(Some(()))` if it successfully skipped a
+    /// value or an error if there were errors or `op` returned an error./
+    pub fn skip_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+        &mut self, op: F
+    ) -> Result<(), Error> {
+        self.next_value()?.skip(op)
+    }
+
+    /// Skips over a next optional value.
+    ///
+    /// Returns `Ok(None)` if there are no more values. Otherwise, the
+    /// closure `op` determines whether the next value is valid. It will
+    /// be called for every encountered value, which for nested constructed
+    /// values can be multiple times. Each time it gets passed the tag,
+    /// whether the value is constructed, and the depth starting at zero for
+    /// the outermost value. It should return an error if the value cannot
+    /// be accepted.
+    ///
+    /// The method will return `Ok(Some(()))` if it successfully skipped a
+    /// value or an error if there were errors or `op` returned an error.
+    pub fn skip_opt_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+        &mut self, op: F
+    ) -> Result<Option<()>, Error> {
+        match self.next_opt()? {
+            Some(value) => {
+                value.skip(op)?;
+                Ok(Some(()))
+            }
+            None => Ok(None)
+        }
+    }
+
+    /// Skips over the next value no matter its content.
+    pub fn skip_any_next(&mut self) -> Result<(), Error> {
+        self.skip_next(|_, _, _| Ok(()))
+    }
+
+    /// Skips over an optional next value no matter its content.
+    pub fn skip_any_opt_next(&mut self) -> Result<Option<()>, Error> {
+        self.skip_opt_next(|_, _, _| Ok(()))
+    }
+
+    /// Skips over all remaining values.
+    pub fn skip_all(&mut self) -> Result<(), Error> {
+        while self.skip_any_opt_next()?.is_some() { }
+        Ok(())
     }
 }
 
@@ -1044,6 +1096,76 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
                 Ok(())
             }
         })
+    }
+
+    /// Skips over an optional INTEGER if it has the given value.
+    ///
+    /// Returns `Ok(Some(()))` if the next value was an integer with the
+    /// expected value.
+    /// Returns `Ok(None)` if the end of the constructed value was reached or
+    /// if the next value did not have a tag of INTEGER.
+    /// Returns an error if the next value was an integer of a different value
+    /// or an integer with an illegal encoding.
+    pub fn skip_opt_u8_if(
+        &mut self, expected: u8
+    ) -> Result<Option<()>, Error> {
+        self.process_opt_primitive_with(Tag::INTEGER, |prim| {
+            let start = prim.start();
+            let got = u8::from_primitive(prim)?;
+            if got != expected {
+                Err(Error::content(
+                    format!("expected integer {expected}"),
+                    start
+                ))
+            }
+            else {
+                Ok(())
+            }
+        })
+    }
+
+    /// Processes a mandatory SEQUENCE value.
+    ///
+    /// This is a shortcut for
+    /// `self.process_constructed_with(Tag::SEQUENCE, op)`.
+    pub fn process_sequence<F, T>(
+        &mut self, op: F,
+    ) -> Result<T, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.process_constructed_with(Tag::SEQUENCE, op)
+    }
+
+    /// Processes an optional SEQUENCE value.
+    ///
+    /// This is a shortcut for
+    /// `self.process_opt_constructed_with(Tag::SEQUENCE, op)`.
+    pub fn process_opt_sequence<F, T>(
+        &mut self, op: F,
+    ) -> Result<Option<T>, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.process_opt_constructed_with(Tag::SEQUENCE, op)
+    }
+
+    /// Processes a mandatory SET value.
+    ///
+    /// This is a shortcut for
+    /// `self.process_constructed_with(Tag::SET, op)`.
+    pub fn process_set<F, T>(
+        &mut self, op: F,
+    ) -> Result<T, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.process_constructed_with(Tag::SET, op)
+    }
+
+    /// Processes an optional SET value.
+    ///
+    /// This is a shortcut for
+    /// `self.process_opt_constructed_with(Tag::SET^, op)`.
+    pub fn process_opt_set<F, T>(
+        &mut self, op: F,
+    ) -> Result<Option<T>, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.process_opt_constructed_with(Tag::SET, op)
     }
 }
 
@@ -1507,38 +1629,56 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         Ok(Some(res))
     }
 
+    /// Skips over an optional next value.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `skip_opt_next`"
+        )
+    )]
+    pub fn skip_opt<F>(
+        &mut self, op: F
+    ) -> Result<Option<()>, Error>
+    where
+        R: io::BufRead,
+        F: FnMut(Tag, bool, usize) -> Result<(), Error>,
+    {
+        self.skip_opt_next(op)
+    }
+
+    /// Attempts to skip over the next value.
+    ///
+    /// If there is a next value, returns `Ok(Some(()))`, if the end of value
+    /// has already been reached, returns `Ok(None)`.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "renamed to `skip_any_opt_next?"
+        )
+    )]
+    pub fn skip_one(&mut self) -> Result<Option<()>, Error>
+    where R: io::BufRead {
+        self.skip_any_opt_next()
+    }
+
     // XXX More:
     //
     // capture
     // capture_one
     // capture_all
-    // skip_opt
-    // skip
-    // skip_all
-    // skip_one
-
-    /*
-    /// Skips over an optional next value.
-    pub fn skip_opt<F, E>(
-        &mut self, mut op: F
-    ) -> Result<Option<()>, Error>
-    where
-        F: FnMut(Tag, bool, usize) -> Result<(), E>,
-        E: error::Error
-    {
-    }
-    */
 
     /// Processes and returns a mandatory boolean value.
     #[cfg_attr(
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `bool::decode_value` instead"
+            note = "use `bool::decode_next` instead"
         )
     )]
     pub fn take_bool(&mut self) -> Result<bool, Error> {
-        self.process_primitive_with(Tag::BOOLEAN, |mut prim| prim.to_bool())
+        bool::decode_next(self)
     }
 
     /// Processes and returns an optional boolean value.
@@ -1546,13 +1686,13 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `bool::decode_opt_value` instead"
+            note = "use `bool::decode_opt_next` instead"
         )
     )]
     pub fn take_opt_bool(
         &mut self,
     ) -> Result<Option<bool>, Error> {
-        bool::decode_opt_value(self)
+        bool::decode_opt_next(self)
     }
 
     /// Processes a mandatory NULL value.
@@ -1560,11 +1700,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `<()>::decode_value` instead"
+            note = "use `<()>::decode_next` instead"
         )
     )]
     pub fn take_null(&mut self) -> Result<(), Error> {
-        <()>::decode_value(self)
+        <()>::decode_next(self)
     }
 
     /// Processes an optional NULL value.
@@ -1572,11 +1712,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `<()>::decode_opt_value` instead"
+            note = "use `<()>::decode_opt_next` instead"
         )
     )]
     pub fn take_opt_null(&mut self) -> Result<Option<()>, Error> {
-        <()>::decode_opt_value(self)
+        <()>::decode_opt_next(self)
     }
 
     /// Processes a mandatory INTEGER value of the `u8` range.
@@ -1587,11 +1727,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `u8::decode_value` instead"
+            note = "use `u8::decode_next` instead"
         )
     )]
     pub fn take_u8(&mut self) -> Result<u8, Error> {
-        u8::decode_value(self)
+        u8::decode_next(self)
     }
 
     /// Processes an optional INTEGER value of the `u8` range.
@@ -1602,11 +1742,157 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         feature = "mark-deprecated",
         deprecated(
             since = "0.8.0",
-            note = "use `u8::decode_opt_value` instead"
+            note = "use `u8::decode_opt_next` instead"
         )
     )]
     pub fn take_opt_u8(&mut self) -> Result<Option<u8>, Error> {
-        u8::decode_opt_value(self)
+        u8::decode_opt_next(self)
+    }
+
+    /// Processes a mandatory INTEGER value of the `u16` range.
+    ///
+    /// If the integer value is less than 0 or greater than 65535, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u16::decode_next` instead"
+        )
+    )]
+    pub fn take_u16(&mut self) -> Result<u16, Error> {
+        u16::decode_next(self)
+    }
+
+    /// Processes an optional INTEGER value of the `u16` range.
+    ///
+    /// If the integer value is less than 0 or greater than 65535, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u16::decode_opt_next` instead"
+        )
+    )]
+    pub fn take_opt_u16(&mut self) -> Result<Option<u16>, Error> {
+        u16::decode_opt_next(self)
+    }
+
+    /// Processes a mandatory INTEGER value of the `u32` range.
+    ///
+    /// If the integer value is less than 0 or greater than 2^32-1, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u32::decode_next` instead"
+        )
+    )]
+    pub fn take_u32(&mut self) -> Result<u32, Error> {
+        u32::decode_next(self)
+    }
+
+    /// Processes an optional INTEGER value of the `u32` range.
+    ///
+    /// If the integer value is less than 0 or greater than 2^32-1, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u32::decode_opt_next` instead"
+        )
+    )]
+    pub fn take_opt_u32(&mut self) -> Result<Option<u32>, Error> {
+        u32::decode_opt_next(self)
+    }
+
+    /// Processes a mandatory INTEGER value of the `u64` range.
+    ///
+    /// If the integer value is less than 0 or greater than 2^64-1, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u64::decode_next` instead"
+        )
+    )]
+    pub fn take_u64(&mut self) -> Result<u64, Error> {
+        u64::decode_next(self)
+    }
+
+    /// Processes an optional INTEGER value of the `u64` range.
+    ///
+    /// If the integer value is less than 0 or greater than 2^64-1, a
+    /// malformed error is returned.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "use `u64::decode_opt_next` instead"
+        )
+    )]
+    pub fn take_opt_u64(&mut self) -> Result<Option<u64>, Error> {
+        u64::decode_opt_next(self)
+    }
+
+    /// Processes a mandatory SEQUENCE value.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "replaced by `process_sequence`"
+        )
+    )]
+    pub fn take_sequence<F, T>(&mut self, op: F) -> Result<T, Error>
+    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
+        self.process_sequence(|mut cons| op(&mut cons))
+    }
+
+    /// Processes an optional SEQUENCE value.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "replaced by `process_opt_sequence`"
+        )
+    )]
+    pub fn take_opt_sequence<F, T>(
+        &mut self, op: F
+    ) -> Result<Option<T>, Error>
+    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
+        self.process_opt_sequence(|mut cons| op(&mut cons))
+    }
+
+    /// Processes a mandatory SET value.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "replaced by `process_set`"
+        )
+    )]
+    pub fn take_set<F, T>(&mut self, op: F) -> Result<T, Error>
+    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
+        self.process_set(|mut cons| op(&mut cons))
+    }
+
+    /// Processes an optional SET value.
+    #[cfg_attr(
+        feature = "mark-deprecated",
+        deprecated(
+            since = "0.8.0",
+            note = "replaced by `process_opt_set`"
+        )
+    )]
+    pub fn take_opt_set<F, T>(
+        &mut self, op: F
+    ) -> Result<Option<T>, Error>
+    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
+        self.process_opt_set(|mut cons| op(&mut cons))
     }
 }
 
