@@ -40,9 +40,7 @@
 
 //--- Re-exports
 
-/*
 pub use self::captured::Captured;
-*/
 pub use self::int::{Integer, Unsigned};
 pub use self::oid::Oid;
 pub use self::string::{
@@ -67,9 +65,7 @@ pub mod string;
 
 //--- Private modules
 
-/*
 mod captured;
-*/
 mod ident;
 mod length;
 

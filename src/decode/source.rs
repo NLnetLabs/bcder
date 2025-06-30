@@ -21,7 +21,7 @@ use crate::length::Length;
 /// available via the [`pos`][Self::pos] method.
 ///
 /// Additionally, the source can track an error that happened during reading.
-/// This error can be set via the [`set_err`][Self::set_err]. If set, any
+/// This error can be set via [`set_err`][Self::set_err]. If set, any
 /// subsequent read attempts will fail and return an error.
 ///
 /// This functionality is used by the value decoder types which check whether
