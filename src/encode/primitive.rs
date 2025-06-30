@@ -24,16 +24,8 @@ pub fn primitive<'s, M: 's>(tag: Tag, data: &'s [u8]) -> impl Values<M> + 's {
 /// This trait should be implemented for types that use primitive encoding.
 /// It defines, how the content octets of a single primitive value containing
 /// a value of the type are to be created. As a consequence, these types
-/// gain the [`encode`] and [`encode_as`] methods from their implementation
-/// of this trait.
-///
-/// Note that the trait requires implementing types to be `Copy` to
-/// avoid unnecessary lifetime parameters on the encoder type. For types that
-/// aren’t `Copy`, `PrimitiveContent` should be implemented on a reference to
-/// the type instead.
-///
-/// [`encode`]: #tymethod.encode
-/// [`encode_as`]: #tymethod.encode_as
+/// gain the [`encode`][Self::encode] and [`encode_as`][Self::encode_as]
+/// methods from their implementation of this trait.
 pub trait PrimitiveContent<M>: Copy {
     /// The natural tag of an encoded value of this type.
     const TAG: Tag;

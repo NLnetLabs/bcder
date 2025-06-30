@@ -2,7 +2,7 @@
 //!
 //! This is a private module. Its public items are re-exported by the parent.
 
-use std::{cmp, io, mem};
+use std::mem;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use crate::encode;
