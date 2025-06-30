@@ -51,7 +51,7 @@ impl Oid {
     ///
     /// The called must ensure that `slice` contains a correctly encoded
     /// OID.
-    pub unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
+    pub const unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
         unsafe { mem::transmute(slice) }
     }
     ///
@@ -75,6 +75,22 @@ impl Oid {
     pub fn from_box(src: Box<[u8]>) -> Result<Box<Self>, InvalidOid> {
         Self::check_slice(src.as_ref())?;
         Ok(unsafe { Self::from_box_unchecked(src) })
+    }
+
+    /// Creates an object identifier from a slice or panics.
+    ///
+    /// This function is intended to create constants and fail at compile
+    /// time if the slice is invalid.
+    ///
+    /// # Panics
+    ///
+    /// The function panics if `slice` does not contain a correctly encoded
+    /// object identifier.
+    pub const fn make(slice: &[u8]) -> &Self {
+        if Self::check_slice(slice).is_err() {
+            panic!("invalid object identifier")
+        }
+        unsafe { Self::from_slice_unchecked(slice) }
     }
 
     /// Checks that the content contains a validly encoded OID.
