@@ -35,7 +35,7 @@ pub use self::values::{
     total_len, total_indefinite_len, write_end_of_contents, write_header,
     write_indefinite_header,
 };
-pub use self::target::{IoTarget, Target, infallible};
+pub use self::target::{IoTarget, SplitTarget, Target, infallible};
 
 pub mod raw;
 

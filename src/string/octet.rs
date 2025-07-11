@@ -1,6 +1,6 @@
 //! Handling of OCTET STRING.
 
-use std::{io, mem};
+use std::{error, fmt, io, mem};
 use std::marker::PhantomData;
 use crate::{decode, encode};
 use crate::decode::NestedItem;
@@ -237,6 +237,14 @@ impl OctetString {
     ) -> impl encode::Values<M> + 'a {
         OctetStringEncoder::new(tag, self.as_slice())
     }
+
+    /// Returns a encoder that wraps the given value in an octet string.
+    pub fn encode_wrapped<'a, M: Mode, VM: Mode, V: encode::Values<VM> + 'a>(
+        values: &'a V
+    ) -> impl encode::Values<M> + 'a {
+        WrappedOctetStringEncoder::new(Tag::OCTET_STRING, values)
+    }
+
 }
 
 /// # Decoding (Legacy version)
@@ -311,6 +319,241 @@ impl<'a> From<&'a OctetString> for Box<OctetString> {
 impl AsRef<[u8]> for OctetString {
     fn as_ref(&self) -> &[u8] {
         self.as_slice()
+    }
+}
+
+
+//------------ OctetStringArray ----------------------------------------------
+
+/// An octet string backed by an array of the given size.
+///
+/// This is similar to [`OctetString`] but instead of an unsized slice, it
+/// stores the data in an octet array of the given length. This is handy if
+/// you have octet strings that are known to be limited in their length.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct OctetStringArray<const N: usize> {
+    /// The array storing the data.
+    octets: [u8; N],
+
+    /// The length of the data in `octets`.
+    ///
+    /// This is guaranteed to always less or equal to `N`.
+    len: usize,
+}
+
+impl<const N: usize> OctetStringArray<N> {
+    /// Creates the octet string using the given slice.
+    ///
+    /// This fails if the slice is longer than `N`.
+    pub fn from_slice(slice: &[u8]) -> Result<Self, OverflowError> {
+        let mut octets = [0u8; N];
+        if let Some(target) = octets.get_mut(..slice.len()) {
+            target.copy_from_slice(slice);
+            Ok(Self {
+                octets, len: slice.len()
+            })
+        }
+        else {
+            Err(OverflowError(()))
+        }
+    }
+
+    /// Returns the length of the data.
+    pub fn len(self) -> usize {
+        self.len
+    }
+
+    /// Returns whether the data is empty.
+    pub fn is_empty(self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns the data as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        // Safety: self.len is guaranteed to be less or equal to N.
+        debug_assert!(self.len <= N);
+        unsafe { self.octets.get_unchecked(..self.len) }
+    }
+}
+
+
+/// # Decoding and Encoding
+impl<const N: usize> OctetStringArray<N> {
+    /// Decodes the next value as an octet string.
+    ///
+    /// If there is no next value, if the next value does not have the tag
+    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
+    /// octet string, an error is returned.
+    pub fn decode_next<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Self, decode::Error> {
+        Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
+    }
+
+    /// Decodes an optional next value as an octet string.
+    ///
+    /// If there is no next value, or if the next value does not have the
+    /// tag `Tag::OCTET_STRING`, returns `Ok(None)`.
+    ///
+    /// If there is an octet string, but it is not correctly encoded, returns
+    /// an error.
+    pub fn decode_opt_next<M: Mode, R: io::Read>(
+        cons: &mut decode::Constructed<M, R>
+    ) -> Result<Option<Self>, decode::Error> {
+        let Some(content) = cons.next_opt_with(
+            Tag::OCTET_STRING
+        )? else {
+            return Ok(None)
+        };
+        Self::decode_value(content).map(Some)
+    }
+
+    /// Decodes octet string content into a boxed slice.
+    pub fn decode_value<M: Mode, R: io::Read>(
+        cons: decode::Value<M, R>
+    ) -> Result<Self, decode::Error> {
+        if M::IS_DER {
+            Self::decode_value_der(cons)
+        }
+        else if M::IS_CER {
+            Self::decode_value_cer(cons)
+        }
+        else {
+            Self::decode_value_ber(cons)
+        }
+    }
+
+    /// Decodes octet string content in BER mode.
+    fn decode_value_ber<M: Mode, R: io::Read>(
+        value: decode::Value<M, R>
+    ) -> Result<Self, decode::Error> {
+        match value {
+            decode::Value::Constructed(cons) => {
+                let mut res_array = [0u8; N];
+                let mut res_len = 0;
+                cons.process_nested(|item| match item {
+                    NestedItem::Constructed(cons) =>  {
+                        if cons.tag != Tag::OCTET_STRING {
+                            Err(decode::Error::content(
+                                "expected OCTET STRING", cons.start
+                            ))
+                        }
+                        else {
+                            Ok(())
+                        }
+                    }
+                    NestedItem::Primitive(mut prim) => {
+                        if prim.tag() != Tag::OCTET_STRING {
+                            return Err(decode::Error::content(
+                                "expected OCTET STRING", prim.pos()
+                            ))
+                        }
+                        let len = prim.remaining().try_to_usize().map_err(|_| {
+                            prim.err_at_start(OverflowError(()))
+                        })?;
+                        
+                        let res_octets = unsafe {
+                            // Safety: res_len can’t get too big.
+                            res_array.as_mut_slice().get_unchecked_mut(
+                                res_len..
+                            )
+                        };
+                        let Some(target) = res_octets.get_mut(..len) else {
+                            return Err(prim.err_at_start(OverflowError(())))
+                        };
+                        prim.read_exact(target)?;
+                        res_len += len;
+                        Ok(())
+                    }
+                })?;
+                Ok(Self { octets: res_array, len: res_len })
+            }
+            decode::Value::Primitive(prim) => {
+                Self::decode_single_primitive(prim)
+            }
+        }
+    }
+
+    fn decode_value_cer<M: Mode, R: io::Read>(
+        value: decode::Value<M, R>
+    ) -> Result<Self, decode::Error> {
+        // This would be easy if N were at most 1000. But we can’t guarantee
+        // that, so we have to loop and stuff.
+        let mut cons = value.into_constructed()?;
+        let mut res_array = [0u8; N];
+        let mut res_octets = res_array.as_mut_slice();
+        let mut res_len = 0;
+        let mut start = cons.pos();
+        
+        while let Some(mut prim) = cons.next_opt_primitive_with(
+            Tag::OCTET_STRING
+        )? {
+            // The collected data must be a multiple of 1000.
+            if res_len % 1000 != 0 {
+                return Err(decode::Error::content(
+                    "short intermediary in CER octet string", start
+                ))
+            }
+            start = prim.start();
+            let len = prim.remaining().try_to_usize().map_err(|_| {
+                decode::Error::content(
+                    "long intermediary in CER octet string", start
+                )
+            })?;
+            if len > 1000 {
+                return Err(decode::Error::content(
+                    "long intermediary in CER octet string", start
+                ))
+            }
+
+            let Some((target, tail)) = res_octets.split_at_mut_checked(len)
+            else {
+                return Err(decode::Error::content(
+                    OverflowError(()), start
+                ))
+            };
+            prim.read_exact(target)?;
+            res_octets = tail;
+            res_len += len;
+        }
+        Ok(Self { octets: res_array, len: res_len })
+    }
+
+    fn decode_value_der<M: Mode, R: io::Read>(
+        value: decode::Value<M, R>
+    ) -> Result<Self, decode::Error> {
+        Self::decode_single_primitive(value.into_primitive()?)
+    }
+
+    fn decode_single_primitive<M: Mode, R: io::Read>(
+        mut prim: decode::Primitive<M, R>
+    ) -> Result<Self, decode::Error> {
+        let len = prim.remaining().try_to_usize().map_err(|_| {
+            prim.err_at_start(OverflowError(()))
+        })?;
+        if len > N {
+            return Err(prim.err_at_start(OverflowError(())))
+        }
+
+        let mut octets = [0u8; N];
+        let target = unsafe {
+            // Safety: We just checked that len isn’t too big.
+            octets.get_unchecked_mut(..len)
+        };
+        prim.read_exact(target)?;
+        Ok(Self { octets, len })
+    }
+}
+
+
+//--- Default
+
+impl<const N: usize> Default for OctetStringArray<N> {
+    fn default() -> Self {
+        Self {
+            octets: [0u8; N],
+            len: 0,
+        }
     }
 }
 
@@ -405,5 +648,96 @@ impl<M: Mode> encode::Values<M> for OctetStringEncoder<'_, M> {
         }
     }
 }
+
+
+//------------ WrappedOctetStringEncoder -------------------------------------
+
+struct WrappedOctetStringEncoder<'a, M, VM, V> {
+    tag: Tag,
+    values: &'a V,
+    marker: PhantomData<(M, VM)>,
+}
+
+impl<'a, M, VM, V> WrappedOctetStringEncoder<'a, M, VM, V> {
+    fn new(tag: Tag, values: &'a V) -> Self {
+        Self { tag, values, marker: PhantomData }
+    }
+}
+
+impl<'a, M: Mode, VM: Mode, V: encode::Values<VM>> WrappedOctetStringEncoder<'a, M, VM, V> {
+    fn encoded_len_der(&self) -> Length {
+        encode::total_len(self.tag, self.values.encoded_len())
+    }
+
+    fn write_encoded_der<T: encode::Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        encode::write_header(
+            target, self.tag, false, self.values.encoded_len()
+        )?;
+        self.values.write_encoded(target)
+    }
+
+    fn encoded_len_cer(&self) -> Length {
+        encode::total_indefinite_len(
+            self.tag,
+            encode::SplitTarget::encoded_len(
+                self.values.encoded_len(), Length::from_usize(1000), self.tag
+            )
+        )
+    }
+
+    fn write_encoded_cer<T: encode::Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        encode::write_indefinite_header(target, self.tag)?;
+        {
+            let mut target = encode::SplitTarget::new(
+                self.values.encoded_len(), Length::from_usize(1000),
+                self.tag,
+                target,
+            );
+            self.values.write_encoded(&mut target)?;
+        }
+        encode::write_end_of_contents(target)
+    }
+}
+
+impl<'a, M, VM, V> encode::Values<M> for WrappedOctetStringEncoder<'a, M, VM, V>
+where M: Mode, VM: Mode, V: encode::Values<VM> {
+    fn encoded_len(&self) -> Length {
+        if M::IS_CER {
+            self.encoded_len_cer()
+        }
+        else {
+            self.encoded_len_der()
+        }
+    }
+
+    fn write_encoded<T: encode::Target>(
+        &self, target: &mut T
+    ) -> Result<(), T::Error> {
+        if M::IS_CER {
+            self.write_encoded_cer(target)
+        }
+        else {
+            self.write_encoded_der(target)
+        }
+    }
+}
+
+
+//------------ OverflowError -------------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+pub struct OverflowError(());
+
+impl fmt::Display for OverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "octet string too long")
+    }
+}
+
+impl error::Error for OverflowError { }
     
 
