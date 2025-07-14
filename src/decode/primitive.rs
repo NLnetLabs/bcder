@@ -100,10 +100,10 @@ impl<'a, M, R: 'a> Primitive<'a, M, R> {
         let len = len.into();
         match self.remaining().cmp(&len) {
             cmp::Ordering::Greater => {
-                Err(self.content_err_at_current("trailing data"))
+                Err(self.err_at_current("trailing data"))
             }
             cmp::Ordering::Less => {
-                Err(self.content_err_at_current("unexpected end of value"))
+                Err(self.err_at_current("unexpected end of value"))
             }
             cmp::Ordering::Equal => {
                 Ok(())
@@ -119,7 +119,7 @@ impl<'a, M, R: 'a> Primitive<'a, M, R> {
     /// continuing to decode data.
     pub fn check_exhausted(&self) -> Result<(), Error> {
         if !self.remaining().is_zero() {
-            Err(self.content_err_at_current("trailing data"))
+            Err(self.err_at_current("trailing data"))
         }
         else {
             Ok(())
@@ -127,14 +127,14 @@ impl<'a, M, R: 'a> Primitive<'a, M, R> {
     }
 
     /// Produces a content error at the start of the value.
-    pub fn content_err_at_start(
+    pub fn err_at_start(
         &self, err: impl Into<Box<dyn error::Error + Send + Sync>>,
     ) -> Error {
         Error::content(err, self.start)
     }
 
     /// Produces a content error at the current position.
-    pub fn content_err_at_current(
+    pub fn err_at_current(
         &self, err: impl Into<Box<dyn error::Error + Send + Sync>>,
     ) -> Error {
         Error::content(err, self.pos())
@@ -160,7 +160,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     ) -> Result<(), Error> {
         let start = target.len();
         let target_len = start.checked_add(len).ok_or_else(|| {
-            self.content_err_at_start("length overflow")
+            self.err_at_start("length overflow")
         })?;
         target.resize(target_len, 0);
 
@@ -198,7 +198,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
         &mut self, target: &mut Vec<u8>
     ) -> Result<(), Error> {
         let len = usize::try_from(self.remaining()).map_err(|_| {
-            self.content_err_at_start("content too large")
+            self.err_at_start("content too large")
         })?;
         self.read_exact_to_vec(len, target)
     }
@@ -280,7 +280,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     /// an error.
     fn take_u8(&mut self) -> Result<u8, Error> {
         if self.remaining().to_u64() < 1 {
-            return Err(self.content_err_at_current("unexpected end of data"))
+            return Err(self.err_at_current("unexpected end of data"))
         }
         self.read_u8()
     }
@@ -307,7 +307,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
                 0 => Ok(false),
                 0xFF => Ok(true),
                 _ => {
-                    Err(self.content_err_at_start("invalid boolean"))
+                    Err(self.err_at_start("invalid boolean"))
                 }
             }
         }
@@ -371,7 +371,7 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     /// Since such a value is empty, this doesn’t really do anything.
     pub fn to_null(&mut self) -> Result<(), Error> {
         if !self.remaining().is_zero() {
-            Err(self.content_err_at_start("invalid NULL value"))
+            Err(self.err_at_start("invalid NULL value"))
         }
         else {
             Ok(())
@@ -536,7 +536,7 @@ impl<M: Mode> FromPrimitive<M> for bool {
                 0x00 => Ok(false),
                 0xFF => Ok(true),
                 _ => {
-                    Err(prim.content_err_at_start("invalid boolean"))
+                    Err(prim.err_at_start("invalid boolean"))
                 }
             }
         }

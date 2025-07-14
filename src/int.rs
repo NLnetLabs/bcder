@@ -136,7 +136,7 @@ impl Integer {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_value_borrowed<'s, M: Mode>(
+    pub fn decode_next_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_primitive_borrowed(
@@ -149,10 +149,10 @@ impl Integer {
         mut prim: Primitive<M, R>,
     ) -> Result<Box<Self>, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
+            prim.err_at_start(OverflowError(()))
         })?;
         Self::from_box(prim.read_exact_into_box(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 
@@ -161,10 +161,10 @@ impl Integer {
         mut prim: Primitive<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
+            prim.err_at_start(OverflowError(()))
         })?;
         Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 }
@@ -457,9 +457,9 @@ impl<const N: usize> IntegerArray<N> {
     ) -> Result<Self, decode::Error> {
         let start = usize::try_from(prim.remaining()).ok().and_then(|len| {
             N.checked_sub(len)
-        }).ok_or_else(|| prim.content_err_at_start(OverflowError(())))?;
+        }).ok_or_else(|| prim.err_at_start(OverflowError(())))?;
         if start == N {
-            return Err(prim.content_err_at_start(InvalidInteger(())))
+            return Err(prim.err_at_start(InvalidInteger(())))
         }
 
         let mut res = [0u8; N];
@@ -468,7 +468,7 @@ impl<const N: usize> IntegerArray<N> {
         let (head, tail) = res.as_mut_slice().split_at_mut(start);
         prim.read_exact(tail)?;
         Integer::check_slice(tail).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })?;
 
         // If the sign bit in tail was set, we need to
@@ -723,10 +723,10 @@ impl Unsigned {
         mut prim: Primitive<M, R>,
     ) -> Result<Box<Self>, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
+            prim.err_at_start(OverflowError(()))
         })?;
         Self::from_box(prim.read_exact_into_box(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 
@@ -735,10 +735,10 @@ impl Unsigned {
         mut prim: Primitive<M, &'s [u8]>,
     ) -> Result<&'s Self, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
-            prim.content_err_at_start(OverflowError(()))
+            prim.err_at_start(OverflowError(()))
         })?;
         Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 }
@@ -968,7 +968,7 @@ impl<const N: usize> UnsignedArray<N> {
 
         // First musn’t have bit 8 set to be unsigned
         if first & 0x80 != 0 {
-            return Err(prim.content_err_at_start(OverflowError(())));
+            return Err(prim.err_at_start(OverflowError(())));
         }
 
         // If that was it, return.
@@ -984,14 +984,14 @@ impl<const N: usize> UnsignedArray<N> {
         // Now determine the start position of what’s left in our byte array.
         let start = usize::try_from(prim.remaining()).ok().and_then(|len| {
             N.checked_sub(len)
-        }).ok_or_else(|| prim.content_err_at_start(OverflowError(())))?;
+        }).ok_or_else(|| prim.err_at_start(OverflowError(())))?;
         if start == N {
-            return Err(prim.content_err_at_start(OverflowError(())))
+            return Err(prim.err_at_start(OverflowError(())))
         }
 
         // If the first byte wasn’t a padding 0, we need to have space for it.
         if first != 0 && start == 0 {
-            return Err(prim.content_err_at_start(OverflowError(())))
+            return Err(prim.err_at_start(OverflowError(())))
         }
 
         // Read the rest.
@@ -1006,7 +1006,7 @@ impl<const N: usize> UnsignedArray<N> {
             // Safety: tail can’t be empty since start is smaller than N.
             #[allow(clippy::indexing_slicing)]
             if tail[0] & 0x80 == 0 {
-                return Err(prim.content_err_at_start(InvalidInteger(())));
+                return Err(prim.err_at_start(InvalidInteger(())));
             }
         }
         else {

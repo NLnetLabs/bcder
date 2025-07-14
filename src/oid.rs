@@ -260,7 +260,7 @@ impl Oid {
         mut prim: Primitive<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_box(prim.read_all_into_box()?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 
@@ -269,7 +269,7 @@ impl Oid {
         mut prim: Primitive<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_slice(prim.read_all_borrowed()?).map_err(|err| {
-            prim.content_err_at_start(err)
+            prim.err_at_start(err)
         })
     }
 
@@ -530,6 +530,15 @@ impl AsRef<Oid> for Oid {
 impl AsRef<[u8]> for Oid {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+
+//--- PartialEq
+
+impl<'a> PartialEq<&'a Oid> for Box<Oid> {
+    fn eq(&self, other: &&'a Oid) -> bool {
+        self.as_ref().eq(other)
     }
 }
 
