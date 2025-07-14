@@ -314,6 +314,14 @@ impl From<u64> for Length {
     }
 }
 
+impl TryFrom<i32> for Length {
+    type Error = <u64 as TryFrom<i32>>::Error;
+
+    fn try_from(src: i32) -> Result<Self, Self::Error> {
+        Ok(Length(src.try_into()?))
+    }
+}
+
 impl From<Length> for u64 {
     fn from(src: Length) -> Self {
         src.to_u64()
@@ -494,6 +502,54 @@ impl ops::MulAssign<usize> for Length {
     }
 }
 
+impl ops::Div<Self> for Length {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        Length(self.0 / other.0)
+    }
+}
+
+impl ops::Div<u64> for Length {
+    type Output = Self;
+
+    fn div(self, other: u64) -> Self {
+        Length(self.0 / other)
+    }
+}
+
+impl ops::Div<usize> for Length {
+    type Output = Self;
+
+    fn div(self, other: usize) -> Self {
+        self / Self::from(other)
+    }
+}
+
+impl ops::Rem<Self> for Length {
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self {
+        Length(self.0 % other.0)
+    }
+}
+
+impl ops::Rem<u64> for Length {
+    type Output = Self;
+
+    fn rem(self, other: u64) -> Self {
+        Length(self.0 % other)
+    }
+}
+
+impl ops::Rem<usize> for Length {
+    type Output = Self;
+
+    fn rem(self, other: usize) -> Self {
+        self % Self::from(other)
+    }
+}
+
 
 //--- PartialEq and PartialOrd
 //
@@ -508,6 +564,15 @@ impl PartialEq<u64> for Length {
 impl PartialEq<usize> for Length {
     fn eq(&self, other: &usize) -> bool {
         self.eq(&Length::from(*other))
+    }
+}
+
+impl PartialEq<i32> for Length {
+    fn eq(&self, other: &i32) -> bool {
+        match Length::try_from(*other) {
+            Ok(other) => *self == other,
+            Err(_) => false
+        }
     }
 }
 
