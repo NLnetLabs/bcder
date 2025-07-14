@@ -1,6 +1,7 @@
 //! Handling BITSTRING.
 
-use std::{error, fmt, io, mem};
+use std::{cmp, error, fmt, io, mem};
+use std::convert::Infallible;
 use std::marker::PhantomData;
 use crate::{decode, encode};
 use crate::decode::NestedItem;
@@ -44,7 +45,7 @@ use crate::mode::{Der, Mode};
 /// 1000 octets long. Otherwise, the constructed encoding is to be chosen
 /// which must contain a sequence of primitively encoded bit strings. Each of
 /// these except for the last one must have content of exactly 1000 octets.
-/// The last one must be a least one and at most 1000 octets of content.
+/// The last one must be at least one and at most 1000 octets of content.
 /// With DER, only the primitive form is allowed.
 ///
 /// In both CER and DER, the unused bits of the last octet must be zero.
@@ -119,6 +120,17 @@ impl BitString {
         }
 
         Ok(())
+    }
+
+    /// Creates a bit string by encoding data.
+    ///
+    /// The resulting bit string will have zero unused bits.
+    pub fn capture_values<M, V: encode::Values<M>>(
+        values: &V
+    ) -> Box<BitString> {
+        let mut target = BitStringTarget::new();
+        encode::infallible(values.write_encoded(&mut target));
+        target.finalize(0)
     }
 
     /// Returns the complete slice of the bit string.
@@ -455,6 +467,15 @@ impl<'a> From<&'a BitString> for Box<BitString> {
 }
 
 
+//--- Clone
+
+impl Clone for Box<BitString> {
+    fn clone(&self) -> Self {
+        unsafe { BitString::from_box_unchecked(Box::from(self.as_slice())) }
+    }
+}
+
+
 //------------ BitStringEncoder ----------------------------------------------
 
 struct BitStringEncoder<'a, M> {
@@ -572,6 +593,58 @@ impl<M: Mode> encode::Values<M> for BitStringEncoder<'_, M> {
         else {
             self.write_encoded_der(target)
         }
+    }
+}
+
+
+//------------ BitStringTarget -----------------------------------------------
+
+/// A buffer to write the content of a bit string into.
+#[derive(Clone, Debug)]
+pub struct BitStringTarget {
+    data: Vec<u8>,
+}
+
+impl BitStringTarget {
+    pub fn new() -> Self {
+        Self {
+            data: vec![0u8],
+        }
+    }
+
+    /// Appends a slice.
+    pub fn append_slice(&mut self, slice: &[u8]) {
+        self.data.extend_from_slice(slice)
+    }
+
+    /// Finalizes the target into a bit string.
+    ///
+    /// The number of unused bits in the last byte is given by `unsused`. This
+    /// is quietly trimmed back to 8 if it is larger. If no data has been
+    /// added to the target, `unused` is ignored.
+    pub fn finalize(mut self, unused: u8) -> Box<BitString> {
+        let len = self.data.len();
+        if len > 1 {
+            let unused = cmp::min(unused, 8);
+            self.data[0] = unused;
+            self.data[len - 1] &= 0xFFu8 << unused;
+        }
+        unsafe { BitString::from_box_unchecked(self.data.into()) }
+    }
+}
+
+impl Default for BitStringTarget {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl encode::Target for BitStringTarget {
+    type Error = Infallible;
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        self.append_slice(data);
+        Ok(())
     }
 }
 

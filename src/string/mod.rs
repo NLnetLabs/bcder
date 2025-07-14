@@ -25,12 +25,12 @@
 
 //--- Re-exports
 
-pub use self::bit::BitString;
+pub use self::bit::{BitString, BitStringError, BitStringTarget};
 pub use self::restricted::{
     CharSetError, Ia5String, NumericString, PrintableString,
     RestrictedString, Utf8String,
 };
-pub use self::octet::OctetString;
+pub use self::octet::{OctetString, OctetStringArray};
 
 
 //--- Private modules

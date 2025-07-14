@@ -44,7 +44,7 @@ pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
 pub use self::oid::Oid;
 pub use self::string::{
-    BitString, OctetString,
+    BitString, OctetString, OctetStringArray,
     Ia5String, NumericString, PrintableString, Utf8String,
 };
 pub use self::ident::{Class, Tag};
