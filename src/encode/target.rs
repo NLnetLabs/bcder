@@ -166,7 +166,7 @@ impl SplitTarget<'static, ()> {
     }
 }
 
-impl<'a, T: Target> Target for SplitTarget<'a, T> {
+impl<T: Target> Target for SplitTarget<'_, T> {
     type Error = T::Error;
 
     fn write_all(&mut self, mut data: &[u8]) -> Result<(), T::Error> {

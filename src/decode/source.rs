@@ -200,7 +200,7 @@ impl<'a, M, R> CaptureSource<'a, M, R> {
     }
 }
 
-impl<'a, M, R: io::Read> io::Read for CaptureSource<'a, M, R> {
+impl<M, R: io::Read> io::Read for CaptureSource<'_, M, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let res = self.reader.read(buf)?;
         if res > 0 {
@@ -214,7 +214,7 @@ impl<'a, M, R: io::Read> io::Read for CaptureSource<'a, M, R> {
 }
 
 
-impl<'a, M, R: io::BufRead> io::BufRead for CaptureSource<'a, M, R> {
+impl<M, R: io::BufRead> io::BufRead for CaptureSource<'_, M, R> {
     fn fill_buf(&mut self) -> Result<&[u8], io::Error> {
         self.reader.fill_buf()
     }

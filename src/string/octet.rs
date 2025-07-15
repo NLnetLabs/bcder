@@ -664,7 +664,8 @@ impl<'a, M, VM, V> WrappedOctetStringEncoder<'a, M, VM, V> {
     }
 }
 
-impl<'a, M: Mode, VM: Mode, V: encode::Values<VM>> WrappedOctetStringEncoder<'a, M, VM, V> {
+impl<M, VM, V> WrappedOctetStringEncoder<'_, M, VM, V>
+where M: Mode, VM: Mode, V: encode::Values<VM> {
     fn encoded_len_der(&self) -> Length {
         encode::total_len(self.tag, self.values.encoded_len())
     }
@@ -703,7 +704,7 @@ impl<'a, M: Mode, VM: Mode, V: encode::Values<VM>> WrappedOctetStringEncoder<'a,
     }
 }
 
-impl<'a, M, VM, V> encode::Values<M> for WrappedOctetStringEncoder<'a, M, VM, V>
+impl<M, VM, V> encode::Values<M> for WrappedOctetStringEncoder<'_, M, VM, V>
 where M: Mode, VM: Mode, V: encode::Values<VM> {
     fn encoded_len(&self) -> Length {
         if M::IS_CER {
