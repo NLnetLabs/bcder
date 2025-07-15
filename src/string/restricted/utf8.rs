@@ -93,7 +93,7 @@ impl CharSetDecoder for Utf8Decoder {
         }
     }
 
-    fn decode_slice_lossy(slice: &[u8]) -> Cow<str> {
+    fn decode_slice_lossy(slice: &[u8]) -> Cow<'_, str> {
         String::from_utf8_lossy(slice)
     }
 }
@@ -114,7 +114,7 @@ impl CharSetEncoder for Utf8Encoder {
     type Error = Infallible;
 
 
-    fn encode_str(slice: &str) -> Result<Cow<[u8]>, Self::Error> {
+    fn encode_str(slice: &str) -> Result<Cow<'_, [u8]>, Self::Error> {
         Ok(Cow::Borrowed(slice.as_bytes()))
     }
 }

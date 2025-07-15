@@ -137,7 +137,7 @@ impl Oid {
     }
 
     /// Returns an iterator to the components of this object identifiers.
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter::new(self.as_slice())
     }
 }

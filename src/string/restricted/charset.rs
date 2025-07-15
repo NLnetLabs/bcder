@@ -56,7 +56,7 @@ pub trait CharSetDecoder: Default {
     ) -> Result<(), Self::Error>;
     */
 
-    fn decode_slice_lossy(slice: &[u8]) -> Cow<str>;
+    fn decode_slice_lossy(slice: &[u8]) -> Cow<'_, str>;
 
     /// Checks a slice.
     fn check_slice(slice: &[u8]) -> Result<(), Self::Error> {
@@ -85,7 +85,7 @@ pub trait CharSetEncoder: Default {
     ) -> Result<(), Self::Error>;
     */
 
-    fn encode_str(slice: &str) -> Result<Cow<[u8]>, Self::Error>;
+    fn encode_str(slice: &str) -> Result<Cow<'_, [u8]>, Self::Error>;
 }
 
 /// A character set encoder that doesn’t need to change the string.

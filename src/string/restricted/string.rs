@@ -89,7 +89,7 @@ impl<L> RestrictedString<L> {
 impl<L: CharSet> RestrictedString<L> {
     pub fn cow_from_str(
         s: &str
-    ) -> Result<Cow<Self>, <L::Encoder as CharSetEncoder>::Error> {
+    ) -> Result<Cow<'_, Self>, <L::Encoder as CharSetEncoder>::Error> {
         match L::Encoder::encode_str(s)? {
             Cow::Borrowed(slice) => {
                 Ok(Cow::Borrowed(unsafe { Self::from_slice_unchecked(slice) }))
@@ -110,7 +110,7 @@ impl<L: CharSet> RestrictedString<L> {
         })
     }
 
-    pub fn to_cow_str(&self) -> Cow<str> {
+    pub fn to_cow_str(&self) -> Cow<'_, str> {
         L::Decoder::decode_slice_lossy(&self.octets)
     }
 

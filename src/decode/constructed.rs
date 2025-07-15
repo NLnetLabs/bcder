@@ -52,7 +52,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// Starts decoding the next mandatory value.
     ///
     /// Returns an error if there are no more values available.
-    pub fn next_value(&mut self) -> Result<Value<M, R>, Error> {
+    pub fn next_value(&mut self) -> Result<Value<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         self.read_value(ident, start)
     }
@@ -63,7 +63,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// tag or the end of the content.
     pub fn next_value_with(
         &mut self, expected: Tag,
-    ) -> Result<Value<M, R>, Error> {
+    ) -> Result<Value<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
@@ -80,7 +80,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// there is no next value.
     pub fn next_constructed(
         &mut self
-    ) -> Result<Constructed<M, R>, Error> {
+    ) -> Result<Constructed<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
             return Err(Error::content(
@@ -100,7 +100,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     pub fn next_constructed_with(
         &mut self,
         expected: Tag,
-    ) -> Result<Constructed<M, R>, Error> {
+    ) -> Result<Constructed<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
@@ -175,7 +175,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// return the next value.
     fn read_value(
         &mut self, ident: Ident, start: Length
-    ) -> Result<Value<M, R>, Error> {
+    ) -> Result<Value<'_, M, R>, Error> {
         self.read_value_io(ident, start).map_err(|err| {
             Error::content(err, start)
         })
@@ -187,7 +187,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// we can use the question mark operator.
     fn read_value_io(
         &mut self, ident: Ident, start: Length
-    ) -> Result<Value<M, R>, io::Error> {
+    ) -> Result<Value<'_, M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {
             Some(length) => {
                 let limit = self.source.pos() + length;
@@ -399,7 +399,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Creates the content of the next value.
     fn read_value(
         &mut self, ident: Ident, start: Length
-    ) -> Result<Value<M, R>, Error> {
+    ) -> Result<Value<'_, M, R>, Error> {
         match &mut self.inner {
             ConstructedEnum::Definite(inner) => {
                 inner.read_value(ident, start)
@@ -450,7 +450,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Starts decoding the next mandatory value.
     ///
     /// Returns an error if there are no more values available.
-    pub fn next_value(&mut self) -> Result<Value<M, R>, Error> {
+    pub fn next_value(&mut self) -> Result<Value<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         self.read_value(ident, start)
     }
@@ -461,7 +461,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// the content of the value.
     pub fn next_opt(
         &mut self
-    ) -> Result<Option<Value<M, R>>, Error> {
+    ) -> Result<Option<Value<'_, M, R>>, Error> {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
@@ -474,7 +474,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// with a tag other than `expected`.
     pub fn next_with(
         &mut self, expected: Tag,
-    ) -> Result<Value<M, R>, Error> {
+    ) -> Result<Value<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
@@ -493,7 +493,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// end of the content has been reached.
     pub fn next_opt_with(
         &mut self, expected: Tag,
-    ) -> Result<Option<Value<M, R>>, Error> {
+    ) -> Result<Option<Value<'_, M, R>>, Error> {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
@@ -510,7 +510,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// next value, returns an error.
     pub fn next_constructed(
         &mut self
-    ) -> Result<Constructed<M, R>, Error> {
+    ) -> Result<Constructed<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
             return Err(Error::content(
@@ -527,7 +527,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// Returns `Ok(None)` if the end of the content has been reached.
     pub fn next_opt_constructed(
         &mut self,
-    ) -> Result<Option<Constructed<M, R>>, Error>
+    ) -> Result<Option<Constructed<'_, M, R>>, Error>
     {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
@@ -547,7 +547,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     pub fn next_constructed_with(
         &mut self,
         expected: Tag,
-    ) -> Result<Constructed<M, R>, Error> {
+    ) -> Result<Constructed<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
@@ -573,7 +573,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     pub fn next_opt_constructed_with(
         &mut self,
         expected: Tag,
-    ) -> Result<Option<Constructed<M, R>>, Error> {
+    ) -> Result<Option<Constructed<'_, M, R>>, Error> {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
@@ -595,7 +595,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// reached a error is returned.
     pub fn next_primitive(
         &mut self
-    ) -> Result<Primitive<M, R>, Error> {
+    ) -> Result<Primitive<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.is_constructed() {
             return Err(Error::content(
@@ -611,7 +611,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// If the next value is not primitive, an error is returned.
     pub fn next_opt_primitive(
         &mut self
-    ) -> Result<Option<Primitive<M, R>>, Error> {
+    ) -> Result<Option<Primitive<'_, M, R>>, Error> {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
@@ -629,7 +629,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// a primitive, if it doesn’t have the expected tag.
     pub fn next_primitive_with(
         &mut self, expected: Tag
-    ) -> Result<Primitive<M, R>, Error> {
+    ) -> Result<Primitive<'_, M, R>, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.tag() != expected {
             return Err(Error::content(
@@ -652,7 +652,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// primitive, the method returns an error.
     pub fn next_opt_primitive_with(
         &mut self, expected: Tag
-    ) -> Result<Option<Primitive<M, R>>, Error> {
+    ) -> Result<Option<Primitive<'_, M, R>>, Error> {
         let Some((ident, start)) = self.read_opt_ident()? else {
             return Ok(None)
         };
@@ -2058,7 +2058,7 @@ impl<'a, R: io::Read + 'a> DefiniteConstructed<'a, R> {
 
     fn read_value<M: Mode>(
         &mut self, ident: Ident, start: Length
-    ) -> Result<Value<M, R>, io::Error> {
+    ) -> Result<Value<'_, M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {
             Some(Length::ZERO) if ident == Ident::END_OF_CONTENTS => {
                 Err(io::Error::new(
@@ -2194,7 +2194,7 @@ impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
 
     fn read_value<M: Mode>(
         &mut self, ident: Ident, start: Length
-    ) -> Result<Value<M, R>, io::Error> {
+    ) -> Result<Value<'_, M, R>, io::Error> {
         match LengthOctets::read::<M>(&mut self.source)?.definite() {
             Some(length) => {
                 let limit = self.source.pos() + length;

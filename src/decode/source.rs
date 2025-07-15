@@ -113,7 +113,7 @@ impl<R> Source<R> {
 
     pub fn capture<M>(
         &mut self, target: Vec<u8>,
-    ) -> Source<CaptureSource<M, R>> {
+    ) -> Source<CaptureSource<'_, M, R>> {
         Source {
             pos: self.pos,
             status: match self.status {

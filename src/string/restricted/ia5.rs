@@ -60,7 +60,7 @@ impl CharSetDecoder for Ia5CharSet {
         Ok(())
     }
 
-    fn decode_slice_lossy(slice: &[u8]) -> Cow<str> {
+    fn decode_slice_lossy(slice: &[u8]) -> Cow<'_, str> {
         String::from_utf8_lossy(slice)
     }
 }
@@ -74,7 +74,7 @@ impl CharSetDirectDecoder for Ia5CharSet {
 impl CharSetEncoder for Ia5CharSet {
     type Error = CharSetError;
 
-    fn encode_str(slice: &str) -> Result<Cow<[u8]>, Self::Error> {
+    fn encode_str(slice: &str) -> Result<Cow<'_, [u8]>, Self::Error> {
         Self::check_slice(slice.as_bytes())?;
         Ok(Cow::Borrowed(slice.as_bytes()))
     }

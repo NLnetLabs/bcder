@@ -26,7 +26,9 @@ impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
         }
     }
 
-    pub fn next_item(&mut self) -> Result<Option<NestedItem<M, R>>, Error> {
+    pub fn next_item(
+        &mut self
+    ) -> Result<Option<NestedItem<'_, M, R>>, Error> {
         // Take the top off the stack. We’ll put it back if we haven’t reached
         // the end of that value yet.
         while let Some(item) = self.stack.pop() {
