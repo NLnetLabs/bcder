@@ -626,8 +626,11 @@ impl BitStringTarget {
         let len = self.data.len();
         if len > 1 {
             let unused = cmp::min(unused, 8);
-            self.data[0] = unused;
-            self.data[len - 1] &= 0xFFu8 << unused;
+            // Safety: We checked for len > 1.
+            unsafe {
+                *self.data.get_unchecked_mut(0) = unused;
+                *self.data.get_unchecked_mut(len - 1) &= 0xFFu8 << unused;
+            }
         }
         unsafe { BitString::from_box_unchecked(self.data.into()) }
     }
