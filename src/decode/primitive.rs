@@ -6,13 +6,15 @@
 use std::{cmp, error, io};
 use std::io::{BufRead, Read};
 use std::marker::PhantomData;
+use crate::encode;
+use crate::captured::Captured;
 use crate::ident::Tag;
 use crate::int::{IntegerArray, UnsignedArray};
 use crate::length::Length;
 use crate::mode::Mode;
 use super::constructed::Constructed;
 use super::error::Error;
-use super::source::{Source, SourceError};
+use super::source::{CaptureSource, Source, SourceError};
 
 
 //------------ Primitive -----------------------------------------------------
@@ -234,6 +236,30 @@ impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
     pub fn skip_all(mut self) -> Result<(), Error>
     where R: io::BufRead {
         self.skip(self.remaining())
+    }
+
+    pub fn capture<F>(self, op: F) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Primitive<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        let mut target = Vec::new();
+        encode::infallible(
+            encode::write_header(
+                &mut target, self.tag, false,
+                self.source.limit.saturating_sub(self.source.source.pos())
+            )
+        );
+        let mut source = self.source.source.capture(target);
+        op(
+            Primitive {
+                source: PrimitiveSource {
+                    source: &mut source,
+                    limit: self.source.limit,
+                },
+                tag: self.tag,
+                start: self.start,
+                marker: PhantomData::<M>,
+            }
+        )?;
+        source.into_reader()?.finalize()
     }
 }
 

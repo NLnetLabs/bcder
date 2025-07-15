@@ -10,13 +10,15 @@
 use std::{cmp, error, io};
 use std::io::Read;
 use std::marker::PhantomData;
+use crate::encode;
+use crate::captured::Captured;
 use crate::ident::{Ident, Tag};
 use crate::length::{Length, LengthOctets};
 use crate::mode::Mode;
 use super::error::Error;
 use super::nested::{NestedItem, NestedIter};
 use super::primitive::{FromPrimitive, Primitive};
-use super::source::{Source, SourceError};
+use super::source::{CaptureSource, Source, SourceError};
 use super::value::Value;
 
 
@@ -723,6 +725,80 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     pub fn skip_all(&mut self) -> Result<(), Error> {
         while self.skip_any_opt_next()?.is_some() { }
         Ok(())
+    }
+
+    pub fn capture<F>(self, op: F) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        match self.inner {
+            ConstructedEnum::Definite(inner) => {
+                Self::capture_definite(
+                    self.tag, self.start, inner, self.stored_ident, op
+                )
+            }
+            ConstructedEnum::Indefinite(inner) => {
+                Self::capture_indefinite(
+                    self.tag, self.start, inner, self.stored_ident, op
+                )
+            }
+        }
+    }
+
+    fn capture_definite<F>(
+        tag: Tag, start: Length, inner: DefiniteConstructed<'a, R>,
+        stored_ident: Option<(Ident, Length)>,
+        op: F
+    ) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        let mut target = Vec::new();
+        encode::infallible(
+            encode::write_header(
+                &mut target, tag, true,
+                inner.limit.saturating_sub(inner.source.pos())
+            )
+        );
+        let mut source = inner.source.capture(target);
+        op(
+            Constructed {
+                tag, start,
+                inner: ConstructedEnum::Definite(
+                    DefiniteConstructed {
+                        source: &mut source,
+                        limit: inner.limit,
+                    }
+                ),
+                stored_ident,
+                marker: PhantomData::<M>,
+            }
+        )?;
+        source.into_reader()?.finalize()
+    }
+
+    fn capture_indefinite<F>(
+        tag: Tag, start: Length, inner: IndefiniteConstructed<'a, R>,
+        stored_ident: Option<(Ident, Length)>,
+        op: F
+    ) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        let mut target = Vec::new();
+        encode::infallible(
+            encode::write_indefinite_header(&mut target, tag)
+        );
+        let mut source = inner.source.capture(target);
+        op(
+            Constructed {
+                tag, start,
+                inner: ConstructedEnum::Indefinite(
+                    IndefiniteConstructed {
+                        source: &mut source,
+                        limit: inner.limit,
+                        done: inner.done,
+                    }
+                ),
+                stored_ident,
+                marker: PhantomData::<M>,
+            }
+        )?;
+        source.into_reader()?.finalize()
     }
 }
 

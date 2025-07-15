@@ -2,8 +2,11 @@
 //!
 //! This module privates some items that are used internally only.
 
-use std::{error, fmt, io};
+use std::{cmp, error, fmt, io};
+use std::marker::PhantomData;
+use crate::captured::Captured;
 use crate::length::Length;
+use super::error::Error;
 
 
 //------------ Source --------------------------------------------------------
@@ -73,6 +76,20 @@ impl<R> Source<R> {
         Ok(())
     }
 
+    /// Converts the source into its status.
+    pub fn into_status(self) -> Result<(), SourceError> {
+        self.status
+    }
+
+    pub fn into_reader(self) -> Result<R, Error> {
+        match self.status {
+            Ok(()) => Ok(self.wrapped_reader),
+            Err(err) => {
+                Err(Error::content(err, self.pos))
+            }
+        }
+    }
+
     /// Changes the status to the given error.
     ///
     /// After calling this method, all attempts of reading will result in an
@@ -92,6 +109,19 @@ impl<R> Source<R> {
     fn reader(&mut self) -> Result<&mut R, io::Error> {
         self.status.as_mut().map_err(|err| err.create_io_error())?;
         Ok(&mut self.wrapped_reader)
+    }
+
+    pub fn capture<M>(
+        &mut self, target: Vec<u8>,
+    ) -> Source<CaptureSource<M, R>> {
+        Source {
+            pos: self.pos,
+            status: match self.status {
+                Ok(()) => Ok(()),
+                Err(ref err) => Err(err.duplicate())
+            },
+            wrapped_reader: CaptureSource::new(self, target),
+        }
     }
 }
 
@@ -136,6 +166,81 @@ impl<R: io::BufRead> io::BufRead for Source<R> {
             reader.consume(amt);
             self.pos += amt;
         }
+    }
+}
+
+
+//------------ CaptureSource -------------------------------------------------
+
+pub struct CaptureSource<'a, M, R> {
+    reader: &'a mut Source<R>,
+    target: Vec<u8>,
+    marker: PhantomData<M>,
+}
+
+impl<'a, M, R> CaptureSource<'a, M, R> {
+    pub fn new(
+        reader: &'a mut Source<R>,
+        target: Vec<u8>,
+    ) -> Self {
+        Self {
+            reader,
+            target,
+            marker: PhantomData,
+        }
+    }
+
+    pub fn finalize(self) -> Result<Box<Captured<M>>, Error> {
+        if let Err(err) = self.reader.status.as_mut() {
+            Err(Error::from_io(err.create_io_error(), self.reader.pos))
+        }
+        else {
+            Ok(Captured::<M>::from_box(self.target.into()))
+        }
+    }
+}
+
+impl<'a, M, R: io::Read> io::Read for CaptureSource<'a, M, R> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        let res = self.reader.read(buf)?;
+        if res > 0 {
+            self.target.extend_from_slice(
+                // Safety: We limit the length to the slice length.
+                unsafe { buf.get_unchecked(..cmp::min(buf.len(), res)) }
+            );
+        }
+        Ok(res)
+    }
+}
+
+
+impl<'a, M, R: io::BufRead> io::BufRead for CaptureSource<'a, M, R> {
+    fn fill_buf(&mut self) -> Result<&[u8], io::Error> {
+        self.reader.fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        // The following code assumes that fill_buf and consume are used
+        // correctly. Specifically, we assume that if consume is called with
+        // a given `amt`, fill_buf will return successfully and provide a
+        // slice of at least `amt` length.
+        //
+        // If this is violated, the result in self.target will be garbage,
+        // so we will place an error into the source in this case.
+
+        if let Ok(slice) = self.reader.fill_buf() {
+            if let Some(slice) = slice.get(..amt) {
+                self.target.extend_from_slice(slice);
+                self.reader.consume(amt);
+                return
+            }
+        }
+
+        // Something went wrong, set an error on the source.
+        self.reader.consume(amt);
+        self.reader.set_err(
+            SourceError::Bug("illegal use of BufRead::consume")
+        );
     }
 }
 
@@ -193,6 +298,17 @@ impl SourceError {
             }
         }
     }
+
+    /// Duplicates the error.
+    ///
+    /// This isn’t a clone since we can’t clone `SourceError::Io(Some(_))`.
+    fn duplicate(&self) -> Self {
+        match *self {
+            Self::InvalidData(inner) => Self::InvalidData(inner),
+            Self::Bug(inner) => Self::Bug(inner),
+            Self::Io(_) => Self::Io(None),
+        }
+    }
 }
 
 impl From<io::Error> for SourceError {
@@ -202,8 +318,13 @@ impl From<io::Error> for SourceError {
 }
 
 impl fmt::Display for SourceError {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidData(inner) => f.write_str(inner),
+            Self::Bug(inner) => f.write_str(inner),
+            Self::Io(Some(err)) => err.fmt(f),
+            Self::Io(None) => f.write_str("earlier IO error"),
+        }
     }
 }
 

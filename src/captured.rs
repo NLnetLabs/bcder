@@ -2,7 +2,7 @@
 //!
 //! This is a private module. Its public items are re-exported by the parent.
 
-use std::mem;
+use std:: mem;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use crate::encode;
@@ -22,21 +22,21 @@ pub struct Captured<M> {
 }
 
 impl<M> Captured<M> {
-    pub unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
+    pub fn from_slice(slice: &[u8]) -> &Self {
         unsafe { mem::transmute(slice) }
     }
 
-    pub unsafe fn from_box_unchecked(data: Box<[u8]>) -> Box<Self> {
+    pub fn from_box(data: Box<[u8]>) -> Box<Self> {
         unsafe { mem::transmute(data) }
     }
 
-    pub unsafe fn from_arc_unchecked(data: Arc<[u8]>) -> Arc<Self> {
+    pub fn from_arc(data: Arc<[u8]>) -> Arc<Self> {
         unsafe { mem::transmute(data) }
     }
 
     pub fn from_values<V: encode::Values<M>>(values: &V) -> Box<Self> {
         let res = values.to_vec().into_boxed_slice();
-        unsafe { Self::from_box_unchecked(res) }
+        Self::from_box(res)
     }
 
     /// Returns a bytes slice with the raw data of the captured value.
@@ -68,4 +68,5 @@ impl<M> encode::Values<M> for Captured<M> {
         target.write_all(&self.data)
     }
 }
+
 

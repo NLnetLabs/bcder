@@ -4,6 +4,7 @@
 //! parent.
 
 use std::io;
+use crate::captured::Captured;
 use crate::ident::Tag;
 use crate::length::Length;
 use crate::mode::Mode;
@@ -11,6 +12,7 @@ use super::constructed::Constructed;
 use super::error::Error;
 use super::nested::NestedItem;
 use super::primitive::Primitive;
+use super::source::CaptureSource;
 
 
 //------------ Value ---------------------------------------------------------
@@ -136,6 +138,21 @@ impl<'a, M: Mode, R: io::Read + 'a> Value<'a, M, R> {
                     }
                 })?;
                 Ok(())
+            }
+        }
+    }
+
+    pub fn capture<F>(self, op: F) -> Result<Box<Captured<M>>, Error>
+    where
+        R: io::BufRead,
+        F: FnOnce(Value<M, CaptureSource<M, R>>) -> Result<(), Error>
+    {
+        match self {
+            Value::Primitive(prim) => {
+                prim.capture(|prim| op(Value::Primitive(prim)))
+            }
+            Value::Constructed(cons) => {
+                cons.capture(|cons| op(Value::Constructed(cons)))
             }
         }
     }
