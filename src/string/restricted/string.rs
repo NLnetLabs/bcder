@@ -129,7 +129,7 @@ impl<L: CharSet> RestrictedString<L> {
     /// correct tag for this particular variant of a restricted string,
     /// or if it doesn’t contain a correctly encoded string, an error
     /// is returned.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_value(cons.next_with(L::TAG)?)
@@ -141,7 +141,7 @@ impl<L: CharSet> RestrictedString<L> {
     /// correct tag for this particular variant of a restricted string,
     /// or if it doesn’t contain a correctly encoded string, an error
     /// is returned.
-    pub fn decode_next_borrowed<'s>(
+    pub fn take_from_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::decode_value_borrowed(cons.next_with(L::TAG)?)
@@ -154,7 +154,7 @@ impl<L: CharSet> RestrictedString<L> {
     ///
     /// If there is restricted string, but it is not correctly encoded,
     /// returns an error.
-    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -172,7 +172,7 @@ impl<L: CharSet> RestrictedString<L> {
     ///
     /// If there is restricted string, but it is not correctly encoded,
     /// returns an error.
-    pub fn decode_opt_next_borrowed<'s>(
+    pub fn take_opt_from_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<Option<&'s Self>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -333,52 +333,6 @@ impl<L: CharSet> RestrictedString<L> {
         &'a self, tag: Tag,
     ) -> impl encode::Values<M> + 'a {
         OctetStringEncoder::new(tag, self.as_slice())
-    }
-}
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl<L: CharSet> RestrictedString<L> {
-    /// Takes a single restricted string value from constructed value content.
-    ///
-    /// If there is no next value, if the next value does not have the
-    /// correct tag for this particular variant of a restricted string,
-    /// or if it doesn’t contain a correctly encoded string, an error
-    /// is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_value`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_next(cons)
-    }
-
-    /// Takes an optional restricted string from constructed value content.
-    ///
-    /// If there is no next value, or if the next value does not have the
-    /// tag for this variant of restricted string, returns `Ok(None)`.
-    ///
-    /// If there is a restricted string, but it is not correctly encoded, an
-    /// error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_opt_value`"
-        )
-    )]
-    pub fn take_opt_value<M: Mode, R: io::BufRead>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Option<Box<Self>>, decode::Error> {
-        Self::decode_opt_next(cons)
     }
 }
 

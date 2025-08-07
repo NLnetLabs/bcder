@@ -726,7 +726,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// tag or the end of the value. It will also return an error if the
     /// closure returns an error or doesn’t process the complete values, or
     /// if accessing the underlying source fails.
-    pub fn process_value_with<F, T>(
+    pub fn take_value_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
@@ -753,7 +753,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     ///
     /// It will return an error if the closure fails or doesn’t process the
     /// complete value, or if accessing the underlying source fails.
-    pub fn process_opt_with<F, T>(
+    pub fn take_opt_value_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
@@ -780,7 +780,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// value or if the closure doesn’t process the next value completely,
     /// an error is returned. An error is also returned if the closure
     /// returns one or if accessing the underlying source fails.
-    pub fn process_constructed<F, T>(&mut self, op: F) -> Result<T, Error>
+    pub fn take_constructed<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
         let (ident, start) = self.read_ident()?;
         if !ident.is_constructed() {
@@ -807,7 +807,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// doesn’t process the next value completely, a malformed error is
     /// returned. An error is also returned if the closure returns one or
     /// if accessing the underlying source fails.
-    pub fn process_opt_constructed<F, T>(
+    pub fn take_opt_constructed<F, T>(
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
@@ -836,7 +836,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// process the contained value’s content completely, a malformed error
     /// is returned. An error is also returned if the closure returns one or
     /// if accessing the underlying source fails.
-    pub fn process_constructed_with<F, T>(
+    pub fn take_constructed_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
@@ -871,7 +871,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// An error is also returned if the closure does not process the
     /// value fully, returns en error or if accessing the underlying source
     /// fails.
-    pub fn process_opt_constructed_with<F, T>(
+    pub fn take_opt_constructed_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
@@ -902,7 +902,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// reached, or if the closure fails to process the next value’s content
     /// fully, an error is returned. An error is also returned if
     /// the closure returns one or if accessing the underlying source fails.
-    pub fn process_primitive<F, T>(&mut self, op: F) -> Result<T, Error>
+    pub fn take_primitive<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
         let (ident, start) = self.read_ident()?;
         if ident.is_constructed() {
@@ -927,7 +927,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// If the next value is not primitive, if the closure fails to process
     /// the next value’s content fully, the closure returns an error, or if
     /// accessing the underlying source fails, an error is returned.
-    pub fn process_opt_primitive<F, T>(
+    pub fn take_opt_primitive<F, T>(
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
@@ -956,7 +956,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// process the contained value’s content completely, a malformed error
     /// is returned. An error is also returned if the closure returns one or
     /// if accessing the underlying source fails.
-    pub fn process_primitive_with<F, T>(
+    pub fn take_primitive_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<T, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
@@ -991,7 +991,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// An error is also returned if the closure does not process the
     /// value fully, returns en error or if accessing the underlying source
     /// fails.
-    pub fn process_opt_primitive_with<F, T>(
+    pub fn take_opt_primitive_with<F, T>(
         &mut self, expected: Tag, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Primitive<M, R>) -> Result<T, Error> {
@@ -1023,7 +1023,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     ///
     /// The method will return `Ok(Some(()))` if it successfully skipped a
     /// value or an error if there were errors or `op` returned an error./
-    pub fn skip_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+    pub fn skip_value<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
         &mut self, op: F
     ) -> Result<(), Error> {
         self.next_value()?.skip(op)
@@ -1041,7 +1041,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     ///
     /// The method will return `Ok(Some(()))` if it successfully skipped a
     /// value or an error if there were errors or `op` returned an error.
-    pub fn skip_opt_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+    pub fn skip_opt_value<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
         &mut self, op: F
     ) -> Result<Option<()>, Error> {
         match self.next_opt()? {
@@ -1054,18 +1054,18 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     }
 
     /// Skips over the next value no matter its content.
-    pub fn skip_any_next(&mut self) -> Result<(), Error> {
-        self.skip_next(|_, _, _| Ok(()))
+    pub fn skip_any_value(&mut self) -> Result<(), Error> {
+        self.skip_value(|_, _, _| Ok(()))
     }
 
     /// Skips over an optional next value no matter its content.
-    pub fn skip_any_opt_next(&mut self) -> Result<Option<()>, Error> {
-        self.skip_opt_next(|_, _, _| Ok(()))
+    pub fn skip_any_opt_value(&mut self) -> Result<Option<()>, Error> {
+        self.skip_opt_value(|_, _, _| Ok(()))
     }
 
     /// Skips over all remaining values.
     pub fn skip_all(&mut self) -> Result<(), Error> {
-        while self.skip_any_opt_next()?.is_some() { }
+        while self.skip_any_opt_value()?.is_some() { }
         Ok(())
     }
 
@@ -1142,6 +1142,9 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
         )?;
         source.into_reader()?.finalize()
     }
+
+    // capture_one
+    // capture_all
 }
 
 
@@ -1151,12 +1154,48 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
 /// their standard form. That is, the values use their regular tag and
 /// encoding.
 impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
+    /// Processes and returns a mandatory boolean value.
+    pub fn take_bool(&mut self) -> Result<bool, Error> {
+        bool::take_from(self)
+    }
+
+    /// Processes and returns an optional boolean value.
+    pub fn take_opt_bool(&mut self) -> Result<Option<bool>, Error> {
+        bool::take_opt_from(self)
+    }
+
+    /// Processes a mandatory NULL value.
+    pub fn take_null(&mut self) -> Result<(), Error> {
+        <()>::take_from(self)
+    }
+
+    /// Processes an optional NULL value.
+    pub fn take_opt_null(&mut self) -> Result<Option<()>, Error> {
+        <()>::take_opt_from(self)
+    }
+
+    /// Processes a mandatory INTEGER value of the `u8` range.
+    ///
+    /// If the integer value is less than 0 or greater than 255, a malformed
+    /// error is returned.
+    pub fn take_u8(&mut self) -> Result<u8, Error> {
+        u8::take_from(self)
+    }
+
+    /// Processes an optional INTEGER value of the `u8` range.
+    ///
+    /// If the integer value is less than 0 or greater than 255, a malformed
+    /// error is returned.
+    pub fn take_opt_u8(&mut self) -> Result<Option<u8>, Error> {
+        u8::take_opt_from(self)
+    }
+
     /// Skips over a mandatory INTEGER if it has the given value.
     ///
     /// If the next value is an integer but of a different value, returns
     /// a malformed error.
     pub fn skip_u8_if(&mut self, expected: u8) -> Result<(), Error> {
-        self.process_primitive_with(Tag::INTEGER, |prim| {
+        self.take_primitive_with(Tag::INTEGER, |prim| {
             let start = prim.start();
             let got = u8::from_primitive(prim)?;
             if got != expected {
@@ -1182,7 +1221,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     pub fn skip_opt_u8_if(
         &mut self, expected: u8
     ) -> Result<Option<()>, Error> {
-        self.process_opt_primitive_with(Tag::INTEGER, |prim| {
+        self.take_opt_primitive_with(Tag::INTEGER, |prim| {
             let start = prim.start();
             let got = u8::from_primitive(prim)?;
             if got != expected {
@@ -1197,716 +1236,96 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
         })
     }
 
-    /// Processes a mandatory SEQUENCE value.
-    ///
-    /// This is a shortcut for
-    /// `self.process_constructed_with(Tag::SEQUENCE, op)`.
-    pub fn process_sequence<F, T>(
-        &mut self, op: F,
-    ) -> Result<T, Error>
-    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        self.process_constructed_with(Tag::SEQUENCE, op)
-    }
-
-    /// Processes an optional SEQUENCE value.
-    ///
-    /// This is a shortcut for
-    /// `self.process_opt_constructed_with(Tag::SEQUENCE, op)`.
-    pub fn process_opt_sequence<F, T>(
-        &mut self, op: F,
-    ) -> Result<Option<T>, Error>
-    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        self.process_opt_constructed_with(Tag::SEQUENCE, op)
-    }
-
-    /// Processes a mandatory SET value.
-    ///
-    /// This is a shortcut for
-    /// `self.process_constructed_with(Tag::SET, op)`.
-    pub fn process_set<F, T>(
-        &mut self, op: F,
-    ) -> Result<T, Error>
-    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        self.process_constructed_with(Tag::SET, op)
-    }
-
-    /// Processes an optional SET value.
-    ///
-    /// This is a shortcut for
-    /// `self.process_opt_constructed_with(Tag::SET^, op)`.
-    pub fn process_opt_set<F, T>(
-        &mut self, op: F,
-    ) -> Result<Option<T>, Error>
-    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
-        self.process_opt_constructed_with(Tag::SET, op)
-    }
-}
-
-
-/// # Legacy methods
-///
-/// The following methods were used in previous versions of _bcder._ They
-/// should be considered deprecated and are provided here for easier
-/// transition.
-impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
-    /// Processes a value with the given tag.
-    ///
-    /// If the next value has the tag `expected`, its content is being given
-    /// to the closure which has to process it completely and return whatever
-    /// is being returned upon success.
-    ///
-    /// The method will return a malformed error if it encounters any other
-    /// tag or the end of the value. It will also return an error if the
-    /// closure returns an error or doesn’t process the complete values, or
-    /// if accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_value_with`"
-        )
-    )]
-    pub fn take_value_if<F, T>(
-        &mut self,
-        expected: Tag,
-        op: F
-    ) -> Result<T, Error>
-    where F: FnOnce(&mut Value<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.read_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        let res = op(&mut self.read_value(ident, start)?)?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional value with the given tag.
-    ///
-    /// If the next value has the tag `expected`, its content is being given
-    /// to the closure which has to process it completely and return whatever
-    /// is to be returned as some value.
-    ///
-    /// If the next value has a different tag or if the end of the value has
-    /// been reached, the method returns `Ok(None)`. It will return an error
-    /// if the closure fails or doesn’t process the complete value, or if
-    /// accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_with`"
-        )
-    )]
-    pub fn take_opt_value_if<F, T>(
-        &mut self,
-        expected: Tag,
-        op: F
-    ) -> Result<Option<T>, Error>
-    where F: FnOnce(&mut Value<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        let res = op(&mut self.read_value(ident, start)?)?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
-    /// Processes a constructed value.
-    ///
-    /// If the next value is a constructed value, its tag and content are
-    /// being given to the closure `op` which has to process it completely.
-    /// If it succeeds, its return value is returned.
-    ///
-    /// If the next value is not a constructed value or there is no next
-    /// value or if the closure doesn’t process the next value completely,
-    /// a malformed error is returned. An error is also returned if the
-    /// closure returns one or if accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_constructed`"
-        )
-    )]
-    pub fn take_constructed<F, T>(&mut self, op: F) -> Result<T, Error>
-    where
-        F: FnOnce(Tag, &mut Constructed<M, R>) -> Result<T, Error>,
-    {
-        let (ident, start) = self.read_ident()?;
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        let res = op(
-            ident.tag(),
-            &mut self.read_value(ident, start)?.into_constructed()?
-        )?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional constructed value.
-    ///
-    /// If the next value is a constructed value, its tag and content are
-    /// being given to the closure `op` which has to process it completely.
-    /// If it succeeds, its return value is returned as some value.
-    ///
-    /// If the end of the value has been reached, the method returns
-    /// `Ok(None)`.
-    ///
-    /// If the next value is not a constructed value or if the closure
-    /// doesn’t process the next value completely, a malformed error is
-    /// returned. An error is also returned if the closure returns one or
-    /// if accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_constructed`"
-        )
-    )]
-    pub fn take_opt_constructed<F, T>(
-        &mut self, op: F
-    ) -> Result<Option<T>, Error>
-    where
-        F: FnOnce(Tag, &mut Constructed<M, R>) -> Result<T, Error>
-    {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        let res = op(
-            ident.tag(),
-            &mut self.read_value(ident, start)?.into_constructed()?
-        )?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
-    /// Processes a constructed value with a required tag.
-    ///
-    /// If the next value is a constructed value with a tag equal to
-    /// `expected`, its content is given to the closure `op` which has to
-    /// process it completely. If the closure succeeds, its return value
-    /// is returned.
-    ///
-    /// If the next value is not constructed or has a different tag, if
-    /// the end of the value has been reached, or if the closure does not
-    /// process the contained value’s content completely, a malformed error
-    /// is returned. An error is also returned if the closure returns one or
-    /// if accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_constructed_with`"
-        )
-    )]
-    pub fn take_constructed_if<F, T>(
-        &mut self, expected: Tag, op: F
-    ) -> Result<T, Error>
-    where
-        F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>,
-    {
-        let (ident, start) = self.read_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        let res = op(
-            &mut self.read_value(ident, start)?.into_constructed()?
-        )?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional constructed value if it has a given tag.
-    ///
-    /// If the next value is a constructed value with a tag equal to
-    /// `expected`, its content is given to the closure `op` which has to
-    /// process it completely. If the closure succeeds, its return value
-    /// is returned.
-    ///
-    /// If the next value does not have the expected tag or the end of this
-    /// value has been reached, the method returns `Ok(None)`. If the next
-    /// value is not constructed it returns an error.
-    ///
-    /// An error is also returned if the closure does not process the
-    /// value fully, returns en error or if accessing the underlying source
-    /// fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_constructed_with`"
-        )
-    )]
-    pub fn take_opt_constructed_if<F, T>(
-        &mut self,
-        expected: Tag,
-        op: F,
-    ) -> Result<Option<T>, Error>
-    where
-        F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>,
-    {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        if !ident.is_constructed() {
-            return Err(Error::content(
-                "expected constructed value", start
-            ))
-        }
-        let res = op(
-            &mut self.read_value(ident, start)?.into_constructed()?
-        )?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
-    /// Processes a primitive value.
-    ///
-    /// If the next value is primitive, its tag and content are given to the
-    /// closure `op` which has to process it fully. Upon success, the
-    /// closure’s return value is returned.
-    ///
-    /// If the next value is not primitive, if the end of value has been
-    /// reached, or if the closure fails to process the next value’s content
-    /// fully, a malformed error is returned. An error is also returned if
-    /// the closure returns one or if accessing the underlying source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_primitive`"
-        )
-    )]
-    pub fn take_primitive<F, T>(&mut self, op: F) -> Result<T, Error>
-    where
-        F: FnOnce(Tag, &mut Primitive<M, R>) -> Result<T, Error>,
-    {
-        let (ident, start) = self.read_ident()?;
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        let res = op(
-            ident.tag(),
-            &mut self.read_value(ident, start)?.into_primitive()?
-        )?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional primitive value.
-    ///
-    /// If the next value is primitive, its tag and content are given to the
-    /// closure `op` which has to process it fully. Upon success, the
-    /// closure’s return value is returned.
-    /// 
-    /// If the end of value has been reached, `Ok(None)` is returned.
-    /// If the next value is not primitive, if the closure fails to process
-    /// the next value’s content fully, the closure returns an error, or if
-    /// accessing the underlying source fails, an error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_primitive`"
-        )
-    )]
-    pub fn take_opt_primitive<F, T>(
-        &mut self, op: F,
-    ) -> Result<Option<T>, Error>
-    where
-        F: FnOnce(Tag, &mut Primitive<M, R>) -> Result<T, Error>,
-    {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        let res = op(
-            ident.tag(),
-            &mut self.read_value(ident, start)?.into_primitive()?
-        )?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
-    /// Processes a primitive value if it has the right tag.
-    ///
-    /// If the next value is a primitive and its tag matches `expected`, its
-    /// content is given to the closure `op` which has to process it
-    /// completely or return an error, either of which is returned.
-    ///
-    /// The method returns a malformed error if there is no next value, if the
-    /// next value is not a primitive, if it doesn’t have the right tag, or if
-    /// the closure doesn’t advance over the complete content. If access to
-    /// the underlying source fails, an error is returned, too.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_primitive_with`"
-        )
-    )]
-    pub fn take_primitive_if<F, T>(
-        &mut self, expected: Tag, op: F
-    ) -> Result<T, Error>
-    where F: FnOnce(&mut Primitive<M, R>) -> Result<T, Error> {
-        let (ident, start) = self.read_ident()?;
-        if ident.tag() != expected {
-            return Err(Error::content(
-                format!("expected value with tag {expected}"),
-                start
-            ))
-        }
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        let res = op(
-            &mut self.read_value(ident, start)?.into_primitive()?
-        )?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional primitive value of a given tag.
-    ///
-    /// If the next value is a primitive and its tag matches `expected`, its
-    /// content is given to the closure `op` which has to process it
-    /// completely or return an error, either of which is returned.
-    ///
-    /// If the end of this value has been reached or if the value’s tag
-    /// doesn’t match, the method returns `Ok(None)`. If the value is not
-    /// primitive, if the closure doesn’t process the next value’s content
-    /// fully, of if access to the underlying source fails, the method
-    /// returns an error.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_primitive_with`"
-        )
-    )]
-    pub fn take_opt_primitive_if<F, T>(
-        &mut self, expected: Tag, op: F
-    ) -> Result<Option<T>, Error>
-    where F: FnOnce(&mut Primitive<M, R>) -> Result<T, Error> {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        if ident.tag() != expected {
-            self.keep_ident(ident, start);
-            return Ok(None)
-        }
-        if ident.is_constructed() {
-            return Err(Error::content(
-                "expected primitive value", start
-            ))
-        }
-        let res = op(
-            &mut self.read_value(ident, start)?.into_primitive()?
-        )?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
-    /// Skips over an optional next value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `skip_opt_next`"
-        )
-    )]
-    pub fn skip_opt<F>(
-        &mut self, op: F
-    ) -> Result<Option<()>, Error>
-    where
-        R: io::BufRead,
-        F: FnMut(Tag, bool, usize) -> Result<(), Error>,
-    {
-        self.skip_opt_next(op)
-    }
-
-    /// Attempts to skip over the next value.
-    ///
-    /// If there is a next value, returns `Ok(Some(()))`, if the end of value
-    /// has already been reached, returns `Ok(None)`.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `skip_any_opt_next?"
-        )
-    )]
-    pub fn skip_one(&mut self) -> Result<Option<()>, Error>
-    where R: io::BufRead {
-        self.skip_any_opt_next()
-    }
-
-    // XXX More:
-    //
-    // capture
-    // capture_one
-    // capture_all
-
-    /// Processes and returns a mandatory boolean value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `bool::decode_next` instead"
-        )
-    )]
-    pub fn take_bool(&mut self) -> Result<bool, Error> {
-        bool::decode_next(self)
-    }
-
-    /// Processes and returns an optional boolean value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `bool::decode_opt_next` instead"
-        )
-    )]
-    pub fn take_opt_bool(
-        &mut self,
-    ) -> Result<Option<bool>, Error> {
-        bool::decode_opt_next(self)
-    }
-
-    /// Processes a mandatory NULL value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `<()>::decode_next` instead"
-        )
-    )]
-    pub fn take_null(&mut self) -> Result<(), Error> {
-        <()>::decode_next(self)
-    }
-
-    /// Processes an optional NULL value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `<()>::decode_opt_next` instead"
-        )
-    )]
-    pub fn take_opt_null(&mut self) -> Result<Option<()>, Error> {
-        <()>::decode_opt_next(self)
-    }
-
-    /// Processes a mandatory INTEGER value of the `u8` range.
-    ///
-    /// If the integer value is less than 0 or greater than 255, a malformed
-    /// error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u8::decode_next` instead"
-        )
-    )]
-    pub fn take_u8(&mut self) -> Result<u8, Error> {
-        u8::decode_next(self)
-    }
-
-    /// Processes an optional INTEGER value of the `u8` range.
-    ///
-    /// If the integer value is less than 0 or greater than 255, a malformed
-    /// error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u8::decode_opt_next` instead"
-        )
-    )]
-    pub fn take_opt_u8(&mut self) -> Result<Option<u8>, Error> {
-        u8::decode_opt_next(self)
-    }
-
     /// Processes a mandatory INTEGER value of the `u16` range.
     ///
     /// If the integer value is less than 0 or greater than 65535, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u16::decode_next` instead"
-        )
-    )]
     pub fn take_u16(&mut self) -> Result<u16, Error> {
-        u16::decode_next(self)
+        u16::take_from(self)
     }
 
     /// Processes an optional INTEGER value of the `u16` range.
     ///
     /// If the integer value is less than 0 or greater than 65535, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u16::decode_opt_next` instead"
-        )
-    )]
     pub fn take_opt_u16(&mut self) -> Result<Option<u16>, Error> {
-        u16::decode_opt_next(self)
+        u16::take_opt_from(self)
     }
 
     /// Processes a mandatory INTEGER value of the `u32` range.
     ///
     /// If the integer value is less than 0 or greater than 2^32-1, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u32::decode_next` instead"
-        )
-    )]
     pub fn take_u32(&mut self) -> Result<u32, Error> {
-        u32::decode_next(self)
+        u32::take_from(self)
     }
 
     /// Processes an optional INTEGER value of the `u32` range.
     ///
     /// If the integer value is less than 0 or greater than 2^32-1, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u32::decode_opt_next` instead"
-        )
-    )]
     pub fn take_opt_u32(&mut self) -> Result<Option<u32>, Error> {
-        u32::decode_opt_next(self)
+        u32::take_opt_from(self)
     }
 
     /// Processes a mandatory INTEGER value of the `u64` range.
     ///
     /// If the integer value is less than 0 or greater than 2^64-1, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u64::decode_next` instead"
-        )
-    )]
     pub fn take_u64(&mut self) -> Result<u64, Error> {
-        u64::decode_next(self)
+        u64::take_from(self)
     }
 
     /// Processes an optional INTEGER value of the `u64` range.
     ///
     /// If the integer value is less than 0 or greater than 2^64-1, a
     /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "use `u64::decode_opt_next` instead"
-        )
-    )]
     pub fn take_opt_u64(&mut self) -> Result<Option<u64>, Error> {
-        u64::decode_opt_next(self)
+        u64::take_opt_from(self)
     }
 
     /// Processes a mandatory SEQUENCE value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_sequence`"
-        )
-    )]
-    pub fn take_sequence<F, T>(&mut self, op: F) -> Result<T, Error>
-    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
-        self.process_sequence(|mut cons| op(&mut cons))
+    ///
+    /// This is a shortcut for
+    /// `self.process_constructed_with(Tag::SEQUENCE, op)`.
+    pub fn take_sequence<F, T>(
+        &mut self, op: F,
+    ) -> Result<T, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.take_constructed_with(Tag::SEQUENCE, op)
     }
 
     /// Processes an optional SEQUENCE value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_sequence`"
-        )
-    )]
+    ///
+    /// This is a shortcut for
+    /// `self.process_opt_constructed_with(Tag::SEQUENCE, op)`.
     pub fn take_opt_sequence<F, T>(
-        &mut self, op: F
+        &mut self, op: F,
     ) -> Result<Option<T>, Error>
-    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
-        self.process_opt_sequence(|mut cons| op(&mut cons))
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.take_opt_constructed_with(Tag::SEQUENCE, op)
     }
 
     /// Processes a mandatory SET value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_set`"
-        )
-    )]
-    pub fn take_set<F, T>(&mut self, op: F) -> Result<T, Error>
-    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
-        self.process_set(|mut cons| op(&mut cons))
+    ///
+    /// This is a shortcut for
+    /// `self.process_constructed_with(Tag::SET, op)`.
+    pub fn take_set<F, T>(
+        &mut self, op: F,
+    ) -> Result<T, Error>
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.take_constructed_with(Tag::SET, op)
     }
 
     /// Processes an optional SET value.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt_set`"
-        )
-    )]
+    ///
+    /// This is a shortcut for
+    /// `self.process_opt_constructed_with(Tag::SET^, op)`.
     pub fn take_opt_set<F, T>(
-        &mut self, op: F
+        &mut self, op: F,
     ) -> Result<Option<T>, Error>
-    where F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error> {
-        self.process_opt_set(|mut cons| op(&mut cons))
+    where F: FnOnce(Constructed<M, R>) -> Result<T, Error> {
+        self.take_opt_constructed_with(Tag::SET, op)
     }
 }
 

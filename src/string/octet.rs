@@ -66,7 +66,7 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
@@ -77,7 +77,7 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_next_borrowed<'s>(
+    pub fn take_from_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::decode_value_borrowed(
@@ -92,7 +92,7 @@ impl OctetString {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -110,7 +110,7 @@ impl OctetString {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next_borrowed<'s>(
+    pub fn take_opt_from_borrowed<'s>(
         cons: &mut decode::Constructed<Der, &'s [u8]>
     ) -> Result<Option<&'s Self>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -247,51 +247,6 @@ impl OctetString {
 
 }
 
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl OctetString {
-    /// Takes a single octet string value from constructed value content.
-    ///
-    /// If there is no next value, if the next value does not have the tag
-    /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
-    /// octet string, a malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_value`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_next(cons)
-    }
-
-    /// Takes an optional octet string value from constructed value content.
-    ///
-    /// If there is no next value, or if the next value does not have the
-    /// tag `Tag::OCTET_STRING`, then `Ok(None)` is returned.
-    ///
-    /// If there is an octet string, but it is not correctly encoded, a
-    /// malformed error is returned.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_opt_value`"
-        )
-    )]
-    pub fn take_opt_value<M: Mode, R: io::BufRead>(
-        cons: &mut decode::Constructed<M, R>
-    ) -> Result<Option<Box<Self>>, decode::Error> {
-        Self::decode_opt_next(cons)
-    }
-}
-
 
 //--- From
 
@@ -384,7 +339,7 @@ impl<const N: usize> OctetStringArray<N> {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
@@ -397,7 +352,7 @@ impl<const N: usize> OctetStringArray<N> {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Self>, decode::Error> {
         let Some(content) = cons.next_opt_with(

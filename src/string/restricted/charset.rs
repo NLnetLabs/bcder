@@ -38,24 +38,6 @@ pub trait CharSetDecoder: Default {
     /// Checks the end of a sequence.
     fn check_final(&mut self) -> Result<(), Self::Error>;
 
-    /*
-    /// Decodes the next slice of a sequence.
-    ///
-    /// The slice may be empty.
-    ///
-    /// Appends whatever it decoded to `target`.
-    fn decode_next(
-        &mut self, slice: &[u8], target: &mut String
-    ) -> Result<(), Self::Error>;
-
-    /// Decodes the end of a sequence.
-    ///
-    /// Appends whatever is left to `target`.
-    fn decode_final(
-        &mut self, target: &mut String
-    ) -> Result<(), Self::Error>;
-    */
-
     fn decode_slice_lossy(slice: &[u8]) -> Cow<'_, str>;
 
     /// Checks a slice.
@@ -74,16 +56,6 @@ pub trait CharSetDirectDecoder: CharSetDecoder {
 pub trait CharSetEncoder: Default {
     /// The error type of the decoder.
     type Error: error::Error + Send + Sync + 'static;
-
-    /*
-    fn encode_next(
-        &mut self, slice: &str, target: &mut Vec<u8>
-    ) -> Result<(), Self::Error>;
-
-    fn encode_final(
-        &mut self, target: &mut Vec<u8>
-    ) -> Result<(), Self::Error>;
-    */
 
     fn encode_str(slice: &str) -> Result<Cow<'_, [u8]>, Self::Error>;
 }

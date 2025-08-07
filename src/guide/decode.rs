@@ -43,7 +43,7 @@
 //!
 //! Typically, decoding happens by taking the next value from a constructed
 //! value which, by convention, is done through an associated function called
-//! `decode_next`. It looks like this:
+//! `take_from`. It looks like this:
 //!
 //! ```
 //! use std::io;
@@ -57,7 +57,7 @@
 //! # }
 //! #
 //! impl EncapsulatedContentInfo {
-//!     pub fn decode_value<M: Mode, R: io::Read>(
+//!     pub fn take_from<M: Mode, R: io::Read>(
 //!         cons: &mut decode::Constructed<M, R>
 //!     ) -> Result<Self, decode::Error> {
 //!         cons.take_sequence(|cons| {

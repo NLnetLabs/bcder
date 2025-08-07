@@ -291,43 +291,13 @@ impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
 }
 
 
-/// # High-level parsing (legacy version)
-///
-/// The following methods were used for parsing primitive content in previous
-/// versions of _bcder._ They are provided here for compatibility and will be
-/// deprecated in a future version.
-///
-/// New code should use the [`FromPrimitive`] trait for builtin types instead.
-#[allow(clippy::wrong_self_convention)]
+/// # High-level parsing.
 impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
-    /// Takes a single octet from the content.
-    ///
-    /// If there aren’t any more octets available from the source, returns
-    /// an error.
-    fn take_u8(&mut self) -> Result<u8, Error> {
-        if self.remaining().to_u64() < 1 {
-            return Err(self.err_at_current("unexpected end of data"))
-        }
-        self.read_u8()
-    }
-
-    /*
-    /// Takes an optional octet from the source.
-    ///
-    /// If there aren’t any more octets available from the source, returns
-    /// `Ok(None)`.
-    fn take_opt_u8(&mut self) -> Result<Option<u8>, Error> {
-        if self.remaining() < 1 {
-            return Ok(None)
-        }
-        self.take_u8().map(Some)
-    }
-    */
-
     /// Decodes the primitive value as a BOOLEAN value.
-    pub fn to_bool(&mut self) -> Result<bool, Error>
+    pub fn into_bool(mut self) -> Result<bool, Error>
     where M: Mode {
-        let res = self.take_u8()?;
+        let res = self.read_u8()?;
+        self.check_exhausted()?;
         if M::IS_RESTRICTED {
             match res {
                 0 => Ok(false),
@@ -343,59 +313,59 @@ impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
     }
 
     /// Converts the content into an INTEGER limited to a `i8`.
-    pub fn to_i8(&mut self) -> Result<i8, Error> {
-        Ok(IntegerArray::from_primitive_ref(self)?.into())
+    pub fn into_i8(self) -> Result<i8, Error> {
+        Ok(IntegerArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `i16`.
-    pub fn to_i16(&mut self) -> Result<i16, Error> {
-        Ok(IntegerArray::from_primitive_ref(self)?.into())
+    pub fn into_i16(self) -> Result<i16, Error> {
+        Ok(IntegerArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `i32`.
-    pub fn to_i32(&mut self) -> Result<i32, Error> {
-        Ok(IntegerArray::from_primitive_ref(self)?.into())
+    pub fn into_i32(self) -> Result<i32, Error> {
+        Ok(IntegerArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `i64`.
-    pub fn to_i64(&mut self) -> Result<i64, Error> {
-        Ok(IntegerArray::from_primitive_ref(self)?.into())
+    pub fn into_i64(self) -> Result<i64, Error> {
+        Ok(IntegerArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `i128`.
-    pub fn to_i128(&mut self) -> Result<i128, Error> {
-        Ok(IntegerArray::from_primitive_ref(self)?.into())
+    pub fn into_i128(self) -> Result<i128, Error> {
+        Ok(IntegerArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `u8`.
-    pub fn to_u8(&mut self) -> Result<u8, Error> {
-        Ok(UnsignedArray::from_primitive_ref(self)?.into())
+    pub fn into_u8(self) -> Result<u8, Error> {
+        Ok(UnsignedArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `u16`.
-    pub fn to_u16(&mut self) -> Result<u16, Error> {
-        Ok(UnsignedArray::from_primitive_ref(self)?.into())
+    pub fn into_u16(self) -> Result<u16, Error> {
+        Ok(UnsignedArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `u32`.
-    pub fn to_u32(&mut self) -> Result<u32, Error> {
-        Ok(UnsignedArray::from_primitive_ref(self)?.into())
+    pub fn into_u32(self) -> Result<u32, Error> {
+        Ok(UnsignedArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `u64`.
-    pub fn to_u64(&mut self) -> Result<u64, Error> {
-        Ok(UnsignedArray::from_primitive_ref(self)?.into())
+    pub fn into_u64(self) -> Result<u64, Error> {
+        Ok(UnsignedArray::from_primitive(self)?.into())
     }
 
     /// Converts the content into an INTEGER limited to a `u128`.
-    pub fn to_u128(&mut self) -> Result<u128, Error> {
-        Ok(UnsignedArray::from_primitive_ref(self)?.into())
+    pub fn into_u128(self) -> Result<u128, Error> {
+        Ok(UnsignedArray::from_primitive(self)?.into())
     }
 
     /// Decodes a NULL value.
     ///
     /// Since such a value is empty, this doesn’t really do anything.
-    pub fn to_null(&mut self) -> Result<(), Error> {
+    pub fn into_null(self) -> Result<(), Error> {
         if !self.remaining().is_zero() {
             Err(self.err_at_start("invalid NULL value"))
         }
@@ -534,18 +504,18 @@ pub trait FromPrimitive<M>: Sized {
         primitive: Primitive<M, R>
     ) -> Result<Self, Error>;
 
-    fn decode_next<R: io::BufRead>(
+    fn take_from<R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, Error>
     where M: Mode {
-        cons.process_primitive_with(Self::TAG, Self::from_primitive)
+        cons.take_primitive_with(Self::TAG, Self::from_primitive)
     }
 
-    fn decode_opt_next<R: io::BufRead>(
+    fn take_opt_from<R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Self>, Error>
     where M: Mode {
-        cons.process_opt_primitive_with(Self::TAG, Self::from_primitive)
+        cons.take_opt_primitive_with(Self::TAG, Self::from_primitive)
     }
 }
 

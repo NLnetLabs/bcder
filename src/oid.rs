@@ -150,7 +150,7 @@ impl Oid {
     /// is not a primitive value with `Tag::OID`, or if it does not contain
     /// a correctly encoded object identifer, irregardless of its actual
     /// value.
-    pub fn skip_next<M: Mode, R: io::BufRead>(
+    pub fn skip_in<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<(), decode::Error> {
         Self::skip_primitive(cons.next_primitive_with(Tag::OID)?)
@@ -163,7 +163,7 @@ impl Oid {
     /// Returns an error if the next value is not a primitive value with
     /// `Tag::OID`, or if it does not contain a correctly encoded object
     /// identifer, irregardless of its actual value.
-    pub fn skip_opt_next<M: Mode, R: io::BufRead>(
+    pub fn skip_opt_in<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<()>, decode::Error> {
         let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
@@ -177,7 +177,7 @@ impl Oid {
     /// Returns an error if `const` has reached its end, if the next value
     /// is not a primitive value with `Tag::OID`, or if it does not contain
     /// a correctly encoded object identifer.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(cons.next_primitive_with(Tag::OID)?)
@@ -188,7 +188,7 @@ impl Oid {
     /// Returns an error if `cons` has reached its end, if the next value
     /// is not a primitive value with `Tag::OID`, or if it does not contain
     /// a correctly encoded object identifer.
-    pub fn decode_next_borrowed<'s, M: Mode>(
+    pub fn take_from_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_primitive_borrowed(cons.next_primitive_with(Tag::OID)?)
@@ -201,7 +201,7 @@ impl Oid {
     /// Returns an error if the next value is not a primitive value with
     /// `Tag::OID`, or if it does not contain a correctly encoded object
     /// identifer.
-    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
@@ -217,7 +217,7 @@ impl Oid {
     /// Returns an error if the next value is not a primitive value with
     /// `Tag::OID`, or if it does not contain a correctly encoded object
     /// identifer.
-    pub fn decode_opt_next_borrowed<'s, M: Mode>(
+    pub fn take_opt_from_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<Option<&'s Self>, decode::Error> {
         let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
@@ -232,7 +232,7 @@ impl Oid {
     /// is not a primitive value with `Tag::OID`, or if it does not contain
     /// a correctly encoded object identifer, or if the object identifier is
     /// not equal to `self`.
-    pub fn expect_next<M: Mode, R: io::BufRead>(
+    pub fn skip_if<M: Mode, R: io::BufRead>(
         &self, cons: &mut Constructed<M, R>
     ) -> Result<(), decode::Error> {
         self.expect_primitive(cons.next_primitive_with(Tag::OID)?)
@@ -246,7 +246,7 @@ impl Oid {
     /// Returns an error if the next value is not a primitive value with
     /// `Tag::OID`, or if it does not contain a correctly encoded object
     /// identifer, or if the object identifier is not equal to `self`.
-    pub fn expect_opt_next<M: Mode, R: io::BufRead>(
+    pub fn skip_opt_if<M: Mode, R: io::BufRead>(
         &self, cons: &mut Constructed<M, R>
     ) -> Result<Option<()>, decode::Error> {
         let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
@@ -356,100 +356,6 @@ impl Oid {
         else {
             Ok(())
         }
-    }
-}
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl Oid {
-    /// Skips over an object identifier value.
-    ///
-    /// If the source has reached its end, if the next value does not have
-    /// the `Tag::OID`, or if it is not a primitive value containing a
-    /// correctly encoded OID, returns a malformed error.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `skip_next`"
-        )
-    )]
-    pub fn skip_in<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<(), decode::Error> {
-        Self::skip_next(cons)
-    }
-
-    /// Skips over an optional object identifier value.
-    ///
-    /// If the source has reached its end of if the next value does not have
-    /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
-    /// tag but is not a primitive value containing a correctly encoded OID,
-    /// returns a malformed error.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `skip_opt_next`"
-        )
-    )]
-    pub fn skip_opt_in<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Option<()>, decode::Error> {
-        Self::skip_opt_next(cons)
-    }
-
-    /// Takes an object identifier value from the source.
-    ///
-    /// If the source has reached its end, if the next value does not have
-    /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
-    /// error.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_next`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::decode_next(cons)
-    }
-
-    /// Takes an optional object identifier value from the source.
-    ///
-    /// If the source has reached its end of if the next value does not have
-    /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
-    /// tag but is not a primitive value, returns a malformed error.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_opt_next`"
-        )
-    )]
-    pub fn take_opt_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Option<Box<Self>>, decode::Error> {
-        Self::decode_opt_next(cons)
-    }
-
-    /// Skip over an object identifier if it matches `self`.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `expect_next`"
-        )
-    )]
-    pub fn skip_if<M: Mode, R: io::BufRead>(
-        &self, cons: &mut Constructed<M, R>,
-    ) -> Result<(), decode::Error> {
-        self.expect_next(cons)
     }
 }
 

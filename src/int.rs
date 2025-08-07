@@ -124,7 +124,7 @@ impl Integer {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -136,7 +136,7 @@ impl Integer {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_next_borrowed<'s, M: Mode>(
+    pub fn take_from_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_primitive_borrowed(
@@ -166,36 +166,6 @@ impl Integer {
         Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
             prim.err_at_start(err)
         })
-    }
-}
-
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl Integer {
-    /// Takes a single signed integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_next`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::from_primitive(
-            cons.next_primitive_with(Tag::INTEGER)?
-        )
     }
 }
 
@@ -432,7 +402,7 @@ impl<const N: usize> IntegerArray<N> {
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer fitting into
     /// `N` bytes.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -479,36 +449,6 @@ impl<const N: usize> IntegerArray<N> {
             head.fill(0xFF)
         }
         Ok(Self(res))
-    }
-}
-
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl<const N: usize> IntegerArray<N> {
-    /// Takes a single signed integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_next`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Self, decode::Error> {
-        Self::from_primitive(
-            cons.next_primitive_with(Tag::INTEGER)?
-        )
     }
 }
 
@@ -698,7 +638,7 @@ impl Unsigned {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -710,7 +650,7 @@ impl Unsigned {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer.
-    pub fn decode_next_borrowed<'s, M: Mode>(
+    pub fn take_from_borrowed<'s, M: Mode>(
         cons: &mut Constructed<M, &'s [u8]>
     ) -> Result<&'s Self, decode::Error> {
         Self::from_primitive_borrowed(
@@ -740,35 +680,6 @@ impl Unsigned {
         Self::from_slice(prim.read_exact_borrowed(len)?).map_err(|err| {
             prim.err_at_start(err)
         })
-    }
-}
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl Unsigned {
-    /// Takes a single unsigned integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_next`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Box<Self>, decode::Error> {
-        Self::from_primitive(
-            cons.next_primitive_with(Tag::INTEGER)?
-        )
     }
 }
 
@@ -940,7 +851,7 @@ impl<const N: usize> UnsignedArray<N> {
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer that
     /// fits into `N` bytes.
-    pub fn decode_next<M: Mode, R: io::BufRead>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -1017,36 +928,6 @@ impl<const N: usize> UnsignedArray<N> {
         }
 
         Ok(Self::from_array(res))
-    }
-}
-
-
-/// # Decoding (Legacy version)
-///
-/// The following contains the decoding functions with the names used in
-/// previous versions of the crate. They are provied here for easier
-/// transition and should be considered as deprecated.
-impl<const N: usize> UnsignedArray<N> {
-    /// Takes a single signed integer from a source.
-    ///
-    /// This requires the next value in `cons` to be a primitive value with
-    /// tag `INTEGER` that contains a correctly encoded integer.
-    ///
-    /// This method is the legacy name of [`decode_value`][Self::decode_value]
-    /// and will be deprecated soon.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "renamed to `decode_next`"
-        )
-    )]
-    pub fn take_from<M: Mode, R: io::BufRead>(
-        cons: &mut Constructed<M, R>
-    ) -> Result<Self, decode::Error> {
-        Self::from_primitive(
-            cons.next_primitive_with(Tag::INTEGER)?
-        )
     }
 }
 
