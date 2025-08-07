@@ -31,6 +31,8 @@
 //! [oid]: oid/index.html
 //! [captured]: captured/index.html
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
 // We have seemingly redundant closures (i.e., closures where just providing
 // a function would also work) that cannot be removed due to lifetime issues.
 #![allow(clippy::redundant_closure)]
@@ -40,21 +42,22 @@
 
 pub use self::captured::Captured;
 pub use self::int::{Integer, Unsigned};
-pub use self::mode::Mode;
-pub use self::oid::{ConstOid, Oid};
+pub use self::oid::Oid;
 pub use self::string::{
-    BitString, OctetString,
+    BitString, OctetString, OctetStringArray,
     Ia5String, NumericString, PrintableString, Utf8String,
 };
-pub use self::tag::Tag;
+pub use self::ident::{Class, Tag};
+pub use self::length::{Length, LengthOverflow};
+pub use self::mode::Mode;
 
 
 //--- Public modules
 
 pub mod decode;
 pub mod encode;
+pub mod mode;
 
-pub mod captured;
 pub mod int;
 pub mod oid;
 pub mod string;
@@ -62,9 +65,10 @@ pub mod string;
 
 //--- Private modules
 
+mod captured;
+mod ident;
 mod length;
-mod mode;
-mod tag;
+
 
 //--- Elaborate documentation
 //

@@ -5,13 +5,12 @@
 //! Data encoded in BER is a stream of nested values for which the length
 //! may or may not be known. Primitive values, for which the length _is_
 //! always known, contain a sequence of octets representing a value of
-//! a certain type. Constructed values are a sequence of other values. These
-//! values may either have a pre-determined length or a bounded by a special
+//! a certain type. Constructed values are a sequence of other values and
+//! may either have a pre-determined length or a bounded by a special
 //! value marking the end of the sequence. The overall stream of data can be
-//! viewed as the content of a constructed value bounded by the end of the
-//! stream.
+//! viewed as a single value.
 //!
-//! In the *ber* crate, the content of a value is parsed through functions.
+//! In the *bcder* crate, the content of a value is parsed through functions.
 //! These functions are given a mutable reference to the value’s content and
 //! are tasked with reading and processing all the content of the value. It
 //! does so by calling methods on the content value. Some of these methods
@@ -30,42 +29,46 @@
 //! ContentType  ::=  OBJECT IDENTIFIER
 //! ```
 //!
-//! Using the types provided by the *ber* crate for object identifiers and
+//! Using the types provided by the *bcder* crate for object identifiers and
 //! octet strings, this definition is easily mapped into a Rust struct:
 //!
 //! ```
 //! use bcder::{Oid, OctetString};
 //!
 //! pub struct EncapsulatedContentInfo {
-//!     content_type: Oid,
-//!     content: Option<OctetString>,
+//!     content_type: Box<Oid>,
+//!     content: Option<Box<OctetString>>,
 //! }
 //! ```
 //!
-//! By convention, the decoder function is called `take_from`. It looks like
-//! this:
+//! Typically, decoding happens by taking the next value from a constructed
+//! value which, by convention, is done through an associated function called
+//! `take_from`. It looks like this:
 //!
 //! ```
+//! use std::io;
 //! # use bcder::{Oid, OctetString};
-//! use bcder::Tag;
+//! use bcder::{Mode, Tag};
 //! use bcder::decode;
-//! use bcder::decode::DecodeError;
 //!
 //! # pub struct EncapsulatedContentInfo {
-//! #     content_type: Oid,
-//! #     content: Option<OctetString>,
+//! #     content_type: Box<Oid>,
+//! #     content: Option<Box<OctetString>>,
 //! # }
 //! #
 //! impl EncapsulatedContentInfo {
-//!     pub fn take_from<S: decode::Source>(
-//!         cons: &mut decode::Constructed<S>
-//!     ) -> Result<Self, DecodeError<S::Error>> {
-//!         cons.take_sequence(|cons| {
+//!     pub fn take_from<M: Mode, R: io::BufRead>(
+//!         cons: &mut decode::Constructed<M, R>
+//!     ) -> Result<Self, decode::Error> {
+//!         cons.take_sequence(|mut cons| {
 //!             Ok(EncapsulatedContentInfo {
-//!                 content_type: Oid::take_from(cons)?,
-//!                 content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
-//!                     OctetString::take_from(cons)
-//!                 })?
+//!                 content_type: Oid::take_from(&mut cons)?,
+//!                 content: cons.take_opt_constructed_with(
+//!                     Tag::ctx(0),
+//!                     |mut cons| {
+//!                         OctetString::take_from(&mut cons)
+//!                     }
+//!                 )?
 //!             })
 //!         })
 //!     }
@@ -87,25 +90,28 @@
 //! decoder would look like this:
 //!
 //! ```
+//! # use std::io;
 //! # use bcder::{Oid, OctetString};
-//! use bcder::Tag;
-//! use bcder::decode;
-//! use bcder::decode::DecodeError;
+//! # use bcder::{Mode, Tag};
+//! # use bcder::decode;
 //!
 //! # pub struct EncapsulatedContentInfo {
-//! #     content_type: Oid,
-//! #     content: Option<OctetString>,
+//! #     content_type: Box<Oid>,
+//! #     content: Option<Box<OctetString>>,
 //! # }
 //! #
 //! impl EncapsulatedContentInfo {
-//!     pub fn from_constructed<S: decode::Source>(
-//!         cons: &mut decode::Constructed<S>
-//!     ) -> Result<Self, DecodeError<S::Error>> {
+//!     pub fn from_constructed<M: Mode, R: io::BufRead>(
+//!         cons: &mut decode::Constructed<M, R>
+//!     ) -> Result<Self, decode::Error> {
 //!         Ok(EncapsulatedContentInfo {
 //!             content_type: Oid::take_from(cons)?,
-//!             content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
-//!                 OctetString::take_from(cons)
-//!             })?
+//!             content: cons.take_opt_constructed_with(
+//!                 Tag::ctx(0),
+//!                 |mut cons| {
+//!                     OctetString::take_from(&mut cons)
+//!                 }
+//!             )?
 //!         })
 //!     }
 //! }

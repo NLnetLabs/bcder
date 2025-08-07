@@ -3,15 +3,16 @@
 //! This module contains the [`Oid`] type that implements object identifiers,
 //! a construct used by ANS.1 to uniquely identify all sorts of things. The
 //! type is also re-exported at the top-level.
-//!
-//! [`Oid`]: struct.Oid.html
 
-use std::{fmt, hash, io, str::FromStr};
-use bytes::Bytes;
-use crate::encode;
-use crate::decode::{Constructed, DecodeError, Primitive, Source};
+use std::{error, fmt, io, mem};
+use std::str::FromStr;
+use std::sync::Arc;
+use crate::decode;
+use crate::decode::{Constructed, Primitive};
+use crate::encode::{PrimitiveContent, Target};
+use crate::ident::Tag;
+use crate::length::Length;
 use crate::mode::Mode;
-use crate::tag::Tag;
 
 
 //------------ Oid -----------------------------------------------------------
@@ -25,97 +26,71 @@ use crate::tag::Tag;
 /// as ‘{ 1 3 6 1 5 5 7 1 }’. Individual integers or sequences of integers
 /// can also be given names which then are used instead of the integers.
 /// 
-/// Values of this type keep a single object identifier in its BER encoding,
-/// i.e., in some form of byte sequence. Because different representations
-/// may be useful, the type is actually generic over something that can
-/// become a reference to a bytes slice. Parsing is only defined for `Bytes`
-/// values, though.
+/// Values of this type keep a single object identifier in its BER encoding
+/// as an unsized byte slice. To get an owned version, the type can be wrapped
+/// in a `Box<Oid>` or `Arc<Oid>`.
 ///
 /// The only use for object identifiers currently is to compare them to
 /// predefined values. For this purpose, you typically define your known
 /// object identifiers in a `oid` submodule as constants of
-/// `Oid<&'static [u8]>` – or its type alias `ConstOid`. This is also the
-/// reason why the wrapped value is `pub` for now. This will change once
-/// `const fn` is stable.
+/// `&Oid` by using `Oid::make`. Unfortunately, you need to provide it with
+/// a byte slice of the encoded identifier since we can’t do the necessary
+/// manipulations in a const function and there currently is no proc macro.
 ///
-/// Unfortunately, there is currently no proc macro to generate the object
-/// identifier constants in the code. Instead, the crate ships with a
-/// `mkoid` binary which accepts object identifiers in ‘dot integer’ notation
-/// and produces the `u8` array for their encoded value. You can install
-/// this binary via `cargo install ber`.
-#[derive(Clone, Debug)]
-pub struct Oid<T: AsRef<[u8]> = Bytes>(pub T);
+/// Instead, the crate ships with a `mkoid` binary which accepts object
+/// identifiers in ‘dot integer’ notation and produces the byte slice for
+/// their encoded value. You can install this binary via `cargo install ber`.
+#[derive(Eq, Hash, PartialEq)]
+#[repr(transparent)]
+pub struct Oid([u8]);
 
-/// A type alias for `Oid<&'static [u8]>.
-///
-/// This is useful when defining object identifier constants.
-pub type ConstOid = Oid<&'static [u8]>;
-
-
-/// # Decoding and Encoding
-///
-impl Oid<Bytes> {
-    /// Skips over an object identifier value.
+impl Oid {
+    /// Creates an object identifier from a byte slice without checking.
     ///
-    /// If the source has reached its end, if the next value does not have
-    /// the `Tag::OID`, or if it is not a primitive value containing a
-    /// correctly encoded OID, returns a malformed error.
-    pub fn skip_in<S: Source>(
-        cons: &mut Constructed<S>
-    ) -> Result<(), DecodeError<S::Error>> {
-        cons.take_primitive_if(Tag::OID, Self::skip_primitive)
-    }
-
-    /// Skips over an optional object identifier value.
+    /// # Safety
     ///
-    /// If the source has reached its end of if the next value does not have
-    /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
-    /// tag but is not a primitive value containing a correctly encoded OID,
-    /// returns a malformed error.
-    pub fn skip_opt_in<S: Source>(
-        cons: &mut Constructed<S>
-    ) -> Result<Option<()>, DecodeError<S::Error>> {
-        cons.take_opt_primitive_if(Tag::OID, Self::skip_primitive)
+    /// The called must ensure that `slice` contains a correctly encoded
+    /// OID.
+    pub const unsafe fn from_slice_unchecked(slice: &[u8]) -> &Self {
+        unsafe { mem::transmute(slice) }
     }
-
-    /// Takes an object identifier value from the source.
     ///
-    /// If the source has reached its end, if the next value does not have
-    /// the `Tag::OID`, or if it is not a primitive value, returns a malformed
-    /// error.
-    pub fn take_from<S: Source>(
-        constructed: &mut Constructed<S>
-    ) -> Result<Self, DecodeError<S::Error>> {
-        constructed.take_primitive_if(Tag::OID, Self::from_primitive)
-    }
-
-    /// Takes an optional object identifier value from the source.
+    /// Creates a boxed identifier from a boxed slice without checking.
     ///
-    /// If the source has reached its end of if the next value does not have
-    /// the `Tag::OID`, returns `Ok(None)`. If the next value has the right
-    /// tag but is not a primitive value, returns a malformed error.
-    pub fn take_opt_from<S: Source>(
-        constructed: &mut Constructed<S>
-    ) -> Result<Option<Self>, DecodeError<S::Error>> {
-        constructed.take_opt_primitive_if(Tag::OID, Self::from_primitive)
+    /// # Safety
+    ///
+    /// The called must ensure that `src` contains a correctly encoded
+    /// object identifier.
+    pub unsafe fn from_box_unchecked(src: Box<[u8]>) -> Box<Self> {
+        unsafe { mem::transmute(src) }
     }
 
-    /// Skips an object identifier in the content of a primitive value.
-    pub fn skip_primitive<S: Source>(
-        prim: &mut Primitive<S>
-    ) -> Result<(), DecodeError<S::Error>> {
-        prim.with_slice_all(Self::check_content)
+    /// Creates an object identifier from a byte slice.
+    pub fn from_slice(slice: &[u8]) -> Result<&Self, InvalidOid> {
+        Self::check_slice(slice)?;
+        Ok(unsafe { Self::from_slice_unchecked(slice) })
     }
 
-    /// Constructs an object identifier from the content of a primitive value.
-    pub fn from_primitive<S: Source>(
-        prim: &mut Primitive<S>
-    ) -> Result<Self, DecodeError<S::Error>> {
-        let content = prim.take_all()?;
-        Self::check_content(content.as_ref()).map_err(|err| {
-            prim.content_err(err)
-        })?;
-        Ok(Oid(content))
+    /// Creates a boxed object identifier from a boxed slice.
+    pub fn from_box(src: Box<[u8]>) -> Result<Box<Self>, InvalidOid> {
+        Self::check_slice(src.as_ref())?;
+        Ok(unsafe { Self::from_box_unchecked(src) })
+    }
+
+    /// Creates an object identifier from a slice or panics.
+    ///
+    /// This function is intended to create constants and fail at compile
+    /// time if the slice is invalid.
+    ///
+    /// # Panics
+    ///
+    /// The function panics if `slice` does not contain a correctly encoded
+    /// object identifier.
+    pub const fn make(slice: &[u8]) -> &Self {
+        if Self::check_slice(slice).is_err() {
+            panic!("invalid object identifier")
+        }
+        unsafe { Self::from_slice_unchecked(slice) }
     }
 
     /// Checks that the content contains a validly encoded OID.
@@ -124,149 +99,301 @@ impl Oid<Bytes> {
     ///
     /// This currently doesn’t check that the sub-identifiers are encoded in
     /// the smallest amount of octets.
-    fn check_content(content: &[u8]) -> Result<(), &'static str> {
+    const fn check_slice(mut slice: &[u8]) -> Result<(), InvalidOid> {
         // There always has to be a first sub-identifier, i.e., content
         // must not be empty. We grab the last byte while we are checking for
         // empty.
-        let last = match content.last() {
+        let last = match slice.last() {
             Some(last) => *last,
             None => {
-                return Err("empty object identifier")
+                return Err(InvalidOid(()))
             }
         };
 
         // The last byte must have bit 8 cleared to indicate the end of a
         // subidentifier.
         if last & 0x80 != 0 {
-            return Err("illegal object identifier")
+            return Err(InvalidOid(()))
+        }
+
+        // The first octet of a subidentifier must not be 0x80. I.e., if
+        // there is an 0x80, the octet before that must have bit 8 set.
+        // Because of the const fn, we can’t do this the easy way.
+        let mut prev = 0; // Pretend we had an end-of-subidentifier before.
+        while let Some((&first, tail)) = slice.split_first() {
+            if first == 0x80 && prev & 0x80 == 0 {
+                return Err(InvalidOid(()))
+            }
+            prev = first;
+            slice = tail;
         }
 
         Ok(())
     }
+
+    /// Returns a reference to the underlying byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// Returns an iterator to the components of this object identifiers.
+    pub fn iter(&self) -> Iter<'_> {
+        Iter::new(self.as_slice())
+    }
 }
 
-impl<T: AsRef<[u8]>> Oid<T> {
-    /// Skip over an object identifier if it matches `self`.
-    pub fn skip_if<S: Source>(
-        &self, constructed: &mut Constructed<S>,
-    ) -> Result<(), DecodeError<S::Error>> {
-        constructed.take_primitive_if(Tag::OID, |prim| {
-            prim.with_slice_all(|content| {
-                // We are assuming that self contains a properly encoded OID,
-                // so we don’t really need to check if prim does, too, if we
-                // compare for equality.
-                if content != self.0.as_ref() {
-                    Err("object identifier mismatch")
-                }
-                else {
-                    Ok(())
-                }
-            })
+/// # Decoding
+impl Oid {
+    /// Skips over the next value if it is an object identifier.
+    ///
+    /// Returns an error if `cons` has reached its end, if the next value
+    /// is not a primitive value with `Tag::OID`, or if it does not contain
+    /// a correctly encoded object identifer, irregardless of its actual
+    /// value.
+    pub fn skip_in<M: Mode, R: io::BufRead>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<(), decode::Error> {
+        Self::skip_primitive(cons.next_primitive_with(Tag::OID)?)
+    }
+
+    /// Skips over an optional next value if it is an object identifier.
+    ///
+    /// Returns `Ok(None)` if the `cons` has reached its end.
+    ///
+    /// Returns an error if the next value is not a primitive value with
+    /// `Tag::OID`, or if it does not contain a correctly encoded object
+    /// identifer, irregardless of its actual value.
+    pub fn skip_opt_in<M: Mode, R: io::BufRead>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Option<()>, decode::Error> {
+        let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
+            return Ok(None)
+        };
+        Ok(Some(Self::skip_primitive(prim)?))
+    }
+
+    /// Decodes the next value as an object identifier.
+    ///
+    /// Returns an error if `const` has reached its end, if the next value
+    /// is not a primitive value with `Tag::OID`, or if it does not contain
+    /// a correctly encoded object identifer.
+    pub fn take_from<M: Mode, R: io::BufRead>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::from_primitive(cons.next_primitive_with(Tag::OID)?)
+    }
+
+    /// Decodes the next value as an object identifier, borrowing the content.
+    ///
+    /// Returns an error if `cons` has reached its end, if the next value
+    /// is not a primitive value with `Tag::OID`, or if it does not contain
+    /// a correctly encoded object identifer.
+    pub fn take_from_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_primitive_borrowed(cons.next_primitive_with(Tag::OID)?)
+    }
+
+    /// Decodes an optional next value if it is an object identifier.
+    ///
+    /// Returns `Ok(None)` if `const` has reached its end.
+    ///
+    /// Returns an error if the next value is not a primitive value with
+    /// `Tag::OID`, or if it does not contain a correctly encoded object
+    /// identifer.
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Option<Box<Self>>, decode::Error> {
+        let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
+            return Ok(None)
+        };
+        Ok(Some(Self::from_primitive(prim)?))
+    }
+
+    /// Decodes an optional next value as object identifier, borrowing content.
+    ///
+    /// Returns `Ok(None)` if `const` has reached its end.
+    ///
+    /// Returns an error if the next value is not a primitive value with
+    /// `Tag::OID`, or if it does not contain a correctly encoded object
+    /// identifer.
+    pub fn take_opt_from_borrowed<'s, M: Mode>(
+        cons: &mut Constructed<M, &'s [u8]>
+    ) -> Result<Option<&'s Self>, decode::Error> {
+        let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
+            return Ok(None)
+        };
+        Ok(Some(Self::from_primitive_borrowed(prim)?))
+    }
+
+    /// Skips over the next value if it is equal to `self`.
+    ///
+    /// Returns an error if `cons` has reached its end, if the next value
+    /// is not a primitive value with `Tag::OID`, or if it does not contain
+    /// a correctly encoded object identifer, or if the object identifier is
+    /// not equal to `self`.
+    pub fn skip_if<M: Mode, R: io::BufRead>(
+        &self, cons: &mut Constructed<M, R>
+    ) -> Result<(), decode::Error> {
+        self.expect_primitive(cons.next_primitive_with(Tag::OID)?)
+    }
+
+
+    /// Skips over an optional next value if it is equal to `self`.
+    ///
+    /// Returns `Ok(None)` if `cons` has reached its end.
+    ///
+    /// Returns an error if the next value is not a primitive value with
+    /// `Tag::OID`, or if it does not contain a correctly encoded object
+    /// identifer, or if the object identifier is not equal to `self`.
+    pub fn skip_opt_if<M: Mode, R: io::BufRead>(
+        &self, cons: &mut Constructed<M, R>
+    ) -> Result<Option<()>, decode::Error> {
+        let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
+            return Ok(None)
+        };
+        Ok(Some(self.expect_primitive(prim)?))
+    }
+
+    /// Constructs an object identifier from the content of a primitive value.
+    pub fn from_primitive<M, R: io::BufRead>(
+        mut prim: Primitive<M, R>
+    ) -> Result<Box<Self>, decode::Error> {
+        Self::from_box(prim.read_all_into_box()?).map_err(|err| {
+            prim.err_at_start(err)
         })
     }
-}
 
-/// # Access to Sub-identifiers
-///
-impl<T: AsRef<[u8]>> Oid<T> {
-    /// Returns an iterator to the components of this object identifiers.
+    /// Constructs an object identifier from the content of a primitive value.
+    pub fn from_primitive_borrowed<'s, M>(
+        mut prim: Primitive<M, &'s [u8]>
+    ) -> Result<&'s Self, decode::Error> {
+        Self::from_slice(prim.read_all_borrowed()?).map_err(|err| {
+            prim.err_at_start(err)
+        })
+    }
+
+    /// Skips over an object identifier contained in a primitive value.
     ///
-    /// # Panics
-    ///
-    /// The returned identifier will eventually panic if `self` does not
-    /// contain a correctly encoded object identifier.
-    pub fn iter(&self) -> Iter {
-        Iter::new(self.0.as_ref())
-    }
-}
-
-
-//--- AsRef
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for Oid<T> {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-
-//--- PartialEq and Eq
-
-impl<T: AsRef<[u8]>, U: AsRef<[u8]>> PartialEq<Oid<U>> for Oid<T> {
-    fn eq(&self, other: &Oid<U>) -> bool {
-        self.0.as_ref() == other.0.as_ref()
-    }
-}
-
-impl<T: AsRef<[u8]>> Eq for Oid<T> { }
-
-
-//--- Hash
-
-impl<T: AsRef<[u8]>> hash::Hash for Oid<T> {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state)
-    }
-}
-
-
-//--- Display
-
-impl<T: AsRef<[u8]>> fmt::Display for Oid<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut components = self.iter();
-        match components.next() {
-            Some(component) => component.fmt(f)?,
-            None => { return Ok(()) }
+    /// Skips the content as long as it is a correctly encoded object
+    /// identifier, no matter what identifier it actually is.
+    pub fn skip_primitive<M, R: io::BufRead>(
+        mut prim: Primitive<M, R>
+    ) -> Result<(), decode::Error> {
+        let start = prim.start();
+        // Can’t be empty.
+        if prim.remaining().is_zero() {
+            return Err(decode::Error::content(InvalidOid(()), start))
         }
-        components.try_for_each(|item| write!(f, ".{}", item))
+        let mut prev = 0;
+        loop {
+            let mut buf = prim.fill_buf()?;
+            if buf.is_empty() {
+                // We have reached the end. Check that the last octet has
+                // bit 8 cleared.
+                if prev & 0x80 == 0 {
+                    return Ok(())
+                }
+                else {
+                    return Err(decode::Error::content(InvalidOid(()), start))
+                }
+            }
+
+            let len = buf.len();
+
+            // 0x80 can’t follow an octet with bit 8 unset.
+            while let Some((&first, tail)) = buf.split_first() {
+                if first == 0x80 && prev & 0x80 == 0 {
+                    return Err(decode::Error::content(
+                        InvalidOid(()), start
+                    ))
+                }
+                prev = first;
+                buf = tail;
+            }
+
+            prim.consume(len);
+        }
     }
-}
 
-
-//--- encode::PrimitiveContent
-
-impl<T: AsRef<[u8]>> encode::PrimitiveContent for Oid<T> {
-    const TAG: Tag = Tag::OID;
-
-    fn encoded_len(&self, _: Mode) -> usize {
-        self.0.as_ref().len()
-    }
-
-    fn write_encoded<W: io::Write>(
+    /// Skips over an idenifier in a primitive if it is equal.
+    ///
+    /// If the primitive contains a different identifier, returns an error.
+    pub fn expect_primitive<M, R: io::BufRead>(
         &self,
-        _: Mode,
-        target: &mut W
-    ) -> Result<(), io::Error> {
-        target.write_all(self.0.as_ref())
+        mut prim: Primitive<M, R>
+    ) -> Result<(), decode::Error> {
+        // We don’t check for a valid OID here but just compare it to our
+        // own slice.
+        let start = prim.start();
+        let mut slice = self.as_slice();
+        while !slice.is_empty() {
+            let buf = prim.fill_buf()?;
+            if buf.is_empty() {
+                return Err(decode::Error::content(
+                    "unexpected object identifier", start
+                ))
+            }
+            match slice.strip_prefix(buf) {
+                Some(tail) => {
+                    if tail.is_empty() {
+                        break
+                    }
+                    else {
+                        slice = tail;
+                    }
+                }
+                None => {
+                    return Err(decode::Error::content(
+                        "unexpected object identifier", start
+                    ))
+                }
+            }
+        }
+        if !prim.remaining().is_zero() {
+            Err(decode::Error::content("unexpected object identifier", start))
+        }
+        else {
+            Ok(())
+        }
     }
 }
 
 
 //--- FromStr
 
-impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
-    type Err = &'static str;
+impl FromStr for Box<Oid> {
+    type Err = ParseOidError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        fn from_str(s: &str) -> Result<u32, &'static str> {
-            u32::from_str(s).map_err(|_| "only integer components allowed")
+        fn from_str(s: &str) -> Result<u32, ParseOidError> {
+            u32::from_str(s).map_err(|_| {
+                ParseOidError("only integer components allowed")
+            })
         }
 
         let mut components = s.split('.');
         let (first, second) = match (components.next(), components.next()) {
             (Some(first), Some(second)) => (first, second),
-            _ => { return Err("at least two components required"); }
+            _ => {
+                return Err(ParseOidError(
+                    "at least two components required"
+                ));
+            }
         };
 
         let first = from_str(first)?;
         if first > 2 {
-            return Err("first component can only be 0, 1, or 2.")
+            return Err(ParseOidError(
+                "first component can only be 0, 1, or 2."
+            ))
         }
 
         let second = from_str(second)?;
         if first < 2 && second >= 40 {
-            return Err("second component for 0. and 1. must be less than 40");
+            return Err(ParseOidError(
+                "second component for 0. and 1. must be less than 40"
+            ));
         }
 
         let mut res = vec![40 * first + second];
@@ -293,7 +420,103 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
             bytes.push((item & 0x7F) as u8);
         }
 
-        Ok(Oid(bytes.into()))
+        Ok(unsafe { Oid::from_box_unchecked(bytes.into()) })
+    }
+}
+
+
+//--- AsRef
+
+impl AsRef<Oid> for Oid {
+    fn as_ref(&self) -> &Oid {
+        self
+    }
+}
+
+impl AsRef<[u8]> for Oid {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+
+//--- PartialEq
+
+impl<'a> PartialEq<&'a Oid> for Box<Oid> {
+    fn eq(&self, other: &&'a Oid) -> bool {
+        self.as_ref().eq(other)
+    }
+}
+
+
+//--- PrimitiveContent
+
+impl<M> PrimitiveContent<M> for &'_ Oid {
+    const TAG: Tag = Tag::OID;
+
+    fn encoded_len(self) -> Length {
+        self.as_slice().len().into()
+    }
+
+    fn write_encoded<T: Target>(
+        self, target: &mut T
+    ) -> Result<(), T::Error> {
+        target.write_all(self.as_slice())
+    }
+}
+
+impl<M> PrimitiveContent<M> for &'_ Box<Oid> {
+    const TAG: Tag = Tag::OID;
+
+    fn encoded_len(self) -> Length {
+        self.as_slice().len().into()
+    }
+
+    fn write_encoded<T: Target>(
+        self, target: &mut T
+    ) -> Result<(), T::Error> {
+        target.write_all(self.as_slice())
+    }
+}
+
+impl<M> PrimitiveContent<M> for &'_ Arc<Oid> {
+    const TAG: Tag = Tag::OID;
+
+    fn encoded_len(self) -> Length {
+        self.as_slice().len().into()
+    }
+
+    fn write_encoded<T: Target>(
+        self, target: &mut T
+    ) -> Result<(), T::Error> {
+        target.write_all(self.as_slice())
+    }
+}
+
+
+//--- Display and Debug
+
+impl fmt::Display for Oid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut components = self.iter();
+        match components.next() {
+            Some(component) => component.fmt(f)?,
+            None => { return Ok(()) }
+        }
+        components.try_for_each(|item| write!(f, ".{item}"))
+    }
+}
+
+impl fmt::Debug for Oid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Oid(")?;
+        let mut components = self.iter();
+        match components.next() {
+            Some(component) => component.fmt_debug(f)?,
+            None => return f.write_str(")"),
+        }
+        components.try_for_each(|item| write!(f, ".{item}"))?;
+        f.write_str(")")
     }
 }
 
@@ -309,7 +532,7 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
 /// This type allows comparison and formatting, which hopefully is all you’ll
 /// need. If you insist, the method `to_u32` allows you to try to convert a
 /// component to a native integer.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Component<'a> {
     /// The position of the component in the object identifier.
     position: Position,
@@ -363,6 +586,9 @@ impl<'a> Component<'a> {
     pub fn to_u32(self) -> Option<u32> {
         // This can be at most five octets with at most four bits in the
         // topmost octet.
+        //
+        // Safety: self.slice is definitely not empty when indexing.
+        #[allow(clippy::indexing_slicing)]
         if self.slice.len() > 5
             || (self.slice.len() == 4 && self.slice[0] & 0x70 != 0)
         {
@@ -393,6 +619,14 @@ impl<'a> Component<'a> {
                 }
             }
             Position::Other => Some(res)
+        }
+    }
+
+    /// Formats the component for use in `Oid`’s `Debug` impl.
+    fn fmt_debug(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.to_u32() {
+            Some(val) => write!(f, "{val}"),
+            None => write!(f, "{:?}", self.slice),
         }
     }
 }
@@ -463,6 +697,8 @@ impl<'a> Iterator for Iter<'a> {
             return None
         }
         for i in 0..self.slice.len() {
+            // Safety: i is always a valid index.
+            #[allow(clippy::indexing_slicing)]
             if self.slice[i] & 0x80 == 0 {
                 let (res, tail) = self.slice.split_at(i + 1);
                 if self.position != Position::First {
@@ -471,9 +707,46 @@ impl<'a> Iterator for Iter<'a> {
                 return Some(Component::new(self.advance_position(), res));
             }
         }
-        panic!("illegal object identifier (last octet has bit 8 set)");
+        // If we arrive here, the last component didn’t end with the last
+        // octet having the most-significant bit cleared. Since we only allow
+        // `Oid` to contain a correctly encoded value, this can’t happen. So,
+        // we are having undefined behaviour here and can do whatever we want.
+        // Which is:
+        None
     }
 }
+
+
+//============ ErrorTyps =====================================================
+
+//------------ InvalidOid ----------------------------------------------------
+
+/// A byte slice contained an invalidly encoded OID.
+#[derive(Clone, Debug)]
+pub struct InvalidOid(());
+
+impl fmt::Display for InvalidOid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("invalid OID")
+    }
+}
+
+impl error::Error for InvalidOid { }
+
+
+//------------ ParseOidError -------------------------------------------------
+
+/// A string couldn’t be parsed as an object identifier.
+#[derive(Clone, Debug)]
+pub struct ParseOidError(&'static str);
+
+impl fmt::Display for ParseOidError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl error::Error for ParseOidError { }
 
 
 //============ Tests ========================================================
@@ -486,26 +759,29 @@ mod test {
     fn display() {
         assert_eq!(
             "2.5.29.19",
-            format!("{}", Oid(&[85, 29, 19])).as_str()
+            format!("{}", Oid::from_slice(&[85, 29, 19]).unwrap()).as_str()
         );
     }
 
     #[test]
     fn take_and_skip_primitive() {
         fn check(slice: &[u8], is_ok: bool) {
-            let take = Primitive::decode_slice(
-                slice, Mode::Der, |prim| Oid::from_primitive(prim)
+            let take = Primitive::decode_slice_ber(
+                slice, |prim| Oid::from_primitive(prim)
             );
             assert_eq!(take.is_ok(), is_ok);
             if let Ok(oid) = take {
                 assert_eq!(oid.0.as_ref(), slice);
             }
-            assert_eq!(
-                Primitive::decode_slice(
-                    slice, Mode::Der, |prim| Oid::skip_primitive(prim)
-                ).is_ok(),
-                is_ok
+            let res = Primitive::decode_slice_ber(
+                slice, |prim| Oid::skip_primitive(prim)
             );
+            if is_ok {
+                res.unwrap()
+            }
+            else {
+                assert!(res.is_err())
+            }
         }
 
         check(b"", false);
@@ -516,3 +792,5 @@ mod test {
         check(b"\x81\x34\x83", false);
     }
 }
+
+

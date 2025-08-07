@@ -38,14 +38,19 @@
 //! `DecodeError` provides a way to store either of them and is the error
 //! type you will likely encounter the most.
 
-pub use self::content::{Content, Constructed, Primitive};
-pub use self::error::{ContentError, DecodeError};
-pub use self::source::{
-    BytesSource, CaptureSource, IntoSource, Pos, LimitedSource, SliceSource,
-    Source
-};
 
-mod content;
+pub use self::constructed::{Constructed, Data};
+pub use self::error::Error;
+pub use self::nested::{ConstructedInfo, NestedItem};
+pub use self::primitive::{FromPrimitive, Primitive};
+pub use self::value::Value;
+pub(crate) use self::source::read_u8;
+
+mod constructed;
 mod error;
+mod nested;
+mod primitive;
 mod source;
+mod test;
+mod value;
 

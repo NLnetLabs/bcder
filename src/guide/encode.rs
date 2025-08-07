@@ -29,8 +29,8 @@
 //! use bcder::{Oid, OctetString};
 //!
 //! pub struct EncapsulatedContentInfo {
-//!     content_type: Oid,
-//!     content: Option<OctetString>,
+//!     content_type: Box<Oid>,
+//!     content: Option<Box<OctetString>>,
 //! }
 //! ```
 //! 
@@ -41,23 +41,23 @@
 //! ```
 //! # use bcder::{Oid, OctetString};
 //! # use bcder::encode::PrimitiveContent;
-//! use bcder::Tag;
+//! use bcder::{Mode, Tag};
 //! use bcder::encode;
 //!
 //! # pub struct EncapsulatedContentInfo {
-//! #     content_type: Oid,
-//! #     content: Option<OctetString>,
+//! #     content_type: Box<Oid>,
+//! #     content: Option<Box<OctetString>>,
 //! # }
 //! # 
 //! impl EncapsulatedContentInfo {
-//!     pub fn encode(self) -> impl encode::Values {
+//!     pub fn encode<M: Mode>(&self) -> impl encode::Values<M> + '_ {
 //!         self.encode_as(Tag::SEQUENCE)
 //!     }
 //!
-//!     pub fn encode_as(self, tag: Tag) -> impl encode::Values {
+//!     pub fn encode_as<M: Mode>(&self, tag: Tag) -> impl encode::Values<M> + '_ {
 //!         encode::sequence_as(tag, (
 //!             self.content_type.encode(),
-//!             self.content.map(|s| s.encode())
+//!             self.content.as_ref().map(|s| s.encode())
 //!         ))
 //!     }
 //! }

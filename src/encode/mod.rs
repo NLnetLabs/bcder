@@ -28,14 +28,18 @@
 //! [`PrimitiveContent`]: trait.PrimitiveContent.html
 //! [encode section of the guide]: ../guide/encode/index.html
 
-pub use self::primitive::{PrimitiveContent, Primitive};
+pub use self::primitive::{PrimitiveContent, Primitive, primitive};
 pub use self::values::{
-    Values,
-    Choice2, Choice3, Constructed, Iter, Nothing, Slice,
-    iter, sequence, sequence_as, set, set_as, slice, total_encoded_len,
-    write_header,
+    Choice2, Choice3, Constructed, EncodeSlice, IndefiniteConstructed, Iter,
+    Nothing, Values, encode_slice, iter, sequence, sequence_as, set, set_as,
+    total_len, total_indefinite_len, write_end_of_contents, write_header,
+    write_indefinite_header,
 };
+pub use self::target::{IoTarget, SplitTarget, Target, infallible};
+
+pub mod raw;
 
 mod primitive;
+mod target;
 mod values;
 
