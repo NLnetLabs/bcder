@@ -57,15 +57,18 @@
 //! # }
 //! #
 //! impl EncapsulatedContentInfo {
-//!     pub fn take_from<M: Mode, R: io::Read>(
+//!     pub fn take_from<M: Mode, R: io::BufRead>(
 //!         cons: &mut decode::Constructed<M, R>
 //!     ) -> Result<Self, decode::Error> {
-//!         cons.take_sequence(|cons| {
+//!         cons.take_sequence(|mut cons| {
 //!             Ok(EncapsulatedContentInfo {
-//!                 content_type: Oid::take_from(cons)?,
-//!                 content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
-//!                     OctetString::take_from(cons)
-//!                 })?
+//!                 content_type: Oid::take_from(&mut cons)?,
+//!                 content: cons.take_opt_constructed_with(
+//!                     Tag::ctx(0),
+//!                     |mut cons| {
+//!                         OctetString::take_from(&mut cons)
+//!                     }
+//!                 )?
 //!             })
 //!         })
 //!     }
@@ -98,14 +101,17 @@
 //! # }
 //! #
 //! impl EncapsulatedContentInfo {
-//!     pub fn from_constructed<M: Mode, R: io::Read>(
+//!     pub fn from_constructed<M: Mode, R: io::BufRead>(
 //!         cons: &mut decode::Constructed<M, R>
 //!     ) -> Result<Self, decode::Error> {
 //!         Ok(EncapsulatedContentInfo {
 //!             content_type: Oid::take_from(cons)?,
-//!             content: cons.take_opt_constructed_if(Tag::ctx(0), |cons| {
-//!                 OctetString::take_from(cons)
-//!             })?
+//!             content: cons.take_opt_constructed_with(
+//!                 Tag::ctx(0),
+//!                 |mut cons| {
+//!                     OctetString::take_from(&mut cons)
+//!                 }
+//!             )?
 //!         })
 //!     }
 //! }
