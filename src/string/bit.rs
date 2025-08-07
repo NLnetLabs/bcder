@@ -186,7 +186,7 @@ impl BitString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::BIT_STRING`, or if it doesn’t contain a correctly encoded
     /// bit string, an error is returned.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_value(cons.next_with(Tag::BIT_STRING)?)
@@ -210,7 +210,7 @@ impl BitString {
     ///
     /// If there is an bit string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -240,7 +240,7 @@ impl BitString {
     }
 
     /// Decodes bit string content into a boxed bit string.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::BufRead>(
         cons: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         if M::IS_DER {
@@ -255,7 +255,7 @@ impl BitString {
     }
 
     /// Decodes bit string content in BER mode.
-    fn decode_value_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         match value {
@@ -322,7 +322,7 @@ impl BitString {
     }
 
     /// Decodes bit string content in CER mode.
-    fn decode_value_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut cons = value.into_constructed()?;
@@ -379,7 +379,7 @@ impl BitString {
     }
 
     /// Decodes bit string content in DER mode.
-    fn decode_value_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let start = value.start();
@@ -430,7 +430,7 @@ impl BitString {
             note = "renamed to `decode_value`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_next(cons)
@@ -450,7 +450,7 @@ impl BitString {
             note = "renamed to `decode_opt_value`"
         )
     )]
-    pub fn take_opt_value<M: Mode, R: io::Read>(
+    pub fn take_opt_value<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         Self::decode_opt_next(cons)

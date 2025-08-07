@@ -13,12 +13,12 @@ use super::primitive::Primitive;
 
 //------------ NestedIter ----------------------------------------------------
 
-pub struct NestedIter<'a, M: Mode, R: io::Read> {
+pub struct NestedIter<'a, M: Mode, R: io::BufRead> {
     cons: ReadableConstructed<'a, M, R>,
     stack: Stack,
 }
 
-impl<'a, M: Mode, R: io::Read> NestedIter<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead> NestedIter<'a, M, R> {
     pub fn new(cons: Constructed<'a, M, R>) -> Self {
         Self {
             cons: cons.into(),
@@ -388,7 +388,7 @@ impl<'a, R> LimitedSource<'a, R> {
     }
 }
 
-impl<R: io::Read> io::Read for LimitedSource<'_, R> {
+impl<R: io::BufRead> io::Read for LimitedSource<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         if let Some(limit) = self.limit {
             let remaining = match limit.checked_sub(

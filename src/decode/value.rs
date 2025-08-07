@@ -17,7 +17,7 @@ use super::source::CaptureSource;
 
 //------------ Value ---------------------------------------------------------
 
-pub enum Value<'a, M: Mode, R: io::Read + 'a> {
+pub enum Value<'a, M: Mode, R: io::BufRead + 'a> {
     /// The value is a primitive value.
     Primitive(Primitive<'a, M, R>),
 
@@ -25,7 +25,7 @@ pub enum Value<'a, M: Mode, R: io::Read + 'a> {
     Constructed(Constructed<'a, M, R>)
 }
 
-impl<'a, M: Mode, R: io::Read + 'a> Value<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Value<'a, M, R> {
     /// Returns whether this value is a primitive value.
     pub fn is_primitive(&self) -> bool {
         match *self {

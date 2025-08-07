@@ -124,7 +124,7 @@ impl Integer {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -145,7 +145,7 @@ impl Integer {
     }
 
     /// Creates an integer from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
+    pub fn from_primitive<M, R: io::BufRead>(
         mut prim: Primitive<M, R>,
     ) -> Result<Box<Self>, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
@@ -190,7 +190,7 @@ impl Integer {
             note = "renamed to `decode_next`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -432,7 +432,7 @@ impl<const N: usize> IntegerArray<N> {
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded integer fitting into
     /// `N` bytes.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -441,7 +441,7 @@ impl<const N: usize> IntegerArray<N> {
     }
 
     /// Creates an integer from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
+    pub fn from_primitive<M, R: io::BufRead>(
         mut prim: Primitive<M, R>,
     ) -> Result<Self, decode::Error> {
         Self::from_primitive_ref(&mut prim)
@@ -452,7 +452,7 @@ impl<const N: usize> IntegerArray<N> {
     /// This function is identical to [`from_primitive`][Self::from_primitive]
     /// but takes a mut ref of the primitive. It exists solely for
     /// compatibility with existing code and will be removed.
-    pub(super) fn from_primitive_ref<M, R: io::Read>(
+    pub(super) fn from_primitive_ref<M, R: io::BufRead>(
         prim: &mut Primitive<M, R>,
     ) -> Result<Self, decode::Error> {
         let start = usize::try_from(prim.remaining()).ok().and_then(|len| {
@@ -503,7 +503,7 @@ impl<const N: usize> IntegerArray<N> {
             note = "renamed to `decode_next`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -568,7 +568,7 @@ macro_rules! signed_builtin {
         impl<M> FromPrimitive<M> for $int {
             const TAG: Tag = Tag::INTEGER;
 
-            fn from_primitive<R: io::Read>(
+            fn from_primitive<R: io::BufRead>(
                 prim: Primitive<M, R>
             ) -> Result<Self, decode::Error> {
                 Ok(IntegerArray::from_primitive(prim)?.into())
@@ -698,7 +698,7 @@ impl Unsigned {
     ///
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -719,7 +719,7 @@ impl Unsigned {
     }
 
     /// Creates an integer from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
+    pub fn from_primitive<M, R: io::BufRead>(
         mut prim: Primitive<M, R>,
     ) -> Result<Box<Self>, decode::Error> {
         let len = usize::try_from(prim.remaining()).map_err(|_| {
@@ -763,7 +763,7 @@ impl Unsigned {
             note = "renamed to `decode_next`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(
@@ -940,7 +940,7 @@ impl<const N: usize> UnsignedArray<N> {
     /// This requires the next value in `cons` to be a primitive value with
     /// tag `INTEGER` that contains a correctly encoded unsigned integer that
     /// fits into `N` bytes.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -949,7 +949,7 @@ impl<const N: usize> UnsignedArray<N> {
     }
 
     /// Creates an integer from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
+    pub fn from_primitive<M, R: io::BufRead>(
         mut prim: Primitive<M, R>,
     ) -> Result<Self, decode::Error> {
         Self::from_primitive_ref(&mut prim)
@@ -960,7 +960,7 @@ impl<const N: usize> UnsignedArray<N> {
     /// This function is identical to [`from_primitive`][Self::from_primitive]
     /// but takes a mut ref of the primitive. It exists solely for
     /// compatibility with existing code and will be removed.
-    pub(super) fn from_primitive_ref<M, R: io::Read>(
+    pub(super) fn from_primitive_ref<M, R: io::BufRead>(
         prim: &mut Primitive<M, R>,
     ) -> Result<Self, decode::Error> {
         // Read the first octet to see if it is zero and needs to be skipped.
@@ -1041,7 +1041,7 @@ impl<const N: usize> UnsignedArray<N> {
             note = "renamed to `decode_next`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::from_primitive(
@@ -1106,7 +1106,7 @@ macro_rules! unsigned_builtin {
         impl<M> FromPrimitive<M> for $int {
             const TAG: Tag = Tag::INTEGER;
 
-            fn from_primitive<R: io::Read>(
+            fn from_primitive<R: io::BufRead>(
                 prim: Primitive<M, R>
             ) -> Result<Self, decode::Error> {
                 Ok(UnsignedArray::from_primitive(prim)?.into())

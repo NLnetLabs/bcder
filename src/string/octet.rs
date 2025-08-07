@@ -66,7 +66,7 @@ impl OctetString {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
@@ -92,7 +92,7 @@ impl OctetString {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -122,7 +122,7 @@ impl OctetString {
     }
 
     /// Decodes octet string content into a boxed slice.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::BufRead>(
         cons: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         if M::IS_DER {
@@ -137,7 +137,7 @@ impl OctetString {
     }
 
     /// Decodes octet string content in BER mode.
-    fn decode_value_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::BufRead>(
         cont: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut target = Vec::new();
@@ -171,7 +171,7 @@ impl OctetString {
         Ok(Self::from_box(target.into_boxed_slice()))
     }
 
-    fn decode_value_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::BufRead>(
         content: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut cons = content.into_constructed()?;
@@ -212,7 +212,7 @@ impl OctetString {
         Ok(Self::from_box(res.into_boxed_slice()))
     }
 
-    fn decode_value_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::BufRead>(
         content: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         content.into_primitive()?.read_all_into_box().map(Self::from_box)
@@ -265,7 +265,7 @@ impl OctetString {
             note = "renamed to `decode_value`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_next(cons)
@@ -285,7 +285,7 @@ impl OctetString {
             note = "renamed to `decode_opt_value`"
         )
     )]
-    pub fn take_opt_value<M: Mode, R: io::Read>(
+    pub fn take_opt_value<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         Self::decode_opt_next(cons)
@@ -384,7 +384,7 @@ impl<const N: usize> OctetStringArray<N> {
     /// If there is no next value, if the next value does not have the tag
     /// `Tag::OCTET_STRING`, or if it doesn’t contain a correctly encoded
     /// octet string, an error is returned.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Self, decode::Error> {
         Self::decode_value(cons.next_with(Tag::OCTET_STRING)?)
@@ -397,7 +397,7 @@ impl<const N: usize> OctetStringArray<N> {
     ///
     /// If there is an octet string, but it is not correctly encoded, returns
     /// an error.
-    pub fn decode_opt_next<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Self>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -409,7 +409,7 @@ impl<const N: usize> OctetStringArray<N> {
     }
 
     /// Decodes octet string content into a boxed slice.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::BufRead>(
         cons: decode::Value<M, R>
     ) -> Result<Self, decode::Error> {
         if M::IS_DER {
@@ -424,7 +424,7 @@ impl<const N: usize> OctetStringArray<N> {
     }
 
     /// Decodes octet string content in BER mode.
-    fn decode_value_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Self, decode::Error> {
         match value {
@@ -474,7 +474,7 @@ impl<const N: usize> OctetStringArray<N> {
         }
     }
 
-    fn decode_value_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Self, decode::Error> {
         // This would be easy if N were at most 1000. But we can’t guarantee
@@ -519,13 +519,13 @@ impl<const N: usize> OctetStringArray<N> {
         Ok(Self { octets: res_array, len: res_len })
     }
 
-    fn decode_value_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Self, decode::Error> {
         Self::decode_single_primitive(value.into_primitive()?)
     }
 
-    fn decode_single_primitive<M: Mode, R: io::Read>(
+    fn decode_single_primitive<M: Mode, R: io::BufRead>(
         mut prim: decode::Primitive<M, R>
     ) -> Result<Self, decode::Error> {
         let len = prim.remaining().try_to_usize().map_err(|_| {

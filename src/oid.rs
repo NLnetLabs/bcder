@@ -177,7 +177,7 @@ impl Oid {
     /// Returns an error if `const` has reached its end, if the next value
     /// is not a primitive value with `Tag::OID`, or if it does not contain
     /// a correctly encoded object identifer.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_primitive(cons.next_primitive_with(Tag::OID)?)
@@ -201,7 +201,7 @@ impl Oid {
     /// Returns an error if the next value is not a primitive value with
     /// `Tag::OID`, or if it does not contain a correctly encoded object
     /// identifer.
-    pub fn decode_opt_next<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(prim) = cons.next_opt_primitive_with(Tag::OID)? else {
@@ -256,7 +256,7 @@ impl Oid {
     }
 
     /// Constructs an object identifier from the content of a primitive value.
-    pub fn from_primitive<M, R: io::Read>(
+    pub fn from_primitive<M, R: io::BufRead>(
         mut prim: Primitive<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::from_box(prim.read_all_into_box()?).map_err(|err| {
@@ -414,7 +414,7 @@ impl Oid {
             note = "renamed to `decode_next`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_next(cons)
@@ -432,7 +432,7 @@ impl Oid {
             note = "renamed to `decode_opt_next`"
         )
     )]
-    pub fn take_opt_from<M: Mode, R: io::Read>(
+    pub fn take_opt_from<M: Mode, R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         Self::decode_opt_next(cons)

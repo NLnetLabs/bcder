@@ -146,7 +146,7 @@ impl<'a, M, R: 'a> Primitive<'a, M, R> {
 
 /// # Basic reading
 ///
-impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
+impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
     /// Reads data until the provided buffer is filled.
     pub fn read_exact(
         &mut self, buf: &mut [u8]
@@ -299,7 +299,7 @@ impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
 ///
 /// New code should use the [`FromPrimitive`] trait for builtin types instead.
 #[allow(clippy::wrong_self_convention)]
-impl<'a, M, R: io::Read + 'a> Primitive<'a, M, R> {
+impl<'a, M, R: io::BufRead + 'a> Primitive<'a, M, R> {
     /// Takes a single octet from the content.
     ///
     /// If there aren’t any more octets available from the source, returns
@@ -493,7 +493,7 @@ impl<'a, R: 'a> Drop for PrimitiveSource<'a, R> {
 
 //--- Read and BufRead
 
-impl<'a, R: io::Read + 'a> io::Read for PrimitiveSource<'a, R> {
+impl<'a, R: io::BufRead + 'a> io::Read for PrimitiveSource<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let len = cmp::min(
             buf.len(),
@@ -530,18 +530,18 @@ pub trait FromPrimitive<M>: Sized {
     /// The natural tag of an encoded value of this type.
     const TAG: Tag;
 
-    fn from_primitive<R: io::Read>(
+    fn from_primitive<R: io::BufRead>(
         primitive: Primitive<M, R>
     ) -> Result<Self, Error>;
 
-    fn decode_next<R: io::Read>(
+    fn decode_next<R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Self, Error>
     where M: Mode {
         cons.process_primitive_with(Self::TAG, Self::from_primitive)
     }
 
-    fn decode_opt_next<R: io::Read>(
+    fn decode_opt_next<R: io::BufRead>(
         cons: &mut Constructed<M, R>
     ) -> Result<Option<Self>, Error>
     where M: Mode {
@@ -552,7 +552,7 @@ pub trait FromPrimitive<M>: Sized {
 impl<M: Mode> FromPrimitive<M> for bool {
     const TAG: Tag = Tag::BOOLEAN;
 
-    fn from_primitive<R: io::Read>(
+    fn from_primitive<R: io::BufRead>(
         mut prim: Primitive<M, R>
     ) -> Result<Self, Error> {
         prim.check_remaining(1u64)?;
@@ -575,7 +575,7 @@ impl<M: Mode> FromPrimitive<M> for bool {
 impl<M> FromPrimitive<M> for () {
     const TAG: Tag = Tag::NULL;
 
-    fn from_primitive<R: io::Read>(
+    fn from_primitive<R: io::BufRead>(
         prim: Primitive<M, R>
     ) -> Result<Self, Error> {
         prim.check_exhausted()

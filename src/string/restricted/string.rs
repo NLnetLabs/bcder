@@ -129,7 +129,7 @@ impl<L: CharSet> RestrictedString<L> {
     /// correct tag for this particular variant of a restricted string,
     /// or if it doesn’t contain a correctly encoded string, an error
     /// is returned.
-    pub fn decode_next<M: Mode, R: io::Read>(
+    pub fn decode_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_value(cons.next_with(L::TAG)?)
@@ -154,7 +154,7 @@ impl<L: CharSet> RestrictedString<L> {
     ///
     /// If there is restricted string, but it is not correctly encoded,
     /// returns an error.
-    pub fn decode_opt_next<M: Mode, R: io::Read>(
+    pub fn decode_opt_next<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         let Some(content) = cons.next_opt_with(
@@ -184,7 +184,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes restricted string content into a boxed restricted string.
-    pub fn decode_value<M: Mode, R: io::Read>(
+    pub fn decode_value<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         if M::IS_DER {
@@ -199,7 +199,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes content in BER mode.
-    fn decode_value_ber<M: Mode, R: io::Read>(
+    fn decode_value_ber<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let start = value.start();
@@ -251,7 +251,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes content in CER mode.
-    fn decode_value_cer<M: Mode, R: io::Read>(
+    fn decode_value_cer<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let mut cons = value.into_constructed()?;
@@ -303,7 +303,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Decodes content in DER mode.
-    fn decode_value_der<M: Mode, R: io::Read>(
+    fn decode_value_der<M: Mode, R: io::BufRead>(
         value: decode::Value<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         let start = value.start();
@@ -355,7 +355,7 @@ impl<L: CharSet> RestrictedString<L> {
             note = "renamed to `decode_value`"
         )
     )]
-    pub fn take_from<M: Mode, R: io::Read>(
+    pub fn take_from<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Box<Self>, decode::Error> {
         Self::decode_next(cons)
@@ -375,7 +375,7 @@ impl<L: CharSet> RestrictedString<L> {
             note = "renamed to `decode_opt_value`"
         )
     )]
-    pub fn take_opt_value<M: Mode, R: io::Read>(
+    pub fn take_opt_value<M: Mode, R: io::BufRead>(
         cons: &mut decode::Constructed<M, R>
     ) -> Result<Option<Box<Self>>, decode::Error> {
         Self::decode_opt_next(cons)

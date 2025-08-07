@@ -48,7 +48,7 @@ impl<M, R> Data<M, R> {
     }
 }
 
-impl<M: Mode, R: io::Read> Data<M, R> {
+impl<M: Mode, R: io::BufRead> Data<M, R> {
     /// Starts decoding the next mandatory value.
     ///
     /// Returns an error if there are no more values available.
@@ -123,7 +123,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     /// all the content and return a result or error.
     pub fn process<F, T>(reader: R, op: F) -> Result<T, Error>
     where
-        R: io::Read,
+        R: io::BufRead,
         M: Mode,
         F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>
     {
@@ -152,7 +152,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
     }
 }
 
-impl<M: Mode, R: io::Read> Data<M, R> {
+impl<M: Mode, R: io::BufRead> Data<M, R> {
     /// Reads the next identifier octets from the source.
     ///
     /// Returns an error if the source has reached its end.
@@ -246,7 +246,7 @@ impl<M: Mode, R: io::Read> Data<M, R> {
 /// expects there to be a next value and otherwise errors out, and
 /// [`decode_opt_value`][Self::decode_opt_value] which is okay with reaching
 /// the end of the value.
-pub struct Constructed<'a, M: Mode, R: io::Read + 'a> {
+pub struct Constructed<'a, M: Mode, R: io::BufRead + 'a> {
     /// The tag of the value.
     tag: Tag,
 
@@ -272,7 +272,7 @@ pub struct Constructed<'a, M: Mode, R: io::Read + 'a> {
 }
 
 /// The type of constructed value.
-enum ConstructedEnum<'a, R: io::Read + 'a> {
+enum ConstructedEnum<'a, R: io::BufRead + 'a> {
     /// A definite-length constructed value.
     Definite(DefiniteConstructed<'a, R>),
 
@@ -280,7 +280,7 @@ enum ConstructedEnum<'a, R: io::Read + 'a> {
     Indefinite(IndefiniteConstructed<'a, R>),
 }
 
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Creates a new constructed value from its components.
     fn new(
         tag: Tag, start: Length, inner: ConstructedEnum<'a, R>
@@ -351,7 +351,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 ///
 /// If you do want to process the value, [`read_value`][Self::read_value]
 /// produces a [`Value`] for it.
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Returns the identifier octets and start position of the next value.
     ///
     /// Returns `Ok(None)` if the end of the value was reached.
@@ -420,7 +420,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 }
 
 /// # Decoding the complete constructed value
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Decodes the constructed value as a single nested value.
     ///
     /// TODO: explain!
@@ -441,12 +441,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 
 /// # Decoding contained values
 ///
-/// The following methods, all prefixed by `decode_` process values by
-/// returning owned objects to the caller. These objects need to be dropped
-/// before progressing to the next value. Because of this, the `process_`
-/// methods using closures may be more convenient for processing sequences
-/// of values.
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+/// The following methods process values by returning owned objects to the
+/// caller. These objects need to be dropped before progressing to the next
+/// value. Because of this, the `take_` methods using closures may be more
+/// convenient for processing sequences of values.
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Starts decoding the next mandatory value.
     ///
     /// Returns an error if there are no more values available.
@@ -669,139 +668,6 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     }
 }
 
-impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
-    /// Skips the next value.
-    ///
-    /// The closure `op` determines whether the next value is valid. It will
-    /// be called for every encountered value, which for nested constructed
-    /// values can be multiple times. Each time it gets passed the tag,
-    /// whether the value is constructed, and the depth starting at zero for
-    /// the outermost value. It should return an error if the value cannot
-    /// be accepted.
-    ///
-    /// The method will return `Ok(Some(()))` if it successfully skipped a
-    /// value or an error if there were errors or `op` returned an error./
-    pub fn skip_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
-        &mut self, op: F
-    ) -> Result<(), Error> {
-        self.next_value()?.skip(op)
-    }
-
-    /// Skips over a next optional value.
-    ///
-    /// Returns `Ok(None)` if there are no more values. Otherwise, the
-    /// closure `op` determines whether the next value is valid. It will
-    /// be called for every encountered value, which for nested constructed
-    /// values can be multiple times. Each time it gets passed the tag,
-    /// whether the value is constructed, and the depth starting at zero for
-    /// the outermost value. It should return an error if the value cannot
-    /// be accepted.
-    ///
-    /// The method will return `Ok(Some(()))` if it successfully skipped a
-    /// value or an error if there were errors or `op` returned an error.
-    pub fn skip_opt_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
-        &mut self, op: F
-    ) -> Result<Option<()>, Error> {
-        match self.next_opt()? {
-            Some(value) => {
-                value.skip(op)?;
-                Ok(Some(()))
-            }
-            None => Ok(None)
-        }
-    }
-
-    /// Skips over the next value no matter its content.
-    pub fn skip_any_next(&mut self) -> Result<(), Error> {
-        self.skip_next(|_, _, _| Ok(()))
-    }
-
-    /// Skips over an optional next value no matter its content.
-    pub fn skip_any_opt_next(&mut self) -> Result<Option<()>, Error> {
-        self.skip_opt_next(|_, _, _| Ok(()))
-    }
-
-    /// Skips over all remaining values.
-    pub fn skip_all(&mut self) -> Result<(), Error> {
-        while self.skip_any_opt_next()?.is_some() { }
-        Ok(())
-    }
-
-    pub fn capture<F>(self, op: F) -> Result<Box<Captured<M>>, Error>
-    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
-        match self.inner {
-            ConstructedEnum::Definite(inner) => {
-                Self::capture_definite(
-                    self.tag, self.start, inner, self.stored_ident, op
-                )
-            }
-            ConstructedEnum::Indefinite(inner) => {
-                Self::capture_indefinite(
-                    self.tag, self.start, inner, self.stored_ident, op
-                )
-            }
-        }
-    }
-
-    fn capture_definite<F>(
-        tag: Tag, start: Length, inner: DefiniteConstructed<'a, R>,
-        stored_ident: Option<(Ident, Length)>,
-        op: F
-    ) -> Result<Box<Captured<M>>, Error>
-    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
-        let mut target = Vec::new();
-        encode::infallible(
-            encode::write_header(
-                &mut target, tag, true,
-                inner.limit.saturating_sub(inner.source.pos())
-            )
-        );
-        let mut source = inner.source.capture(target);
-        op(
-            Constructed {
-                tag, start,
-                inner: ConstructedEnum::Definite(
-                    DefiniteConstructed {
-                        source: &mut source,
-                        limit: inner.limit,
-                    }
-                ),
-                stored_ident,
-                marker: PhantomData::<M>,
-            }
-        )?;
-        source.into_reader()?.finalize()
-    }
-
-    fn capture_indefinite<F>(
-        tag: Tag, start: Length, inner: IndefiniteConstructed<'a, R>,
-        stored_ident: Option<(Ident, Length)>,
-        op: F
-    ) -> Result<Box<Captured<M>>, Error>
-    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
-        let mut target = Vec::new();
-        encode::infallible(
-            encode::write_indefinite_header(&mut target, tag)
-        );
-        let mut source = inner.source.capture(target);
-        op(
-            Constructed {
-                tag, start,
-                inner: ConstructedEnum::Indefinite(
-                    IndefiniteConstructed {
-                        source: &mut source,
-                        limit: inner.limit,
-                        done: inner.done,
-                    }
-                ),
-                stored_ident,
-                marker: PhantomData::<M>,
-            }
-        )?;
-        source.into_reader()?.finalize()
-    }
-}
-
 
 /// # Processing values using closures
 ///
@@ -810,17 +676,17 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
 /// check whether the value was fully processed before returning. Otherwise
 /// an error would be delayed until the start of processing of the next value
 /// which may be a bit confusing during debugging.
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Process one value of content.
     ///
     /// The closure `op` receives the next value and must process it
     /// completely.
     ///
     /// Upon success, the method returns the closure’s return value. The
-    /// method returns am error if there isn’t at least one more value
+    /// method returns an error if there isn’t at least one more value
     /// available. It also returns an error if the closure returns one
     /// or if reading from the source fails.
-    pub fn process_value<F, T>(&mut self, op: F) -> Result<T, Error>
+    pub fn take_value<F, T>(&mut self, op: F) -> Result<T, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
         let (ident, start) = self.read_ident()?;
         let res = op(self.read_value(ident, start)?)?;
@@ -837,7 +703,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
     /// If there are no more values available, the method returns `Ok(None)`.
     /// It returns an error if the closure returns one or if reading from
     /// the source fails.
-    pub fn process_opt<F, T>(
+    pub fn take_opt_value<F, T>(
         &mut self, op: F
     ) -> Result<Option<T>, Error>
     where F: FnOnce(Value<M, R>) -> Result<T, Error> {
@@ -1145,6 +1011,137 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
         self.check_source_status()?;
         Ok(Some(res))
     }
+
+    /// Skips the next value.
+    ///
+    /// The closure `op` determines whether the next value is valid. It will
+    /// be called for every encountered value, which for nested constructed
+    /// values can be multiple times. Each time it gets passed the tag,
+    /// whether the value is constructed, and the depth starting at zero for
+    /// the outermost value. It should return an error if the value cannot
+    /// be accepted.
+    ///
+    /// The method will return `Ok(Some(()))` if it successfully skipped a
+    /// value or an error if there were errors or `op` returned an error./
+    pub fn skip_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+        &mut self, op: F
+    ) -> Result<(), Error> {
+        self.next_value()?.skip(op)
+    }
+
+    /// Skips over a next optional value.
+    ///
+    /// Returns `Ok(None)` if there are no more values. Otherwise, the
+    /// closure `op` determines whether the next value is valid. It will
+    /// be called for every encountered value, which for nested constructed
+    /// values can be multiple times. Each time it gets passed the tag,
+    /// whether the value is constructed, and the depth starting at zero for
+    /// the outermost value. It should return an error if the value cannot
+    /// be accepted.
+    ///
+    /// The method will return `Ok(Some(()))` if it successfully skipped a
+    /// value or an error if there were errors or `op` returned an error.
+    pub fn skip_opt_next<F: FnMut(Tag, bool, usize) -> Result<(), Error>>(
+        &mut self, op: F
+    ) -> Result<Option<()>, Error> {
+        match self.next_opt()? {
+            Some(value) => {
+                value.skip(op)?;
+                Ok(Some(()))
+            }
+            None => Ok(None)
+        }
+    }
+
+    /// Skips over the next value no matter its content.
+    pub fn skip_any_next(&mut self) -> Result<(), Error> {
+        self.skip_next(|_, _, _| Ok(()))
+    }
+
+    /// Skips over an optional next value no matter its content.
+    pub fn skip_any_opt_next(&mut self) -> Result<Option<()>, Error> {
+        self.skip_opt_next(|_, _, _| Ok(()))
+    }
+
+    /// Skips over all remaining values.
+    pub fn skip_all(&mut self) -> Result<(), Error> {
+        while self.skip_any_opt_next()?.is_some() { }
+        Ok(())
+    }
+
+    pub fn capture<F>(self, op: F) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        match self.inner {
+            ConstructedEnum::Definite(inner) => {
+                Self::capture_definite(
+                    self.tag, self.start, inner, self.stored_ident, op
+                )
+            }
+            ConstructedEnum::Indefinite(inner) => {
+                Self::capture_indefinite(
+                    self.tag, self.start, inner, self.stored_ident, op
+                )
+            }
+        }
+    }
+
+    fn capture_definite<F>(
+        tag: Tag, start: Length, inner: DefiniteConstructed<'a, R>,
+        stored_ident: Option<(Ident, Length)>,
+        op: F
+    ) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        let mut target = Vec::new();
+        encode::infallible(
+            encode::write_header(
+                &mut target, tag, true,
+                inner.limit.saturating_sub(inner.source.pos())
+            )
+        );
+        let mut source = inner.source.capture(target);
+        op(
+            Constructed {
+                tag, start,
+                inner: ConstructedEnum::Definite(
+                    DefiniteConstructed {
+                        source: &mut source,
+                        limit: inner.limit,
+                    }
+                ),
+                stored_ident,
+                marker: PhantomData::<M>,
+            }
+        )?;
+        source.into_reader()?.finalize()
+    }
+
+    fn capture_indefinite<F>(
+        tag: Tag, start: Length, inner: IndefiniteConstructed<'a, R>,
+        stored_ident: Option<(Ident, Length)>,
+        op: F
+    ) -> Result<Box<Captured<M>>, Error>
+    where F: FnOnce(Constructed<M, CaptureSource<M, R>>) -> Result<(), Error> {
+        let mut target = Vec::new();
+        encode::infallible(
+            encode::write_indefinite_header(&mut target, tag)
+        );
+        let mut source = inner.source.capture(target);
+        op(
+            Constructed {
+                tag, start,
+                inner: ConstructedEnum::Indefinite(
+                    IndefiniteConstructed {
+                        source: &mut source,
+                        limit: inner.limit,
+                        done: inner.done,
+                    }
+                ),
+                stored_ident,
+                marker: PhantomData::<M>,
+            }
+        )?;
+        source.into_reader()?.finalize()
+    }
 }
 
 
@@ -1153,7 +1150,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 /// These methods provide short-cuts for processing fundamental values in
 /// their standard form. That is, the values use their regular tag and
 /// encoding.
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Skips over a mandatory INTEGER if it has the given value.
     ///
     /// If the next value is an integer but of a different value, returns
@@ -1251,66 +1248,7 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 /// The following methods were used in previous versions of _bcder._ They
 /// should be considered deprecated and are provided here for easier
 /// transition.
-impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
-    /// Process one value of content.
-    ///
-    /// The closure `op` receives the tag and content of the next value
-    /// and must process it completely, advancing to the content’s end.
-    ///
-    /// Upon success, the method returns the closure’s return value. The
-    /// method returns a malformed error if there isn’t at least one more
-    /// value available. It also returns an error if the closure returns one
-    /// or if reading from the source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_value`"
-        )
-    )]
-    pub fn take_value<F, T>(
-        &mut self, op: F,
-    ) -> Result<T, Error>
-    where
-        F: FnOnce(Tag, &mut Value<M, R>) -> Result<T, Error>,
-    {
-        let (ident, start) = self.read_ident()?;
-        let res = op(ident.tag(), &mut self.read_value(ident, start)?)?;
-        self.check_source_status()?;
-        Ok(res)
-    }
-
-    /// Processes an optional value.
-    ///
-    /// If there is at least one more value available, the closure `op` is
-    /// given the tag and content of that value and must process it
-    /// completely, advancing to the end of its content. If the closure
-    /// succeeds, its return value is returned as ‘some’ result.
-    ///
-    /// If there are no more values available, the method returns `Ok(None)`.
-    /// It returns an error if the closure returns one or if reading from
-    /// the source fails.
-    #[cfg_attr(
-        feature = "mark-deprecated",
-        deprecated(
-            since = "0.8.0",
-            note = "replaced by `process_opt`"
-        )
-    )]
-    pub fn take_opt_value<F, T>(
-        &mut self, op: F,
-    ) -> Result<Option<T>, Error>
-    where
-        F: FnOnce(Tag, &mut Value<M, R>) -> Result<T, Error>,
-    {
-        let Some((ident, start)) = self.read_opt_ident()? else {
-            return Ok(None)
-        };
-        let res = op(ident.tag(), &mut self.read_value(ident, start)?)?;
-        self.check_source_status()?;
-        Ok(Some(res))
-    }
-
+impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Processes a value with the given tag.
     ///
     /// If the next value has the tag `expected`, its content is being given
@@ -1975,11 +1913,11 @@ impl<'a, M: Mode, R: io::Read + 'a> Constructed<'a, M, R> {
 
 //------------ ReadableConstructed--------------------------------------------
 
-pub(super) struct ReadableConstructed<'a, M: Mode, R: io::Read + 'a> {
+pub(super) struct ReadableConstructed<'a, M: Mode, R: io::BufRead + 'a> {
     pub cons: Constructed<'a, M, R>,
 }
 
-impl<'a, M: Mode, R: io::Read + 'a> ReadableConstructed<'a, M, R> {
+impl<'a, M: Mode, R: io::BufRead + 'a> ReadableConstructed<'a, M, R> {
     pub(super) fn read_opt_ident(
         &mut self
     ) -> Result<Option<(Ident, Length)>, Error> {
@@ -2005,7 +1943,7 @@ impl<'a, M: Mode, R: io::Read + 'a> ReadableConstructed<'a, M, R> {
     }
 }
 
-impl<'a, M: Mode, R: io::Read + 'a> From<Constructed<'a, M, R>>
+impl<'a, M: Mode, R: io::BufRead + 'a> From<Constructed<'a, M, R>>
 for ReadableConstructed<'a, M, R> {
     fn from(cons: Constructed<'a, M, R>) -> Self {
         Self { cons }
@@ -2013,7 +1951,7 @@ for ReadableConstructed<'a, M, R> {
 }
 
 
-impl<'a, M: Mode, R: io::Read + 'a> io::Read
+impl<'a, M: Mode, R: io::BufRead + 'a> io::Read
 for ReadableConstructed<'a, M, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         match &mut self.cons.inner {
@@ -2051,7 +1989,7 @@ impl<'a, R: 'a> DefiniteConstructed<'a, R> {
     }
 }
 
-impl<'a, R: io::Read + 'a> DefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> DefiniteConstructed<'a, R> {
     fn read_ident(&mut self) -> Result<Option<Ident>, io::Error> {
          Ident::read_opt(self)
     }
@@ -2124,7 +2062,7 @@ impl<'a, R: 'a> Drop for DefiniteConstructed<'a, R> {
     }
 }
 
-impl<'a, R: io::Read + 'a> io::Read for DefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> io::Read for DefiniteConstructed<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let len = cmp::min(
             buf.len(),
@@ -2141,13 +2079,13 @@ impl<'a, R: io::Read + 'a> io::Read for DefiniteConstructed<'a, R> {
 //------------ IndefiniteConstructed -----------------------------------------
 
 /// The content of a constructed value with a definite length.
-struct IndefiniteConstructed<'a, R: io::Read + 'a> {
+struct IndefiniteConstructed<'a, R: io::BufRead + 'a> {
     source: &'a mut Source<R>,
     limit: Option<Length>,
     done: bool,
 }
 
-impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> IndefiniteConstructed<'a, R> {
     fn new<M: Mode>(
         source: &'a mut Source<R>, limit: Option<Length>,
     ) -> Result<Self, io::Error> {
@@ -2170,7 +2108,7 @@ impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
     }
 }
 
-impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> IndefiniteConstructed<'a, R> {
     fn read_ident<M: Mode>(&mut self) -> Result<Option<Ident>, io::Error> {
         let ident = Ident::read(&mut self.source)?;
         if ident == Ident::END_OF_CONTENTS {
@@ -2256,7 +2194,7 @@ impl<'a, R: io::Read + 'a> IndefiniteConstructed<'a, R> {
     }
 }
 
-impl<'a, R: io::Read + 'a> Drop for IndefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> Drop for IndefiniteConstructed<'a, R> {
     fn drop(&mut self) {
         if self.done {
             return
@@ -2267,7 +2205,7 @@ impl<'a, R: io::Read + 'a> Drop for IndefiniteConstructed<'a, R> {
     }
 }
 
-impl<'a, R: io::Read + 'a> io::Read for IndefiniteConstructed<'a, R> {
+impl<'a, R: io::BufRead + 'a> io::Read for IndefiniteConstructed<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         if self.done {
             let msg = "attempted read past end of value";
