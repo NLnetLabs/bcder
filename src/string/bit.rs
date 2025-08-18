@@ -82,6 +82,8 @@ impl BitString {
     }
 
     /// Returns the value of the given bit.
+    ///
+    /// Returns false if a bit beyond the bit length is requested.
     pub fn bit(&self, bit: usize) -> bool {
         let idx = bit >> 3;
         if self.bits.len() <= idx {
@@ -92,6 +94,13 @@ impl BitString {
             return false
         }
         self.bits[idx] & (1 << bit) != 0
+    }
+
+    /// Returns the value of the given octet.
+    ///
+    /// Returns 0 if an octet beyond the octet length is requested.
+    pub fn octet(&self, idx: usize) -> u8 {
+        self.bits.get(idx).copied().unwrap_or(0)
     }
 
     /// Returns the number of bits in the bit string.
