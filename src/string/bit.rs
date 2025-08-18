@@ -110,7 +110,7 @@ impl BitString {
     }
 
     /// Returns an iterator over the octets in the bit string.
-    pub fn octets(&self) -> BitStringIter {
+    pub fn octets(&self) -> BitStringIter<'_> {
         BitStringIter(self.bits.iter())
     }
 

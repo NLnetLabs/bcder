@@ -80,7 +80,7 @@ impl OctetString {
     ///
     /// The iterator will produce `&[u8]` which, when appended produce the
     /// complete content of the octet string.
-    pub fn iter(&self) -> OctetStringIter {
+    pub fn iter(&self) -> OctetStringIter<'_> {
         match self.0 {
             Inner::Primitive(ref inner) => {
                 OctetStringIter(Inner::Primitive(inner.as_ref()))
@@ -94,7 +94,7 @@ impl OctetString {
     }
 
     /// Returns an iterator over the individual octets of the string.
-    pub fn octets(&self) -> OctetStringOctets {
+    pub fn octets(&self) -> OctetStringOctets<'_> {
         OctetStringOctets::new(self.iter())
     }
 
