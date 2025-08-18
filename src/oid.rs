@@ -175,7 +175,7 @@ impl<T: AsRef<[u8]>> Oid<T> {
     ///
     /// The returned identifier will eventually panic if `self` does not
     /// contain a correctly encoded object identifier.
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter::new(self.0.as_ref())
     }
 }

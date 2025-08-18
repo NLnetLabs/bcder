@@ -44,7 +44,7 @@ pub trait CharSet {
     /// it creates that and returns it as a `Ok(Cow::Owned(_))`. Finally, if
     /// the string cannot be encoded in this character set, it returns an
     /// error.
-    fn from_str(s: &str) -> Result<Cow<[u8]>, CharSetError>;
+    fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError>;
 
     /// Checks whether a sequence of octets is a valid string.
     ///
@@ -134,7 +134,7 @@ impl<L: CharSet> RestrictedString<L> {
     }
 
     /// Returns an iterator over the character in the character string.
-    pub fn chars(&self) -> RestrictedStringChars<L> {
+    pub fn chars(&self) -> RestrictedStringChars<'_, L> {
         RestrictedStringChars::new(self.octets.octets())
     }
 
@@ -399,7 +399,7 @@ impl CharSet for Utf8CharSet {
         }))
     }
 
-    fn from_str(s: &str) -> Result<Cow<[u8]>, CharSetError> {
+    fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
         Ok(Cow::Borrowed(s.as_bytes()))
     }
 }
@@ -437,7 +437,7 @@ impl CharSet for NumericCharSet {
         }
     }
 
-    fn from_str(s: &str) -> Result<Cow<[u8]>, CharSetError> {
+    fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
         Ok(Cow::Borrowed(s.as_bytes()))
     }
 }
@@ -483,7 +483,7 @@ impl CharSet for PrintableCharSet {
         }
     }
 
-    fn from_str(s: &str) -> Result<Cow<[u8]>, CharSetError> {
+    fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
         Ok(Cow::Borrowed(s.as_bytes()))
     }
 }
@@ -523,7 +523,7 @@ impl CharSet for Ia5CharSet {
         }
     }
 
-    fn from_str(s: &str) -> Result<Cow<[u8]>, CharSetError> {
+    fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
         Ok(Cow::Borrowed(s.as_bytes()))
     }
 }
