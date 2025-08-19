@@ -6,9 +6,14 @@ Breaking changes
 
 New
 
+* Addded `BitString::octet` which lets you fetch the octet with the given
+  index. ([#88])
+
 Bug fixes
 
 Other changes
+
+[#88]: https://github.com/NLnetLabs/bcder/pull/88
 
 
 ## 0.7.5
