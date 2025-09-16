@@ -1,17 +1,13 @@
 # Change Log
 
-## Unreleased next version
+## 0.7.6
 
-Breaking changes
+Released 2025-09-16.
 
 New
 
 * Addded `BitString::octet` which lets you fetch the octet with the given
   index. ([#88])
-
-Bug fixes
-
-Other changes
 
 [#88]: https://github.com/NLnetLabs/bcder/pull/88
 
