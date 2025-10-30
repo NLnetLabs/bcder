@@ -163,6 +163,12 @@ impl<L: CharSet> RestrictedString<L> {
         cons.take_value_if(L::TAG, Self::from_content)
     }
 
+    pub fn take_opt_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
+    ) -> Result<Option<Self>, DecodeError<S::Error>> {
+        cons.take_opt_value_if(L::TAG, Self::from_content)
+    }
+
     /// Takes a character set from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
