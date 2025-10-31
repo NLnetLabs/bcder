@@ -163,6 +163,13 @@ impl<L: CharSet> RestrictedString<L> {
         cons.take_value_if(L::TAG, Self::from_content)
     }
 
+    /// Takes an optional single character set value string value from 
+    /// constructed value content.
+    ///
+    /// If there is no next value then `Ok(None)` is returned.
+    ///
+    /// If there is a character string, but it is not correctly encoded, a
+    /// malformed error is returned.
     pub fn take_opt_from<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Option<Self>, DecodeError<S::Error>> {
