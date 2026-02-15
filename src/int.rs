@@ -469,6 +469,13 @@ impl Unsigned {
         }).count();
         let value = bytes.slice(num_leading_zero_bytes..);
 
+        // Handle all-zero input: return canonical zero encoding
+        if value.is_empty() {
+            return unsafe { Ok(Unsigned::from_bytes_unchecked(
+                Bytes::from_static(&[0x00])
+            ))}
+        }
+
         // Create a new Unsigned integer from the given value bytes, ensuring
         // that the most-significant bit is zero.
         let new_bytes = if value[0] & 0x80 == 0 {
