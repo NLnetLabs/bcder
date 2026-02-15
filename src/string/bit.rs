@@ -90,7 +90,7 @@ impl BitString {
             return false
         }
         let bit = 7 - (bit as u8 & 7);
-        if self.bits.len() + 1 == idx && self.unused > bit {
+        if self.bits.len() - 1 == idx && self.unused > bit {
             return false
         }
         self.bits[idx] & (1 << bit) != 0
