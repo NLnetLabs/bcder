@@ -258,7 +258,7 @@ impl Integer {
 
     /// Returns whether the number is zero.
     pub fn is_zero(&self) -> bool {
-        self.0[0] == 0
+        self.0.len() == 1 && self.0[0] == 0
     }
 
     /// Returns whether the integer is positive.
