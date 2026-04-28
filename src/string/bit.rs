@@ -182,9 +182,15 @@ impl BitString {
                 }
                 let bits = inner.take_all()?;
 
-                // Strictly speaking, we should also check if the unused bits
-                // in the last octet are zero.
-
+                if unused > 0 && inner.mode() == Mode::Der {
+                    let mask = (1u8 << unused) - 1;
+                    if bits[bits.len() - 1] & mask != 0 {
+                        return Err(content.content_err(
+                            "non-zero unused bits in DER bit string"
+                        ));
+                    }
+                }
+                
                 Ok(BitString { unused, bits })
             }
             decode::Content::Constructed(ref inner) => {
