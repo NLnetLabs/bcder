@@ -1105,20 +1105,13 @@ impl<'a, S: Source + 'a> Constructed<'a, S> {
                     // still that from the value one level above.
                     match stack.pop() {
                         Some(None) => { }
-                        None => {
+                        None if self.state == State::Indefinite => {
                             // We read end-of-value as the very first value.
                             // This can only happen if the outer value is
                             // an indefinite value. If so, change state and
                             // return.
-                            if self.state == State::Indefinite {
-                                self.state = State::Done;
-                                return Ok(None)
-                            }
-                            else {
-                                return Err(self.content_err(
-                                    "invalid nested values"
-                                ))
-                            }
+                            self.state = State::Done;
+                            return Ok(None)
                         }
                         _ => {
                             return Err(self.content_err(
