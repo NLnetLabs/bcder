@@ -6,6 +6,8 @@ Breaking changes
 
 New
 
+* Added `RestrictedString::take_opt_from`. ([#90])
+
 Bug fixes
 
 * Fixed `Utf8String` potentially accepting invalid UTF-8. ([#91] by [@sumleo])
@@ -17,6 +19,7 @@ Bug fixes
 
 Other changes
 
+[#90]: https://github.com/NLnetLabs/bcder/pull/90
 [#91]: https://github.com/NLnetLabs/bcder/pull/91
 [#92]: https://github.com/NLnetLabs/bcder/pull/92
 [#93]: https://github.com/NLnetLabs/bcder/pull/93
