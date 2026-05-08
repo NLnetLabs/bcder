@@ -383,5 +383,22 @@ mod test {
         check(b"\x03\x01\x04", None);
         check(b"\x03\x00", None);
     }
+
+    #[test]
+    fn bitstring_bit() {
+        let b = BitString::new(0, Bytes::from_static(b"\xFF\xff"));
+        assert_eq!(b.bit(0), true);
+        assert_eq!(b.bit(15), true);
+        assert_eq!(b.bit(16), false);
+        assert_eq!(b.bit(24), false);
+
+        let b = BitString::new(2, Bytes::from_static(b"\xFF\xfc"));
+        assert_eq!(b.bit(0), true);
+        assert_eq!(b.bit(13), true);
+        assert_eq!(b.bit(14), false);
+        assert_eq!(b.bit(15), false);
+        assert_eq!(b.bit(16), false);
+        assert_eq!(b.bit(24), false);
+    }
 }
 
