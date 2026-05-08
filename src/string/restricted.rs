@@ -371,12 +371,16 @@ impl CharSet for Utf8CharSet {
             return Err(CharSetError)
         }
         if first < 0xE0 {
-            return Ok(Some(unsafe {
-                char::from_u32_unchecked(
-                    ((u32::from(first & 0x1F)) << 6) |
-                    u32::from(second & 0x3F)
-                )
-            }))
+            let codepoint = ((u32::from(first & 0x1F)) << 6) |
+                           u32::from(second & 0x3F);
+            // Reject overlong encoding: 2-byte sequence must encode >= 0x80
+            if codepoint < 0x80 {
+                return Err(CharSetError)
+            }
+            return match char::from_u32(codepoint) {
+                Some(ch) => Ok(Some(ch)),
+                None => Err(CharSetError)
+            }
         }
         let third = match iter.next() {
             Some(ch) => ch,
@@ -386,13 +390,17 @@ impl CharSet for Utf8CharSet {
             return Err(CharSetError)
         }
         if first < 0xF0 {
-            return Ok(Some(unsafe {
-                char::from_u32_unchecked(
-                    ((u32::from(first & 0x0F)) << 12) |
-                    ((u32::from(second & 0x3F)) << 6) |
-                    u32::from(third & 0x3F)
-                )
-            }))
+            let codepoint = ((u32::from(first & 0x0F)) << 12) |
+                           ((u32::from(second & 0x3F)) << 6) |
+                           u32::from(third & 0x3F);
+            // Reject overlong encoding: 3-byte sequence must encode >= 0x800
+            if codepoint < 0x800 {
+                return Err(CharSetError)
+            }
+            return match char::from_u32(codepoint) {
+                Some(ch) => Ok(Some(ch)),
+                None => Err(CharSetError)
+            }
         }
         let fourth = match iter.next() {
             Some(ch) => ch,
@@ -401,14 +409,18 @@ impl CharSet for Utf8CharSet {
         if first > 0xF7 || fourth < 0x80 {
             return Err(CharSetError)
         }
-        Ok(Some(unsafe {
-            char::from_u32_unchecked(
-                ((u32::from(first & 0x07)) << 18) |
-                ((u32::from(second & 0x3F)) << 12) |
-                ((u32::from(third & 0x3F)) << 6) |
-                u32::from(fourth & 0x3F)
-            )
-        }))
+        let codepoint = ((u32::from(first & 0x07)) << 18) |
+                       ((u32::from(second & 0x3F)) << 12) |
+                       ((u32::from(third & 0x3F)) << 6) |
+                       u32::from(fourth & 0x3F);
+        // Reject overlong encoding: 4-byte sequence must encode >= 0x10000
+        if codepoint < 0x10000 {
+            return Err(CharSetError)
+        }
+        match char::from_u32(codepoint) {
+            Some(ch) => Ok(Some(ch)),
+            None => Err(CharSetError)
+        }
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
@@ -587,5 +599,30 @@ mod test {
     fn should_restrict_printable_string() {
         let os = OctetString::new(Bytes::from_static(b"This is wrong!"));
         assert!(PrintableString::new(os).is_err());
+    }
+
+    #[test]
+    fn should_reject_surrogate_code_points() {
+        // Surrogate U+D800: bytes ED A0 80
+        let os = OctetString::new(Bytes::from_static(b"\xed\xa0\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject surrogate U+D800");
+
+        // Surrogate U+DFFF: bytes ED BF BF
+        let os = OctetString::new(Bytes::from_static(b"\xed\xbf\xbf"));
+        assert!(Utf8String::new(os).is_err(), "should reject surrogate U+DFFF");
+    }
+
+    #[test]
+    fn should_reject_overlong_encoding() {
+        // Overlong encoding of U+0000: C0 80
+        let os = OctetString::new(Bytes::from_static(b"\xc0\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject overlong encoding");
+    }
+
+    #[test]
+    fn should_reject_above_max_unicode() {
+        // U+110000 (above max valid Unicode): F4 90 80 80
+        let os = OctetString::new(Bytes::from_static(b"\xf4\x90\x80\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject code points above U+10FFFF");
     }
 }
