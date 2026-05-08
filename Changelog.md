@@ -8,7 +8,20 @@ New
 
 Bug fixes
 
+* Fixed `Utf8String` potentially accepting invalid UTF-8. ([#91] by [@sumleo])
+* Fixed a panic in `Unsigned::from_bytes` when the input is all zero.
+  ([#92] by [@sumleo])
+* Fixed incorrect bounds check in `BitString::bit`. ([#93] by [@sumleo])
+* Added character set validation to `FromStr` impl for `NumericString`,
+  `PrintableString`, and `Ia5String`. ([#95] by [@sumleo])
+
 Other changes
+
+[#91]: https://github.com/NLnetLabs/bcder/pull/91
+[#92]: https://github.com/NLnetLabs/bcder/pull/92
+[#93]: https://github.com/NLnetLabs/bcder/pull/93
+[#95]: https://github.com/NLnetLabs/bcder/pull/95
+[@sumleo]: https://github.com/sumleo
 
 
 ## 0.7.6
