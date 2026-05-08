@@ -412,7 +412,9 @@ impl CharSet for Utf8CharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -450,7 +452,9 @@ impl CharSet for NumericCharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -496,7 +500,9 @@ impl CharSet for PrintableCharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -536,7 +542,9 @@ impl CharSet for Ia5CharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
