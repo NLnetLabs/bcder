@@ -359,6 +359,7 @@ mod test {
         check(b"\x03\x07\x12deadb\xd0", None);
         check(b"\x03\x01\x04", None);
         check(b"\x03\x02\x03ff", None);
+        check(b"\x03\x00", None);
         check(b"\x03", None);
     }
 
