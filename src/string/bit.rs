@@ -182,7 +182,10 @@ impl BitString {
                 }
                 let bits = inner.take_all()?;
 
-                if unused > 0 && inner.mode() == Mode::Der {
+                if unused > 0 && 
+                    (inner.mode() == Mode::Der || inner.mode() == Mode::Cer) &&
+                    !bits.is_empty()
+                {
                     let mask = (1u8 << unused) - 1;
                     if bits[bits.len() - 1] & mask != 0 {
                         return Err(content.content_err(
@@ -212,40 +215,8 @@ impl BitString {
     pub fn skip_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<(), DecodeError<S::Error>> {
-        match *content {
-            decode::Content::Primitive(ref mut inner) => {
-                if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
-                    return Err(content.content_err(
-                        "long bit string component in CER mode"
-                    ))
-                }
-                let unused = inner.take_u8()?;
-                if unused > 7 {
-                    return Err(content.content_err(
-                        "invalid bit string with large initial octet"
-                    ));
-                }
-                if inner.remaining() == 0 && unused > 0 {
-                    return Err(content.content_err(
-                        "invalid bit string \
-                         (non-zero initial with empty bits)"
-                    ));
-                }
-                inner.skip_all()
-            }
-            decode::Content::Constructed(ref inner) => {
-                if inner.mode() == Mode::Der {
-                    Err(content.content_err(
-                       "constructed bit string in DER mode"
-                    ))
-                }
-                else {
-                    Err(content.content_err(
-                        "constructed bit string not implemented"
-                    ))
-                }
-            }
-        }
+        Self::from_content(content)?;
+        return Ok(());
     }
 
     /// Returns a value encoder that encodes a bytes slice as an octet string.
@@ -387,7 +358,8 @@ mod test {
         check(b"\x03\x01\x00", Some((0, b"")));
         check(b"\x03\x07\x12deadb\xd0", None);
         check(b"\x03\x01\x04", None);
-        check(b"\x03\x00", None);
+        check(b"\x03\x02\x03ff", None);
+        check(b"\x03", None);
     }
 
     #[test]
