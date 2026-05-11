@@ -216,7 +216,7 @@ impl BitString {
         content: &mut decode::Content<S>
     ) -> Result<(), DecodeError<S::Error>> {
         Self::from_content(content)?;
-        return Ok(());
+        Ok(())
     }
 
     /// Returns a value encoder that encodes a bytes slice as an octet string.
