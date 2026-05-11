@@ -183,14 +183,15 @@ impl BitString {
                 let bits = inner.take_all()?;
 
                 if unused > 0 && 
-                    (inner.mode() == Mode::Der || inner.mode() == Mode::Cer) &&
-                    !bits.is_empty()
+                    (inner.mode() == Mode::Der || inner.mode() == Mode::Cer)
                 {
-                    let mask = (1u8 << unused) - 1;
-                    if bits[bits.len() - 1] & mask != 0 {
-                        return Err(content.content_err(
-                            "non-zero unused bits in DER bit string"
-                        ));
+                    if let Some(last) = bits.last() {
+                        let mask = (1u8 << unused) - 1;
+                        if last & mask != 0 {
+                            return Err(content.content_err(
+                                "non-zero unused bits in DER bit string"
+                            ));
+                        }
                     }
                 }
                 
@@ -215,8 +216,60 @@ impl BitString {
     pub fn skip_content<S: decode::Source>(
         content: &mut decode::Content<S>
     ) -> Result<(), DecodeError<S::Error>> {
-        Self::from_content(content)?;
-        Ok(())
+        match *content {
+            decode::Content::Primitive(ref mut inner) => {
+                if inner.mode() == Mode::Cer && inner.remaining() > 1000 {
+                    return Err(content.content_err(
+                        "long bit string component in CER mode"
+                    ))
+                }
+                let unused = inner.take_u8()?;
+                if unused > 7 {
+                    return Err(content.content_err(
+                        "invalid bit string with large initial octet"
+                    ));
+                }
+                if inner.remaining() == 0 && unused > 0 {
+                    return Err(content.content_err(
+                        "invalid bit string \
+                         (non-zero initial with empty bits)"
+                    ));
+                }
+                
+                if inner.remaining() > 0 {
+                    inner.skip(inner.remaining() - 1)?;
+                }
+                
+                let bits = inner.take_all()?;
+
+                if unused > 0 && 
+                    (inner.mode() == Mode::Der || inner.mode() == Mode::Cer)
+                {
+                    if let Some(last) = bits.last() {
+                        let mask = (1u8 << unused) - 1;
+                        if last & mask != 0 {
+                            return Err(content.content_err(
+                                "non-zero unused bits in DER bit string"
+                            ));
+                        }
+                    }
+                }
+                
+                Ok(())
+            }
+            decode::Content::Constructed(ref inner) => {
+                if inner.mode() == Mode::Der {
+                    Err(content.content_err(
+                       "constructed bit string in DER mode"
+                    ))
+                }
+                else {
+                    Err(content.content_err(
+                        "constructed bit string not implemented"
+                    ))
+                }
+            }
+        }
     }
 
     /// Returns a value encoder that encodes a bytes slice as an octet string.
