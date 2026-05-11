@@ -163,6 +163,18 @@ impl<L: CharSet> RestrictedString<L> {
         cons.take_value_if(L::TAG, Self::from_content)
     }
 
+    /// Takes an optional single character set value from constructed content.
+    ///
+    /// If there is no next value then `Ok(None)` is returned.
+    ///
+    /// If there is a character string, but it is not correctly encoded, a
+    /// malformed error is returned.
+    pub fn take_opt_from<S: decode::Source>(
+        cons: &mut decode::Constructed<S>
+    ) -> Result<Option<Self>, DecodeError<S::Error>> {
+        cons.take_opt_value_if(L::TAG, Self::from_content)
+    }
+
     /// Takes a character set from content.
     pub fn from_content<S: decode::Source>(
         content: &mut decode::Content<S>
@@ -359,12 +371,16 @@ impl CharSet for Utf8CharSet {
             return Err(CharSetError)
         }
         if first < 0xE0 {
-            return Ok(Some(unsafe {
-                char::from_u32_unchecked(
-                    ((u32::from(first & 0x1F)) << 6) |
-                    u32::from(second & 0x3F)
-                )
-            }))
+            let codepoint = ((u32::from(first & 0x1F)) << 6) |
+                           u32::from(second & 0x3F);
+            // Reject overlong encoding: 2-byte sequence must encode >= 0x80
+            if codepoint < 0x80 {
+                return Err(CharSetError)
+            }
+            return match char::from_u32(codepoint) {
+                Some(ch) => Ok(Some(ch)),
+                None => Err(CharSetError)
+            }
         }
         let third = match iter.next() {
             Some(ch) => ch,
@@ -374,13 +390,17 @@ impl CharSet for Utf8CharSet {
             return Err(CharSetError)
         }
         if first < 0xF0 {
-            return Ok(Some(unsafe {
-                char::from_u32_unchecked(
-                    ((u32::from(first & 0x0F)) << 12) |
-                    ((u32::from(second & 0x3F)) << 6) |
-                    u32::from(third & 0x3F)
-                )
-            }))
+            let codepoint = ((u32::from(first & 0x0F)) << 12) |
+                           ((u32::from(second & 0x3F)) << 6) |
+                           u32::from(third & 0x3F);
+            // Reject overlong encoding: 3-byte sequence must encode >= 0x800
+            if codepoint < 0x800 {
+                return Err(CharSetError)
+            }
+            return match char::from_u32(codepoint) {
+                Some(ch) => Ok(Some(ch)),
+                None => Err(CharSetError)
+            }
         }
         let fourth = match iter.next() {
             Some(ch) => ch,
@@ -389,18 +409,24 @@ impl CharSet for Utf8CharSet {
         if first > 0xF7 || fourth < 0x80 {
             return Err(CharSetError)
         }
-        Ok(Some(unsafe {
-            char::from_u32_unchecked(
-                ((u32::from(first & 0x07)) << 18) |
-                ((u32::from(second & 0x3F)) << 12) |
-                ((u32::from(third & 0x3F)) << 6) |
-                u32::from(fourth & 0x3F)
-            )
-        }))
+        let codepoint = ((u32::from(first & 0x07)) << 18) |
+                       ((u32::from(second & 0x3F)) << 12) |
+                       ((u32::from(third & 0x3F)) << 6) |
+                       u32::from(fourth & 0x3F);
+        // Reject overlong encoding: 4-byte sequence must encode >= 0x10000
+        if codepoint < 0x10000 {
+            return Err(CharSetError)
+        }
+        match char::from_u32(codepoint) {
+            Some(ch) => Ok(Some(ch)),
+            None => Err(CharSetError)
+        }
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -438,7 +464,9 @@ impl CharSet for NumericCharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -484,7 +512,9 @@ impl CharSet for PrintableCharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -524,7 +554,9 @@ impl CharSet for Ia5CharSet {
     }
 
     fn from_str(s: &str) -> Result<Cow<'_, [u8]>, CharSetError> {
-        Ok(Cow::Borrowed(s.as_bytes()))
+        let bytes = s.as_bytes();
+        Self::check(&mut bytes.iter().copied())?;
+        Ok(Cow::Borrowed(bytes))
     }
 }
 
@@ -567,5 +599,30 @@ mod test {
     fn should_restrict_printable_string() {
         let os = OctetString::new(Bytes::from_static(b"This is wrong!"));
         assert!(PrintableString::new(os).is_err());
+    }
+
+    #[test]
+    fn should_reject_surrogate_code_points() {
+        // Surrogate U+D800: bytes ED A0 80
+        let os = OctetString::new(Bytes::from_static(b"\xed\xa0\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject surrogate U+D800");
+
+        // Surrogate U+DFFF: bytes ED BF BF
+        let os = OctetString::new(Bytes::from_static(b"\xed\xbf\xbf"));
+        assert!(Utf8String::new(os).is_err(), "should reject surrogate U+DFFF");
+    }
+
+    #[test]
+    fn should_reject_overlong_encoding() {
+        // Overlong encoding of U+0000: C0 80
+        let os = OctetString::new(Bytes::from_static(b"\xc0\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject overlong encoding");
+    }
+
+    #[test]
+    fn should_reject_above_max_unicode() {
+        // U+110000 (above max valid Unicode): F4 90 80 80
+        let os = OctetString::new(Bytes::from_static(b"\xf4\x90\x80\x80"));
+        assert!(Utf8String::new(os).is_err(), "should reject code points above U+10FFFF");
     }
 }
