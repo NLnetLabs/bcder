@@ -229,23 +229,26 @@ impl BitString {
                         "invalid bit string with large initial octet"
                     ));
                 }
-                if inner.remaining() == 0 && unused > 0 {
-                    return Err(content.content_err(
-                        "invalid bit string \
-                         (non-zero initial with empty bits)"
-                    ));
-                }
-                
-                if inner.remaining() > 0 {
-                    inner.skip(inner.remaining() - 1)?;
-                }
-                
-                let bits = inner.take_all()?;
+                if inner.remaining() == 0 {
+                    if unused > 0 {
+                        return Err(content.content_err(
+                            "invalid bit string \
+                            (non-zero initial with empty bits)"
+                        ));
+                    }
+                } else {
+                    if let Some(remaining) = inner.remaining().checked_sub(1) {
+                        inner.skip(remaining)?;
+                    }
 
-                if unused > 0 && 
-                    (inner.mode() == Mode::Der || inner.mode() == Mode::Cer)
-                {
-                    if let Some(last) = bits.last() {
+                    let last = inner.take_u8()?;
+                    
+                    if unused > 0 && 
+                        (
+                            inner.mode() == Mode::Der || 
+                            inner.mode() == Mode::Cer
+                        )
+                    {
                         let mask = (1u8 << unused) - 1;
                         if last & mask != 0 {
                             return Err(content.content_err(
@@ -407,11 +410,15 @@ mod test {
             }
         }
 
+        check(b"\x03\x07\x00deadb\xdf", Some((0, b"deadb\xdf")));
         check(b"\x03\x07\x04deadb\xd0", Some((4, b"deadb\xd0")));
+        check(b"\x03\x07\x07deadb\x80", Some((7, b"deadb\x80")));
         check(b"\x03\x01\x00", Some((0, b"")));
-        check(b"\x03\x07\x12deadb\xd0", None);
+        check(b"\x03\x07\x08deadb\xdf", None);
+        check(b"\x03\x07\xffdeadb\xdf", None);
         check(b"\x03\x01\x04", None);
-        check(b"\x03\x02\x03ff", None);
+        check(b"\x03\x02\x03\xff", None);
+        check(b"\x03\x03\x03\x00\xff", None);
         check(b"\x03\x00", None);
         check(b"\x03", None);
     }
