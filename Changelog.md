@@ -8,6 +8,11 @@ New
 
 * Added `RestrictedString::take_opt_from`. ([#90])
 
+Improvements
+
+* `BIT_STRING` parsing now checks that the unused bits are zero in CER and
+  DER modes. ([#97])
+
 Bug fixes
 
 * Fixed `Utf8String` potentially accepting invalid UTF-8. ([#91] by [@sumleo])
@@ -24,6 +29,7 @@ Other changes
 [#92]: https://github.com/NLnetLabs/bcder/pull/92
 [#93]: https://github.com/NLnetLabs/bcder/pull/93
 [#95]: https://github.com/NLnetLabs/bcder/pull/95
+[#97]: https://github.com/NLnetLabs/bcder/pull/97
 [@sumleo]: https://github.com/sumleo
 
 
