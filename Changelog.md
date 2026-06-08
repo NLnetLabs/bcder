@@ -1,5 +1,18 @@
 # Change Log
 
+## Unreleased next version
+
+Breaking changes
+
+New
+
+Improvements
+
+Bug fixes
+
+Other changes
+
+
 ## 0.7.7
 
 Released 2026-06-08.
