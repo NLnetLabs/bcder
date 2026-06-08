@@ -1,8 +1,8 @@
 # Change Log
 
-## Unreleased next version
+## 0.7.7
 
-Breaking changes
+Released 2026-06-08.
 
 New
 
@@ -21,8 +21,6 @@ Bug fixes
 * Fixed incorrect bounds check in `BitString::bit`. ([#93] by [@sumleo])
 * Added character set validation to `FromStr` impl for `NumericString`,
   `PrintableString`, and `Ia5String`. ([#95] by [@sumleo])
-
-Other changes
 
 [#90]: https://github.com/NLnetLabs/bcder/pull/90
 [#91]: https://github.com/NLnetLabs/bcder/pull/91
