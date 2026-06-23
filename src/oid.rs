@@ -269,7 +269,16 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
             return Err("second component for 0. and 1. must be less than 40");
         }
 
-        let mut res = vec![40 * first + second];
+        // The first two arcs are combined into a single subidentifier as
+        // `40 * first + second`. For `first == 2` the second arc is
+        // unbounded, so this can exceed `u32::MAX`; use checked arithmetic
+        // to return an error instead of overflowing.
+        let first_subidentifier = first
+            .checked_mul(40)
+            .and_then(|v| v.checked_add(second))
+            .ok_or("OID component out of range")?;
+
+        let mut res = vec![first_subidentifier];
         for item in components {
             res.push(from_str(item)?);
         }
@@ -514,5 +523,30 @@ mod test {
         check(b"\x81\x34\x83\x03", true);
         check(b"\x81\x34\x83\x83\x03\x03", true);
         check(b"\x81\x34\x83", false);
+    }
+
+    #[test]
+    fn from_str() {
+        use std::str::FromStr;
+
+        // Well-formed OIDs round-trip to the expected encoding.
+        assert_eq!(
+            Oid::<Vec<u8>>::from_str("2.5.29.19").unwrap().0,
+            vec![85, 29, 19]
+        );
+        // A large second arc under `first == 2` is representable.
+        assert!(Oid::<Vec<u8>>::from_str("2.100.3").is_ok());
+
+        // Malformed inputs are rejected without panicking.
+        assert!(Oid::<Vec<u8>>::from_str("").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("2").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("3.5").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("1.40").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("1.x").is_err());
+
+        // Regression for #101: a second component that makes the combined
+        // first subidentifier exceed `u32::MAX` must return an error rather
+        // than overflow-panic in overflow-checking builds.
+        assert!(Oid::<Vec<u8>>::from_str("2.4294967295").is_err());
     }
 }
