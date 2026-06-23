@@ -10,7 +10,14 @@ Improvements
 
 Bug fixes
 
+* Fixed a panic in the `FromStr` implementation for `Oid` when the combined
+  first subidentifier (`40 * first + second`) of an OID overflows `u32`, e.g.
+  `"2.4294967295"`. Such input is now rejected with an error instead of
+  panicking in overflow-checking builds. ([#101])
+
 Other changes
+
+[#101]: https://github.com/NLnetLabs/bcder/issues/101
 
 
 ## 0.7.7
