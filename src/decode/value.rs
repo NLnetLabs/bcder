@@ -3,7 +3,7 @@
 //! This is a private module. The relevant items are re-exported by the
 //! parent.
 
-use std::io;
+use std::{error, io};
 use crate::captured::Captured;
 use crate::ident::Tag;
 use crate::length::Length;
@@ -56,6 +56,28 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Value<'a, M, R> {
         }
     }
 
+    pub fn into_primitive_with(
+        self, tag: Tag,
+    ) -> Result<Primitive<'a, M, R>, Error> {
+        match self {
+            Value::Primitive(inner) => {
+                if inner.tag() == tag {
+                    Ok(inner)
+                }
+                else {
+                    Err(Error::content(
+                        format!("expected primitive {tag}"), inner.start(),
+                    ))
+                }
+            }
+            Value::Constructed(inner) => {
+                Err(Error::content(
+                    format!("expected primitive {tag}"), inner.start(),
+                ))
+            }
+        }
+    }
+
     /// Converts a reference into on to a constructed value or errors out.
     pub fn into_constructed(
         self
@@ -67,6 +89,28 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Value<'a, M, R> {
                 ))
             }
             Value::Constructed(inner) => Ok(inner),
+        }
+    }
+
+    pub fn into_constructed_with(
+        self, tag: Tag,
+    ) -> Result<Constructed<'a, M, R>, Error> {
+        match self {
+            Value::Primitive(inner) => {
+                Err(Error::content(
+                    format!("expected constructed {tag}"), inner.start()
+                ))
+            }
+            Value::Constructed(inner) => {
+                if inner.tag() == tag {
+                    Ok(inner)
+                }
+                else {
+                    Err(Error::content(
+                        format!("expected constructed {tag}"), inner.start()
+                    ))
+                }
+            }
         }
     }
 
@@ -155,6 +199,33 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Value<'a, M, R> {
                 cons.capture(|cons| op(Value::Constructed(cons)))
             }
         }
+    }
+
+    /// Produces an error at the start of the value.
+    pub fn err_at_start(
+        &self, err: impl Into<Box<dyn error::Error + Send + Sync>>,
+    ) -> Error {
+        match self {
+            Value::Primitive(inner) => inner.err_at_start(err),
+            Value::Constructed(inner) => inner.err_at_start(err),
+        }
+    }
+
+    /// Produces an error at the current position.
+    pub fn err_at_current(
+        &self, err: impl Into<Box<dyn error::Error + Send + Sync>>,
+    ) -> Error {
+        match self {
+            Value::Primitive(inner) => inner.err_at_current(err),
+            Value::Constructed(inner) => inner.err_at_current(err),
+        }
+    }
+}
+
+/// # Processing Standard Values
+impl<'a, M: Mode, R: io::BufRead + 'a> Value<'a, M, R> {
+    pub fn into_sequence(self) -> Result<Constructed<'a, M, R>, Error> {
+        self.into_constructed_with(Tag::SEQUENCE)
     }
 }
 

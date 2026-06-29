@@ -5,7 +5,7 @@
 //     {IntegerArray,UnsignedArray}::from_primitive_ref do crazy slice
 //     wrangling need to be thoroughly reviewed.
 
-use std::{cmp, error, fmt, hash, io, mem};
+use std::{cmp, error, fmt, hash, io, mem, slice, str};
 use std::sync::Arc;
 use crate::decode;
 use crate::{Mode, Tag};
@@ -801,9 +801,14 @@ impl<M> PrimitiveContent<M> for &'_ Arc<Unsigned> {
 /// signed integer of size `N`. It does not contain the possibly necessary
 /// padding zero but uses the full bit space of the `N` bytes and adds the
 /// zero if necessary when encoding the value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct UnsignedArray<const N: usize>([u8; N]);
+
+impl<const N: usize> UnsignedArray<N> {
+    /// The representation of the value zero.
+    pub const ZERO: Self = Self([0; N]);
+}
 
 impl<const N: usize> UnsignedArray<N> {
     /// Creates a new value from a byte array.
@@ -813,6 +818,52 @@ impl<const N: usize> UnsignedArray<N> {
     pub fn from_array(array: [u8; N]) -> Self {
         let () = const { assert!(N > 0) };
         Self(array)
+    }
+
+    /// Creates a value for the content of the given slice.
+    ///
+    /// Assumes the slice to contain a variable length unsigned integer in
+    /// big endian ordering. If the slice is shorter than the array size `N`,
+    /// the resulting value is left padded with zeros. If the slice is longer
+    /// than `N`, an error will be returned unless all the excess bytes are
+    /// zero. An error is also returned if the slice is empty.
+    pub fn from_slice(s: &[u8]) -> Result<Self, FromSliceError> {
+        // Empty slice is an error.
+        if s.is_empty() {
+            return Err(FromSliceError::Empty);
+        }
+
+        match N.checked_sub(s.len()) {
+            Some(start) => {
+                let mut res = [0u8; N];
+
+                // Panic: `start` is N or less.
+                #[allow(clippy::indexing_slicing)]
+                res[start..].copy_from_slice(s);
+
+                Ok(Self::from_array(res))
+            }
+            None => {
+                // The slice is too long. Split it at length - N and check
+                // whether the left part is all zero.
+
+                // Panic: We know that the length is greater than N.
+                let (left, right) = s.split_at(
+                    s.len() - N
+                );
+
+                if left.iter().copied().any(|ch| ch != 0) {
+                    return Err(FromSliceError::Long)
+                }
+
+                // Panic: We know that right is N bytes long.
+                #[allow(clippy::expect_used)]
+                let res = <[u8; N]>::try_from(right).expect(
+                    "bug: long slice split at the wrong point"
+                );
+                Ok(Self::from_array(res))
+            }
+        }
     }
 
     /// Returns the underlying byte array.
@@ -841,6 +892,91 @@ impl<const N: usize> UnsignedArray<N> {
             slice = tail; 
         }
         (false, b"\x00")
+    }
+
+    /// Returns the decimal representation of the integer.
+    ///
+    /// The returned value can be used as a `str` and can be formatted.
+    pub fn display(mut self) -> UnsignedArrayString<N> {
+        let mut buf = TripleArray::<N>::default();
+        let mut len = 0;
+        while self != Self::ZERO && len < TripleArray::<N>::LEN {
+            let (new_val, digit) = self.div_u8(10);
+            
+            // Panic: len is checked in the loop condition.
+            #[allow(clippy::indexing_slicing)]
+            {
+                buf.as_mut()[len] = digit + b'0';
+            }
+
+            self = new_val;
+            len += 1;
+        }
+        UnsignedArrayString { buf, len }
+    }
+
+    /// Divides the value by a `u8` and returns the result and remainder.
+    fn div_u8(self, div: u8) -> (Self, u8) {
+        let div = div as u16;
+        let mut res = Self::default();
+        let mut step = 0u16;
+        for (idx, val) in self.0.iter().copied().enumerate() {
+            step += u16::from(val);
+
+            // Panic: ixd comes out of enumerating an array of the same size.
+            #[allow(clippy::indexing_slicing)] {
+                res.0[idx] = (step / div) as u8;
+            }
+
+            step %= div;
+        }
+        (res, step as u8)
+    }
+
+    /// Multiplies the value by a `u8` and returns the result.
+    ///
+    /// If the result doesn’t fit, returns `None`.
+    fn checked_mul_u8(self, rhs: u8) -> Option<Self> {
+        let mut res = Self::default();
+        let mut overflow = 0;
+        let rhs = u16::from(rhs);
+        for (idx, val) in self.0.iter().copied().enumerate().rev() {
+            let step = u16::from(val) * rhs + overflow;
+
+            // Panic: ixd comes out of enumerating an array of the same size.
+            #[allow(clippy::indexing_slicing)] {
+                res.0[idx] = step as u8;
+            }
+            overflow = step >> 8;
+        }
+        if overflow == 0 {
+            Some(res)
+        }
+        else {
+            None
+        }
+    }
+
+    /// Adds a `u8` to the value and returns the result.
+    ///
+    /// If the result doesn’t fit, returns `None`.
+    fn checked_add_u8(mut self, rhs: u8) -> Option<Self> {
+        let mut overflow = u16::from(rhs);
+        for i in (0..N).rev() {
+            // Panic: i is limited to N - 1 by the for loop range.
+            #[allow(clippy::indexing_slicing)]
+            {
+                let step = u16::from(self.0[i]) + overflow;
+                self.0[i] = step as u8;
+                overflow = step >> 8;
+            }
+        }
+        if overflow == 0 {
+            Some(self)
+        }
+        else {
+            None
+        }
     }
 }
 
@@ -940,6 +1076,35 @@ impl<const N: usize> Default for UnsignedArray<N> {
     }
 }
 
+
+//--- FromStr
+
+impl<const N: usize> str::FromStr for UnsignedArray<N> {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut res = Self::default();
+        for ch in s.chars() {
+            match ch {
+                '0' ..= '9' => {
+                    res = match res.checked_mul_u8(10) {
+                        Some(res) => {
+                            match res.checked_add_u8((ch as u8) - b'0') {
+                                Some(res) => res,
+                                None => return Err(ParseError(()))
+                            }
+                        }
+                        None => return Err(ParseError(()))
+                    }
+                }
+                _ => return Err(ParseError(()))
+            }
+        }
+        Ok(res)
+    }
+}
+
+
 //--- PrimitiveContent
 
 impl<const N: usize, M> PrimitiveContent<M> for UnsignedArray<N> {
@@ -960,6 +1125,21 @@ impl<const N: usize, M> PrimitiveContent<M> for UnsignedArray<N> {
             target.write_all(&[0])?;
         }
         target.write_all(slice)
+    }
+}
+
+
+//--- Display and Debug
+
+impl<const N: usize> fmt::Display for UnsignedArray<N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display().fmt(f)
+    }
+}
+
+impl<const N: usize> fmt::Debug for UnsignedArray<N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 
@@ -1021,11 +1201,94 @@ unsigned_builtin!(u64);
 unsigned_builtin!(u128);
 
 
+//------------ UnsignedArrayString -------------------------------------------
+
+/// The decimal representation of an unsigned array integer.
+///
+/// A value of this type contains the decimal representation of an unsigned
+/// integer of at most `N` bytes as a `str`-like.
+///
+/// Like [`UnsignedArray<N>`], this type is owned and `Copy`.
+#[derive(Clone, Copy)]
+pub struct UnsignedArrayString<const N: usize> {
+    buf: TripleArray<N>,
+    len: usize,
+}
+
+impl<const N: usize> UnsignedArrayString<N> {
+    /// Returns a `str` with the decimal representation of the value.
+    pub fn as_str(&self) -> &str {
+        // Panic safety: `self.len` not being too large is an invariant of
+        // this type.
+        // Safety: `self.buf` containing a valid UTF-8 string is an invariant
+        // of this type.
+        #[allow(clippy::indexing_slicing)]
+        unsafe { str::from_utf8_unchecked(&self.buf.as_ref()[..self.len]) }
+    }
+}
+
+impl<const N: usize> From<UnsignedArrayString<N>> for String {
+    fn from(src: UnsignedArrayString<N>) -> Self {
+        src.to_string()
+    }
+}
+
+
+impl<const N: usize> AsRef<str> for UnsignedArrayString<N> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<const N: usize> fmt::Display for UnsignedArrayString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
+
+//------------ TripleArray ---------------------------------------------------
+
+/// An generic array of three times the given size.
+#[derive(Clone, Copy)]
+struct TripleArray<const N: usize>([[u8; N]; 3]);
+
+impl<const N: usize> TripleArray<N> {
+    const LEN: usize = mem::size_of::<Self>();
+
+    fn default() -> Self {
+        Self([[0; N]; 3])
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for TripleArray<N> {
+    fn as_ref(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(
+                self.0.get_unchecked(0).as_ptr(),
+                N * 3
+            )
+        }
+    }
+}
+
+impl<const N: usize> AsMut<[u8]> for TripleArray<N> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.0.get_unchecked_mut(0).as_mut_ptr(),
+                N * 3
+            )
+        }
+    }
+}
+
+
 //============ Error Types ===================================================
 
 //------------ InvalidInteger ------------------------------------------------
 
-/// A octets slice does not contain a validly encoded integer.
+/// An octets slice does not contain a validly encoded integer.
 #[derive(Clone, Copy, Debug)]
 pub struct InvalidInteger(());
 
@@ -1050,6 +1313,51 @@ impl fmt::Display for OverflowError {
 }
 
 impl error::Error for OverflowError { }
+
+
+//------------ FromSliceError ------------------------------------------------
+
+/// Creating an integer array from a slice failed.
+///
+/// This can happen if the slice is empty or if it is longer than the array.
+#[derive(Clone, Copy, Debug)]
+pub enum FromSliceError {
+    /// The slice was empty.
+    Empty,
+
+    /// The slice has more than the array’s length of significant bytes.
+    Long,
+}
+
+impl fmt::Display for FromSliceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(
+            match self {
+                FromSliceError::Empty => "empty integer",
+                FromSliceError::Long => {
+                    "integer has too many significant bytes"
+                }
+            }
+        )
+    }
+}
+
+impl error::Error for FromSliceError { }
+
+
+//------------ ParseError ----------------------------------------------------
+
+/// A source value is not correctly formated for converting into a value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParseError(());
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("invalid integer")
+    }
+}
+
+impl error::Error for ParseError { }
 
 
 //============ Tests =========================================================

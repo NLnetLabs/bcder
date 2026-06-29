@@ -1,7 +1,7 @@
 //! The identifier octets of a BER encoded value.
 //!
-//! This is a private module. The relevant items are re-exported by the
-//! parent.
+//! This is a private module. [`Tag`] and [`Class`] are being re-exported by
+//! the parent. [`Ident`] is used only internally by the crate.
 
 use std::{fmt, io};
 use crate::decode::read_u8;
@@ -18,8 +18,8 @@ use crate::length::Length;
 /// within this class. The number is an unsigned integer.
 ///
 /// In BER encoding, the tag becomes part of the identifier octets by
-/// combining it with a bit indicating whether a value is primitive or
-/// constructed.
+/// combining it with a bit indicating whether a value’s encoding is
+/// primitive or constructed.
 ///
 /// # Limitations
 ///
@@ -225,9 +225,34 @@ impl fmt::Debug for Tag {
 
 //------------ Ident ---------------------------------------------------------
 
+/// The identifier octets of a BER encoded value.
+///
+/// The identifier octets combine the ASN.1 tag of the value – represented by
+/// the type [`Tag`] – and whether a value’s encoding is primitive or
+/// constructed.
+///
+/// The identifier octets consist of one or more octets. The left-most two
+/// bits of the first octets encode the class, the next bit encoded whether
+/// the encoding is constructed. The lower five bits either provide the
+/// number of the tag directly or indicate that more octets follow if they
+/// are all 1. That is, tags with a number up to 30 are encoded in one octet,
+/// greater tags require multiple octets. In those subsequent octets, the
+/// left-most bit indicates whether another octet follow. The first
+/// subsequent octet must not have all lower seven bits zero. That is, the
+/// number must be encoded in its shortest form.
+///
+/// # Limitations
+///
+/// We only support tag numbers that fit into a `u32`. Consequently, we only
+/// support identifier octets up to six bytes in length.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ident(I);
 
+/// The internal representation of the identifier octets.
+///
+/// This is simply the encoding. Turns out doing this as an enum of byte
+/// arrays of the given length is the easiest and safest way to do this,
+/// even if it wastes a byte for the variant tag.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum I {
     L1([u8; 1]),
@@ -402,7 +427,13 @@ impl Ident {
         }
     }
 
-    /// Reads the identifier octets from a reader.
+    /// Reads optional identifier octets from a reader.
+    ///
+    /// Returns `None` if the end of the reader is reached before
+    /// reading the first octet. Returns an error when the end is reached
+    /// after reading the first octet if there are more octets supposed to
+    /// follow. Also returns an error if the tag number doesn’t fit into
+    /// a `u32`.
     pub fn read_opt(
         reader: &mut impl io::Read
     ) -> Result<Option<Self>, io::Error> {
@@ -460,6 +491,9 @@ impl Ident {
         ))
     }
 
+    /// Reads identifier octets from a reader.
+    ///
+    /// Returns an error if complete identifier octets cannot be read.
     pub fn read(
         reader: &mut impl io::Read
     ) -> Result<Self, io::Error> {
@@ -504,15 +538,28 @@ impl fmt::Debug for Ident {
 
 //------------ Class ---------------------------------------------------------
 
+/// The class of a tag.
+///
+/// The class determines how to interpret a tag. There are four classes.
 #[derive(Clone, Copy, Debug)]
 pub enum Class {
+    /// Tags for types defined by the ASN.1 specification itself.
     Universal,
+
+    /// Tags for types defined by an application of ASN.1
     Application,
+
+    /// Tags distinguising alternatives within a type definition. 
     Context,
+
+    /// Private use tags.
     Private,
 }
 
 impl Class {
+    /// Determines the class from an octet.
+    ///
+    /// Only considers the two left-most bits of the octet.
     const fn from_u8(octet: u8) -> Self {
         match octet {
             0x00..=0x3F => Self::Universal,
@@ -522,6 +569,9 @@ impl Class {
         }
     }
 
+    /// Returns an octet with the left-most bits set for this class.
+    ///
+    /// The lower six bits are left at zero.
     const fn into_u8(self) -> u8 {
         match self {
             Self::Universal => 0x00,

@@ -515,14 +515,14 @@ impl<const N: usize> Default for OctetStringArray<N> {
 
 //------------ OctetStringEncoder --------------------------------------------
 
-pub(super) struct OctetStringEncoder<'a, M> {
+pub struct OctetStringEncoder<'a, M> {
     tag: Tag,
     slice: &'a [u8],
     marker: PhantomData<M>,
 }
 
 impl<'a, M> OctetStringEncoder<'a, M> {
-    pub(super) fn new(tag: Tag, slice: &'a [u8]) -> Self {
+    pub fn new(tag: Tag, slice: &'a [u8]) -> Self {
         Self { tag, slice, marker: PhantomData }
     }
 

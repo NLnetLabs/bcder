@@ -1,7 +1,7 @@
 //! The length octets.
 //!
 //! This is a private module. [`Length`] and [`LengthOverflow`] are being
-//! re-exported by the parent. [`LengthOctets`] is used only internally be
+//! re-exported by the parent. [`LengthOctets`] is used only internally by
 //! the crate.
 
 use std::{error, fmt, io, ops};
@@ -17,7 +17,7 @@ use crate::encode::Target;
 ///
 /// This type is used to represent the length of primitive values and of
 /// definite-length constructed values. Like the standard library’s IO
-/// module, we are using a `u64` for such lengths since `usize` may not be too
+/// module, we are using a `u64` for such lengths since `usize` may be too
 /// small on some platforms. But since slice lengths are using `usize` and
 /// conversion between `usize` and `u64` is somewhat complicated, this type
 /// wraps a `u64` and provides means for converting.
@@ -35,7 +35,7 @@ use crate::encode::Target;
 ///
 /// A conversion from a `Length` to a `usize` can fail on smaller platforms.
 /// An attempt for such a conversion will result in an [`LengthOverflow`]
-/// which should be treated as a case of “not implemented”. The conversion can
+/// which should be treated as a case of “not implemented.” The conversion can
 /// be done via the `TryFrom<_>` impl or the explicit [`try_to_usize`] method.
 /// A saturating conversion – providing `usize::MAX` in case of an overflow –
 /// is available via [`to_usize_saturating`][Self::to_usize_saturating].
@@ -46,8 +46,8 @@ use crate::encode::Target;
 /// both provided through dedicated methods as well as the operators.
 ///
 /// However, unlike the built-in integers, the operators use the checked
-/// variant and will panic in debug mode and use the saturating variant in
-/// release mode.
+/// variant and will panic in debug mode and use the saturating (!) variant
+/// in release mode.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Length(u64);
@@ -57,7 +57,7 @@ impl Length {
     /// The smallest value that can be represented by this type.
     pub const MIN: Self = Self::from_u64(u64::MIN);
 
-    /// The smallest value that can be represented by this type.
+    /// The largest value that can be represented by this type.
     pub const MAX: Self = Self::from_u64(u64::MAX);
 
     /// The size of this type in bits.
@@ -177,21 +177,21 @@ impl Length {
 
     /// Saturating addition.
     ///
-    /// Saturates the numeric bounds instead of overflowing.
+    /// Returns `Length::MAX` in case of overflow.
     pub const fn saturating_add(self, other: Self) -> Self {
         Self(self.0.saturating_add(other.0))
     }
 
     /// Saturating subtraction.
     ///
-    /// Saturates the numeric bounds instead of overflowing.
+    /// Returns `Length::MIN` in case of overflow.
     pub const fn saturating_sub(self, other: Self) -> Self {
         Self(self.0.saturating_sub(other.0))
     }
 
     /// Saturating multiplication.
     ///
-    /// Saturates the numeric bounds instead of overflowing.
+    /// Returns `Length::MAX` in case of overflow.
     pub const fn saturating_mul(self, other: Self) -> Self {
         Self(self.0.saturating_mul(other.0))
     }
@@ -256,9 +256,13 @@ impl Length {
 
 
 /// # Encoding
+//
+// See `LengthOctets` below for details on the encoding.
 impl Length {
-    const LEN: usize = 0u64.to_ne_bytes().len();
+    /// The byte length of a value.
+    const LEN: usize = Self::ZERO.0.to_ne_bytes().len();
 
+    /// Returns the encoded length of the value.
     fn encoded_len(self) -> Length {
         if self.0 > 0x7F {
             let idx = self.encoded_start_idx();
@@ -271,6 +275,7 @@ impl Length {
         }
     }
 
+    /// Writes the encoded length to the given target.
     fn write_encoded<T: Target>(
         self, target: &mut T
     ) -> Result<(), T::Error> {
@@ -282,7 +287,8 @@ impl Length {
             // greater than LEN, so the subtraction here is fine.
             target.write_all(&[((Self::LEN - idx) | 0x80) as u8])?;
 
-            // Panic: idx can’t be bigger than LEN, so this can’t panic.
+            // Panic safety: idx can’t be bigger than LEN, so this can’t
+            // panic.
             #[allow(clippy::indexing_slicing)]
             target.write_all(
                 &self.0.to_be_bytes()[idx..]
@@ -295,7 +301,7 @@ impl Length {
 
     /// Returns the index of the first non-zero octet of `len`.
     fn encoded_start_idx(self) -> usize {
-        (self.0.leading_zeros().next_multiple_of(8) / 8) as usize
+        (self.0.leading_zeros() + 1).div_ceil(8) as usize
     }
 }
 
@@ -922,13 +928,29 @@ mod test {
         assert!(take_from(b"\xFF").is_err());
     }
 
-    /*
+    #[test]
+    fn length_encoded_start_idx() {
+        assert_eq!(Length(0xFFFF_FFFF_FFFF_FFFF).encoded_start_idx(), 0);
+        assert_eq!(Length(0x7FFF_FFFF_FFFF_FFFF).encoded_start_idx(), 0);
+        assert_eq!(Length(0x01FF_FFFF_FFFF_FFFF).encoded_start_idx(), 0);
+        
+        assert_eq!(Length(0x00FF_FFFF_FFFF_FFFF).encoded_start_idx(), 1);
+        assert_eq!(Length(0x007F_FFFF_FFFF_FFFF).encoded_start_idx(), 1);
+        assert_eq!(Length(0x0001_FFFF_FFFF_FFFF).encoded_start_idx(), 1);
+        
+        assert_eq!(Length(0xFF).encoded_start_idx(), 7);
+        assert_eq!(Length(0x7F).encoded_start_idx(), 7);
+        assert_eq!(Length(0x01).encoded_start_idx(), 7);
+
+        assert_eq!(Length(0x00).encoded_start_idx(), 8);
+    }
+
     #[test]
     fn encode() {
         fn step<const N: usize>(l: Option<usize>, res: &[u8; N]) {
-            let l = LengthOctets::<Ber>::new(l);
+            let l = LengthOctets::new(l.map(Length::from_usize));
             let mut vec = Vec::new();
-            l.append_encoded(&mut vec);
+            l.write_encoded(&mut vec);
             assert_eq!(
                 vec.as_slice(), res.as_ref(),
                 "append failed for {l:?}: {vec:?}"
@@ -949,6 +971,5 @@ mod test {
         step(Some(0x80), b"\x81\x80");
         step(Some(0xdead), b"\x82\xde\xad");
     }
-    */
 }
 

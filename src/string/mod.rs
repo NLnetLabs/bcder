@@ -30,7 +30,7 @@ pub use self::restricted::{
     CharSetError, Ia5String, NumericString, PrintableString,
     RestrictedString, Utf8String,
 };
-pub use self::octet::{OctetString, OctetStringArray};
+pub use self::octet::{OctetString, OctetStringArray, OctetStringEncoder};
 
 
 //--- Private modules

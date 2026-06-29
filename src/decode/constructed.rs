@@ -57,10 +57,10 @@ impl<M: Mode, R: io::BufRead> Data<M, R> {
         self.read_value(ident, start)
     }
 
-    /// Starts decoding an optional next value.
+    /// Starts decoding the next value with the given tag.
     ///
-    /// Returns an error if error if it encounters any other
-    /// tag or the end of the content.
+    /// Returns an error if it encounters any other tag or the end of the
+    /// content.
     pub fn next_value_with(
         &mut self, expected: Tag,
     ) -> Result<Value<'_, M, R>, Error> {
@@ -116,7 +116,7 @@ impl<M: Mode, R: io::BufRead> Data<M, R> {
         self.read_value(ident, start)?.into_constructed()
     }
 
-    /// Decodes a reader as a single constructed value.
+    /// Decodes a reader as a single value.
     ///
     /// The function will start decoding of `reader`. It will pass a
     /// constructed content value to the closure `op` which has to process
@@ -125,10 +125,10 @@ impl<M: Mode, R: io::BufRead> Data<M, R> {
     where
         R: io::BufRead,
         M: Mode,
-        F: FnOnce(&mut Constructed<M, R>) -> Result<T, Error>
+        F: FnOnce(Value<M, R>) -> Result<T, Error>
     {
         let mut data = Self::new(reader);
-        let res = op(&mut data.next_constructed()?)?;
+        let res = op(data.next_value()?)?;
         data.check_exhausted()?;
         Ok(res)
     }
@@ -260,7 +260,7 @@ pub struct Constructed<'a, M: Mode, R: io::BufRead + 'a> {
     /// this is an enum.
     inner: ConstructedEnum<'a, R>,
 
-    /// The identifer and startof the last value if we didn’t process it.
+    /// The identifer and start of the last value if we didn’t process it.
     ///
     /// Some methods allow to only process a value if it fullfills certain
     /// criteria. If they don’t like it, they park the identifier octets and
@@ -292,7 +292,7 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
         }
     }
 
-    /// Converts the value into on using a different encoding mode.
+    /// Converts the value into one using a different encoding mode.
     pub fn switch_mode<N: Mode>(self) -> Constructed<'a, N, R> {
         Constructed {
             tag: self.tag,
@@ -346,10 +346,10 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
 /// [`read_opt_ident`][Self::read_opt_ident] so you can check if you want to
 /// process that value.
 ///
-/// If you like do not want to process the value, you retain the identifer
-/// octets for later via [`keep_ident`][Self::keep_ident].
+/// If you do not want to process the value, you retain the identifer octets
+/// for later via [`keep_ident`][Self::keep_ident].
 ///
-/// If you do want to process the value, [`read_value`][Self::read_value]
+/// If you want to process the value, [`read_value`][Self::read_value]
 /// produces a [`Value`] for it.
 impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// Returns the identifier octets and start position of the next value.
@@ -1282,6 +1282,11 @@ impl<'a, M: Mode, R: io::BufRead + 'a> Constructed<'a, M, R> {
     /// malformed error is returned.
     pub fn take_opt_u64(&mut self) -> Result<Option<u64>, Error> {
         u64::take_opt_from(self)
+    }
+
+    /// Returns the next value if it is a SEQUENCE.
+    pub fn next_sequence(&mut self) -> Result<Constructed<'_, M, R>, Error> {
+        self.next_constructed_with(Tag::SEQUENCE)
     }
 
     /// Processes a mandatory SEQUENCE value.

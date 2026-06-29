@@ -5,8 +5,9 @@
 use std:: mem;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use crate::encode;
+use crate::{decode, encode};
 use crate::length::Length;
+use crate::mode::Mode;
 
 
 //------------ Captured ------------------------------------------------------
@@ -42,6 +43,14 @@ impl<M> Captured<M> {
     /// Returns a bytes slice with the raw data of the captured value.
     pub fn as_slice(&self) -> &[u8] {
         &self.data
+    }
+
+    pub fn process<F, T>(&self, op: F) -> Result<T, decode::Error>
+    where
+        M: Mode,
+        F: FnOnce(decode::Value<M, &[u8]>) -> Result<T, decode::Error>
+    {
+        decode::Data::process(&self.data, op)
     }
 }
 
