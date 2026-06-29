@@ -31,9 +31,9 @@
 pub use self::primitive::{PrimitiveContent, Primitive};
 pub use self::values::{
     Choice2, Choice3, Constructed, EncodeSlice, IndefiniteConstructed, Iter,
-    Nothing, Values, encode_slice, iter, sequence, sequence_as, set, set_as,
-    total_len, total_indefinite_len, write_end_of_contents, write_header,
-    write_indefinite_header,
+    Nothing, ToValues, Values, encode_slice, iter, sequence, sequence_as, set,
+    set_as, total_len, total_indefinite_len, write_end_of_contents,
+    write_header, write_indefinite_header,
 };
 pub use self::target::{IoTarget, SplitTarget, Target, infallible};
 

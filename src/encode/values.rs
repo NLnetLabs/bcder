@@ -183,6 +183,15 @@ impl<M, V: Values<M>> Values<M> for Vec<V> {
 }
 
 
+//------------ ToValues -----------------------------------------------------
+
+/// A type that can return a value encoder for itself.
+pub trait ToValues<M> {
+    /// Returns a value encoder for `self`.
+    fn to_values(&self) -> impl Values<M> + '_;
+}
+
+
 //------------ Constructed ---------------------------------------------------
 
 /// A value encoder for a single constructed value.

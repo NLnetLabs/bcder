@@ -1647,3 +1647,13 @@ impl<'a, R: io::BufRead + 'a> io::Read for IndefiniteConstructed<'a, R> {
     }
 }
 
+
+//------------ TakeFromConstructed -------------------------------------------
+
+/// A type that knows how to decode a value from a constructed value.
+pub trait TakeFromConstructed<M: Mode>: Sized {
+    fn take_from<R: io::BufRead>(
+        cons: &mut Constructed<M, R>
+    ) -> Result<Self, Error>;
+}
+

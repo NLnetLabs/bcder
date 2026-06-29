@@ -39,7 +39,7 @@
 //! type you will likely encounter the most.
 
 
-pub use self::constructed::{Constructed, Data};
+pub use self::constructed::{Constructed, Data, TakeFromConstructed};
 pub use self::error::Error;
 pub use self::nested::{ConstructedInfo, NestedItem};
 pub use self::primitive::{FromPrimitive, Primitive};

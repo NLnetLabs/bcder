@@ -18,6 +18,10 @@ use super::values::{Values, total_len, write_header};
 /// a value of the type are to be created. As a consequence, these types
 /// gain the [`encode`][Self::encode] and [`encode_as`][Self::encode_as]
 /// methods from their implementation of this trait.
+///
+/// The trait requires the implementing type to be `Copy` so it can be
+/// implemented without taking references on copy types. If your type isn’t
+/// `Copy`, simply implement the trait for a reference to the type.
 pub trait PrimitiveContent<M>: Copy {
     /// The natural tag of an encoded value of this type.
     const TAG: Tag;
