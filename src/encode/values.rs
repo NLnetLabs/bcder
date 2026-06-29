@@ -14,15 +14,18 @@ use super::target::{Target, infallible};
 
 /// A type that is a value encoder.
 ///
-/// Value encoders know how to encode themselves into a
+/// Value encoders know how to encode themselves into a (possibly empty)
 /// sequence of BER encoded values. While you can impl this trait for your
 /// type manually, in practice it is often easier to define a method called
 /// `encode` and let it return some dedicated value encoder type constructed
 /// from the types provided by this module.
 ///
-/// A type implementing this trait should encodes itself into one or more
+/// A type implementing this trait should encodes itself into zero or more
 /// BER values. That is, the type becomes the content or part of the content
 /// of a constructed value.
+///
+/// Value encoder implemented through this trait must always know their
+/// encoded length up front, even if they are used in CER mode.
 pub trait Values<M> {
     /// Returns the length of the encoded values for the given mode.
     fn encoded_len(&self) -> Length;
@@ -37,7 +40,7 @@ pub trait Values<M> {
 
     /// Converts the encoder into one with an explicit tag.
     ///
-    /// For an explicite tag, the value is wrapped in a constructed value with
+    /// For an explicit tag, the value is wrapped in a constructed value with
     /// the given tag.
     fn explicit(self, tag: Tag) -> Constructed<Self>
     where Self: Sized {
@@ -54,7 +57,7 @@ pub trait Values<M> {
 
 //--- Blanket impls
 
-impl<M, V: Values<M>> Values<M> for &'_ V {
+impl<M, V: Values<M> + ?Sized> Values<M> for &'_ V {
     fn encoded_len(&self) -> Length {
         (*self).encoded_len()
     }

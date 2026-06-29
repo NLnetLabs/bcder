@@ -11,6 +11,11 @@ use super::values::{
 };
 
 
+//------------ primitive -----------------------------------------------------
+
+/// Returns a value encoder for a bytes slice as a primitive value.
+///
+/// The value will use the tag `tag` and have the content of `data`.
 pub fn primitive<'s, M: 's>(
     tag: Tag, data: &'s (impl AsRef<[u8]> + ?Sized),
 ) -> impl Values<M> + 's {
@@ -20,6 +25,12 @@ pub fn primitive<'s, M: 's>(
 pub use self::primitive as prim;
 
 
+//------------ definite_constructed ------------------------------------------
+
+/// Returns a value encoder for a definite length constructed value.
+///
+/// The value will have the tag `tag` and produce the content using the
+/// value encoder provided by `content`.
 pub fn definite_constructed<M, V: Values<M>>(
     tag: Tag, content: V
 ) -> impl Values<M> {
@@ -49,6 +60,12 @@ impl<M, V: Values<M>> Values<M> for DefiniteConstructed<M, V> {
 }
 
 
+//------------ indefinite_constructed ----------------------------------------
+
+/// Returns a value encoder for an indefinite length constructed value.
+///
+/// The value will have the tag `tag` and produce the content using the
+/// value encoder provided by `content`.
 pub fn indefinite_constructed<M, V: Values<M>>(
     tag: Tag, content: V
 ) -> impl Values<M> {

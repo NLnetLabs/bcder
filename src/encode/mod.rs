@@ -28,7 +28,7 @@
 //! [`PrimitiveContent`]: trait.PrimitiveContent.html
 //! [encode section of the guide]: ../guide/encode/index.html
 
-pub use self::primitive::{PrimitiveContent, Primitive, primitive};
+pub use self::primitive::{PrimitiveContent, Primitive};
 pub use self::values::{
     Choice2, Choice3, Constructed, EncodeSlice, IndefiniteConstructed, Iter,
     Nothing, Values, encode_slice, iter, sequence, sequence_as, set, set_as,

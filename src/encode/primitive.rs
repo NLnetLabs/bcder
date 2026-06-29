@@ -9,20 +9,12 @@ use crate::length::Length;
 use super::target::{Target, infallible};
 use super::values::{Values, total_len, write_header};
 
-
-//------------ primitive -----------------------------------------------------
-
-/// Encodes the give slice as a primitive value with the given tag.
-pub fn primitive<'s, M: 's>(tag: Tag, data: &'s [u8]) -> impl Values<M> + 's {
-    data.encode_as(tag)
-}
-
 //------------ PrimitiveContent ----------------------------------------------
 
 /// A type that is encoded as a primitive value.
 ///
 /// This trait should be implemented for types that use primitive encoding.
-/// It defines, how the content octets of a single primitive value containing
+/// It defines how the content octets of a single primitive value containing
 /// a value of the type are to be created. As a consequence, these types
 /// gain the [`encode`][Self::encode] and [`encode_as`][Self::encode_as]
 /// methods from their implementation of this trait.
@@ -35,21 +27,20 @@ pub trait PrimitiveContent<M>: Copy {
 
     /// Writes the encoded content to a target.
     fn write_encoded<T: Target>(
-        self,
-        target: &mut T
+        self, target: &mut T
     ) -> Result<(), T::Error>;
 
 
     //--- Provided methods
 
-    /// Returns a value encoder for this content using the natural tag.
+    /// Returns a value encoder for this primitive using the natural tag.
     ///
-    /// This is identical to `self.encode_as(Self::TAG)`
+    /// This is identical to `self.encode_as(Self::TAG)`.
     fn encode(self) -> Primitive<M, Self> {
         self.encode_as(Self::TAG)
     }
 
-    /// Returns a value encoder for this content using the given tag.
+    /// Returns a value encoder for this primitive using the given tag.
     ///
     /// The returned value is a content encoder that produces a single
     /// primitive BER encoded value. The tag for this value is explicitely
@@ -132,9 +123,6 @@ impl<M> PrimitiveContent<M> for &'_ [u8] {
 ///
 /// This type is returned by [`PrimitiveContent::encode`] and
 /// [`PrimitiveContent::encode_as`].
-///
-/// [`PrimitiveContent::encode`]: trait.PrimitiveContent.html#tymethod_encode
-/// [`PrimitiveContent::encode_as`]: trait.PrimitiveContent.html#tymethod_encode_as
 pub struct Primitive<M, P> {
     /// The tag of the value
     tag: Tag,
