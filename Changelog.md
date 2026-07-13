@@ -10,7 +10,14 @@ Improvements
 
 Bug fixes
 
+* Fixed a panic in `Oid::from_str` when the first component is 2 and the
+  second component is too slightly too large. ([#103], reported by
+  [@xc01])
+
 Other changes
+
+[#103]: https://github.com/NLnetLabs/bcder/pull/103
+[@xc01]: https://github.com/xc01
 
 
 ## 0.7.7
