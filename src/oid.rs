@@ -270,9 +270,10 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
         }
 
         let mut res = vec![
-            first.checked_mul(40).and_then(|first| {
-                first.checked_add(second)
-            }).ok_or("overflow in second component")?
+            // Panic: first is between 0 and 2, so times 40 will always fit.
+            (40 * first).checked_add(second).ok_or(
+                "overflow in second component"
+            )?
         ];
         for item in components {
             res.push(from_str(item)?);
@@ -493,6 +494,7 @@ mod test {
             Oid(&[85, 29, 19])
         );
         assert!(Oid::<Vec<u8>>::from_str("2.4294967295").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("3.4294967295").is_err());
     }
 
     #[test]
