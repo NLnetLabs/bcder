@@ -269,7 +269,12 @@ impl<T: AsRef<[u8]> + From<Vec<u8>>> FromStr for Oid<T> {
             return Err("second component for 0. and 1. must be less than 40");
         }
 
-        let mut res = vec![40 * first + second];
+        let mut res = vec![
+            // Panic: first is between 0 and 2, so times 40 will always fit.
+            (40 * first).checked_add(second).ok_or(
+                "overflow in second component"
+            )?
+        ];
         for item in components {
             res.push(from_str(item)?);
         }
@@ -481,6 +486,16 @@ impl<'a> Iterator for Iter<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn from_str() {
+        assert_eq!(
+            Oid::<Vec<u8>>::from_str("2.5.29.19").unwrap(),
+            Oid(&[85, 29, 19])
+        );
+        assert!(Oid::<Vec<u8>>::from_str("2.4294967295").is_err());
+        assert!(Oid::<Vec<u8>>::from_str("3.4294967295").is_err());
+    }
 
     #[test]
     fn display() {
