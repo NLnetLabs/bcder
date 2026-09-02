@@ -23,7 +23,7 @@ use crate::tag::Tag;
 /// [`take_from`][Self::take_from] function. The
 /// [`from_content`][Self::from_content] function parses the
 /// content octets of a bit string value and can be used of the bit string is
-/// implcitely tagged. Alternatively, you can create a new simple bit string
+/// implicitly tagged. Alternatively, you can create a new simple bit string
 /// via the [`new`][Self::new] method.
 ///
 /// There are two types of methods for accessing the data in a bit string.
