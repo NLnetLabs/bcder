@@ -424,6 +424,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::bool_assert_comparison)]
     fn bitstring_bit() {
         let b = BitString::new(0, Bytes::from_static(b"\xFF\xff"));
         assert_eq!(b.bit(0), true);
