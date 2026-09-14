@@ -42,7 +42,7 @@ use crate::tag::Tag;
 /// identifier constants in the code. Instead, the crate ships with a
 /// `mkoid` binary which accepts object identifiers in ‘dot integer’ notation
 /// and produces the `u8` array for their encoded value. You can install
-/// this binary via `cargo install ber`.
+/// this binary via `cargo install bcder`.
 #[derive(Clone, Debug)]
 pub struct Oid<T: AsRef<[u8]> = Bytes>(pub T);
 
